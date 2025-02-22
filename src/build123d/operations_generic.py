@@ -821,7 +821,7 @@ def project(
             elif isinstance(context, BuildLine):
                 projected_shapes.extend(projection)
             else:  # BuildPart
-                projected_shapes.append(projection[0])
+                projected_shapes.extend(projection.faces())
 
     projected_points: ShapeList[Vector] = ShapeList()
     for pnt in point_list:
