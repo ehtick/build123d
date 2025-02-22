@@ -64,6 +64,7 @@ development = [
     "wheel",
     "pytest",
     "pytest-cov",
+    "pytest-xdist",
     "pylint",
     "mypy",
     "black",
