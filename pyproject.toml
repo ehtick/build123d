@@ -61,13 +61,14 @@ ocp_vscode = [
 
 # development dependencies
 development = [
-    "wheel",
+    "black",
+    "mypy",
+    "pylint",
     "pytest",
     "pytest-cov",
     "pytest-xdist",
-    "pylint",
-    "mypy",
-    "black",
+    "sympy",
+    "wheel",
 ]
 
 # typing stubs for the OCP CAD kernel

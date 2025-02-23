@@ -45,6 +45,13 @@ with BuildPart() as p:
     mirror(about=Plane.YZ)
 
 part = scale(p.part, IN)
-print(f"\npart weight = {part.volume*7800e-6/LB:0.2f} lbs")
+
+
+got_mass = part.volume*7800e-6/LB
+want_mass = 3.923
+tolerance = 0.02
+delta = abs(got_mass - want_mass)
+print(f"Mass: {got_mass:0.1f} lbs")
+assert delta < tolerance, f'{got_mass=}, {want_mass=}, {delta=}, {tolerance=}'
 
 show(p)
