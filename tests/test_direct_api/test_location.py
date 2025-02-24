@@ -290,7 +290,8 @@ class TestLocation(unittest.TestCase):
         }
 
         # Serializing json with custom Location encoder
-        json_object = json.dumps(data_dict, indent=4, cls=LocationEncoder)
+        with self.assertWarnsRegex(DeprecationWarning, "Use GeomEncoder instead"):
+            json_object = json.dumps(data_dict, indent=4, cls=LocationEncoder)
 
         # Writing to sample.json
         with open("sample.json", "w") as outfile:
@@ -298,7 +299,8 @@ class TestLocation(unittest.TestCase):
 
         # Reading from sample.json
         with open("sample.json") as infile:
-            read_json = json.load(infile, object_hook=LocationEncoder.location_hook)
+            with self.assertWarnsRegex(DeprecationWarning, "Use GeomEncoder instead"):
+                read_json = json.load(infile, object_hook=LocationEncoder.location_hook)
 
         # Validate locations
         for key, value in read_json.items():

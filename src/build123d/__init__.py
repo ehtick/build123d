@@ -150,6 +150,7 @@ __all__ = [
     "Compound",
     "Location",
     "LocationEncoder",
+    "GeomEncoder",
     "Joint",
     "RigidJoint",
     "RevoluteJoint",

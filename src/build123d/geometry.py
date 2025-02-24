@@ -39,11 +39,11 @@ import itertools
 import json
 import logging
 import numpy as np
-
-from math import degrees, pi, radians, isclose
-from typing import Any, overload, TypeAlias, TYPE_CHECKING
+import warnings
 
 from collections.abc import Iterable, Sequence
+from math import degrees, pi, radians, isclose
+from typing import Any, overload, TypeAlias, TYPE_CHECKING
 
 import OCP.TopAbs as TopAbs_ShapeEnum
 
@@ -1252,6 +1252,68 @@ class Color:
         return f"Color{str(tuple(self))}"
 
 
+class GeomEncoder(json.JSONEncoder):
+    """
+    A JSON encoder for build123d geometry objects.
+
+    This class extends ``json.JSONEncoder`` to provide custom serialization for
+    geometry objects such as Axis, Color, Location, Plane, and Vector. It converts
+    each geometry object into a dictionary containing exactly one key that identifies
+    the geometry type (e.g. ``"Axis"``, ``"Vector"``, etc.), paired with a tuple or
+    list that represents the underlying data. Any other object types are handled by
+    the standard encoder.
+
+    The inverse decoding is performed by the ``geometry_hook`` static method, which
+    expects the dictionary to have precisely one key from the known geometry types.
+    It then uses a class registry (``CLASS_REGISTRY``) to look up and instantiate
+    the appropriate class with the provided values.
+
+    **Usage Example**::
+
+        import json
+
+        # Suppose we have some geometry objects:
+        axis = Axis(position=(0, 0, 0), direction=(1, 0, 0))
+        vector = Vector(0.0, 1.0, 2.0)
+
+        data = {
+            "my_axis": axis,
+            "my_vector": vector
+        }
+
+        # Encode them to JSON:
+        encoded_data = json.dumps(data, cls=GeomEncoder, indent=4)
+
+        # Decode them back:
+        decoded_data = json.loads(encoded_data, object_hook=GeomEncoder.geometry_hook)
+
+    """
+
+    def default(self, obj):
+        """Return a JSON-serializable representation of a known geometry object."""
+        if isinstance(obj, Axis):
+            return {"Axis": (tuple(obj.position), tuple(obj.direction))}
+        elif isinstance(obj, Color):
+            return {"Color": obj.to_tuple()}
+        if isinstance(obj, Location):
+            return {"Location": obj.to_tuple()}
+        elif isinstance(obj, Plane):
+            return {"Plane": (tuple(obj.origin), tuple(obj.x_dir), tuple(obj.z_dir))}
+        elif isinstance(obj, Vector):
+            return {"Vector": tuple(obj)}
+        else:
+            # Let the base class default method raise the TypeError
+            return super().default(obj)
+
+    @staticmethod
+    def geometry_hook(json_dict):
+        """Convert dictionaries back into geometry objects for decoding."""
+        if len(json_dict.items()) != 1:
+            raise ValueError(f"Invalid geometry json object {json_dict}")
+        for key, value in json_dict.items():
+            return CLASS_REGISTRY[key](*value)
+
+
 class Location:
     """Location in 3D space. Depending on usage can be absolute or relative.
 
@@ -1714,6 +1776,7 @@ class LocationEncoder(json.JSONEncoder):
 
     def default(self, o: Location) -> dict:
         """Return a serializable object"""
+        warnings.warn("Use GeomEncoder instead", DeprecationWarning, stacklevel=2)
         if not isinstance(o, Location):
             raise TypeError("Only applies to Location objects")
         return {"Location": o.to_tuple()}
@@ -1725,6 +1788,7 @@ class LocationEncoder(json.JSONEncoder):
         Example:
             read_json = json.load(infile, object_hook=LocationEncoder.location_hook)
         """
+        warnings.warn("Use GeomEncoder instead", DeprecationWarning, stacklevel=2)
         if "Location" in obj:
             obj = Location(*[[float(f) for f in v] for v in obj["Location"]])
         return obj
@@ -2888,6 +2952,15 @@ class Plane(metaclass=PlaneMeta):
 
         if shape is not None:
             return shape.intersect(self)
+
+
+CLASS_REGISTRY = {
+    "Axis": Axis,
+    "Color": Color,
+    "Location": Location,
+    "Plane": Plane,
+    "Vector": Vector,
+}
 
 
 def to_align_offset(
