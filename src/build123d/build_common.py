@@ -50,7 +50,7 @@ import functools
 from abc import ABC, abstractmethod
 from itertools import product
 from math import sqrt, cos, pi
-from typing import Any, cast, overload, Type, TypeVar
+from typing import Any, cast, overload, Protocol, Type, TypeVar
 
 from collections.abc import Callable, Iterable
 from typing_extensions import Self
@@ -1341,11 +1341,16 @@ class WorkplaneList:
 
 # Type variable representing the return type of the wrapped function
 T2 = TypeVar("T2")
+T2_covar = TypeVar("T2_covar", covariant=True)
+
+
+class ContextComponentGetter(Protocol[T2_covar]):
+    def __call__(self, select: Select = Select.ALL) -> T2_covar: ...
 
 
 def __gen_context_component_getter(
-    func: Callable[[Builder, Select], T2]
-) -> Callable[[Select], T2]:
+    func: Callable[[Builder, Select], T2],
+) -> ContextComponentGetter[T2]:
     """
     Wraps a Builder method to automatically provide the Builder context.
 
@@ -1360,7 +1365,7 @@ def __gen_context_component_getter(
               a `Select` instance as its second argument.
 
     Returns:
-        Callable[[Select], T2]: A callable that takes only a `Select` argument and
+        ContextComponentGetter[T2]: A callable that takes only a `Select` argument and
         internally retrieves the Builder context to call the original method.
 
     Raises:
