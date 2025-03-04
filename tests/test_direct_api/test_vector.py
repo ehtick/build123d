@@ -156,6 +156,16 @@ class TestVector(unittest.TestCase):
         self.assertNotEqual(a, b)
         self.assertNotEqual(a, object())
 
+    def test_vector_sets(self):
+        # Check that equal and hash work the same way to enable sets
+        a = Vector(1, 2, 3)
+        for i in range(1, 8):
+            v = Vector(a.X + 1.0 / (10**i), a.Y, a.Z)
+            if v == a:
+                self.assertEqual(len(set([a, v])), 1)
+            else:
+                self.assertEqual(len(set([a, v])), 2)
+
     def test_vector_distance(self):
         """
         Test line distance from plane.

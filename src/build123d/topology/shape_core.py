@@ -866,7 +866,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if self.wrapped is not None:
             memo[id(self.wrapped)] = downcast(BRepBuilderAPI_Copy(self.wrapped).Shape())
         for key, value in self.__dict__.items():
-            if key == 'topo_parent':
+            if key == "topo_parent":
                 result.topo_parent = value
             else:
                 setattr(result, key, copy.deepcopy(value, memo))

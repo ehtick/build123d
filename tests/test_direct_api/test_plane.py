@@ -408,6 +408,21 @@ class TestPlane(unittest.TestCase):
             Plane(origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, 1, 1)),
         )
 
+    def test_set(self):
+        p0 = Plane((0, 1, 2), (3, 4, 5), (6, 7, 8))
+        for i in range(1, 8):
+            for j in range(1, 8):
+                for k in range(1, 8):
+                    p1 = Plane(
+                        (p0.origin.X + 1.0 / (10**i), p0.origin.Y, p0.origin.Z),
+                        (p0.x_dir.X + 1.0 / (10**j), p0.x_dir.Y, p0.x_dir.Z),
+                        (p0.z_dir.X + 1.0 / (10**k), p0.z_dir.Y, p0.z_dir.Z),
+                    )
+                    if p0 == p1:
+                        self.assertEqual(len(set([p0, p1])), 1)
+                    else:
+                        self.assertEqual(len(set([p0, p1])), 2)
+
     def test_to_location(self):
         loc = Plane(origin=(1, 2, 3), x_dir=(0, 1, 0), z_dir=(0, 0, 1)).location
         self.assertAlmostEqual(loc.position, (1, 2, 3), 5)

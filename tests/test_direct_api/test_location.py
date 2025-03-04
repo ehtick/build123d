@@ -266,6 +266,23 @@ class TestLocation(unittest.TestCase):
         self.assertNotEqual(loc, diff_orientation)
         self.assertNotEqual(loc, object())
 
+    def test_set(self):
+        l0 = Location((0, 1, 2), (3, 4, 5))
+        for i in range(1, 8):
+            for j in range(1, 8):
+                l1 = Location(
+                    (l0.position.X + 1.0 / (10**i), l0.position.Y, l0.position.Z),
+                    (
+                        l0.orientation.X + 1.0 / (10**j),
+                        l0.orientation.Y,
+                        l0.orientation.Z,
+                    ),
+                )
+                if l0 == l1:
+                    self.assertEqual(len(set([l0, l1])), 1)
+                else:
+                    self.assertEqual(len(set([l0, l1])), 2)
+
     def test_neg(self):
         loc = Location((1, 2, 3), (0, 35, 127))
         n_loc = -loc

@@ -1350,7 +1350,8 @@ class ContextComponentGetter(Protocol[T2_covar]):
 
 def __gen_context_component_getter(
     func: Callable[[Builder, Select], T2],
-) -> ContextComponentGetter[T2]:
+    # ) -> ContextComponentGetter[T2]:
+) -> Callable[[Select], T2]:
     """
     Wraps a Builder method to automatically provide the Builder context.
 

@@ -563,7 +563,10 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             float: The signed value; positive indicates convexity, negative indicates concavity.
                 Returns 0 if the geometry type is unsupported.
         """
-        if self.geom_type == GeomType.CYLINDER:
+        if (
+            self.geom_type == GeomType.CYLINDER
+            and type(self.geom_adaptor()) != Geom_RectangularTrimmedSurface
+        ):
             axis = self.axis_of_rotation
             if axis is None:
                 raise ValueError("Can't find curvature of empty object")

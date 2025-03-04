@@ -42,7 +42,7 @@ import numpy as np
 import warnings
 
 from collections.abc import Iterable, Sequence
-from math import degrees, pi, radians, isclose
+from math import degrees, log10, pi, radians, isclose
 from typing import Any, overload, TypeAlias, TYPE_CHECKING
 
 import OCP.TopAbs as TopAbs_ShapeEnum
@@ -88,6 +88,7 @@ logging.getLogger("build123d").addHandler(logging.NullHandler())
 logger = logging.getLogger("build123d")
 
 TOLERANCE = 1e-6
+TOL_DIGITS = abs(int(log10(TOLERANCE)))
 TOL = 1e-2
 DEG2RAD = pi / 180.0
 RAD2DEG = 180 / pi
@@ -445,11 +446,17 @@ class Vector:
         """Vectors equal operator =="""
         if not isinstance(other, Vector):
             return NotImplemented
-        return self.wrapped.IsEqual(other.wrapped, 0.00001, 0.00001)
+        return self.wrapped.IsEqual(other.wrapped, TOLERANCE, TOLERANCE)
 
     def __hash__(self) -> int:
         """Hash of Vector"""
-        return hash((round(self.X, 6), round(self.Y, 6), round(self.Z, 6)))
+        return hash(
+            (
+                round(self.X, TOL_DIGITS - 1),
+                round(self.Y, TOL_DIGITS - 1),
+                round(self.Z, TOL_DIGITS - 1),
+            )
+        )
 
     def __copy__(self) -> Vector:
         """Return copy of self"""
@@ -689,6 +696,16 @@ class Axis(metaclass=AxisMeta):
     def __deepcopy__(self, _memo) -> Axis:
         """Return deepcopy of self"""
         return Axis(self.position, self.direction)
+
+    def __hash__(self) -> int:
+        """Hash of Axis"""
+        return hash(
+            (
+                round(v, TOL_DIGITS - 1)
+                for vector in [self.position, self.direction]
+                for v in vector
+            )
+        )
 
     def __repr__(self) -> str:
         """Display self"""
@@ -1660,7 +1677,25 @@ class Location:
             radians(other.orientation.Y),
             radians(other.orientation.Z),
         )
-        return self.position == other.position and quaternion1.IsEqual(quaternion2)
+        # Test quaternions with tolerance
+        q_values = [
+            [get_value() for get_value in (q.X, q.Y, q.Z, q.W)]
+            for q in (quaternion1, quaternion2)
+        ]
+        quaternion_eq = all(
+            isclose(v1, v2, abs_tol=TOLERANCE) for v1, v2 in zip(*q_values)
+        )
+        return self.position == other.position and quaternion_eq
+
+    def __hash__(self) -> int:
+        """Hash of Location"""
+        return hash(
+            (
+                round(v, TOL_DIGITS - 1)
+                for vector in [self.position, self.orientation]
+                for v in vector
+            )
+        )
 
     def __neg__(self) -> Location:
         """Flip the orientation without changing the position operator -"""
@@ -2563,8 +2598,8 @@ class Plane(metaclass=PlaneMeta):
             return NotImplemented
 
         # equality tolerances
-        eq_tolerance_origin = 1e-6
-        eq_tolerance_dot = 1e-6
+        eq_tolerance_origin = TOLERANCE
+        eq_tolerance_dot = TOLERANCE
 
         return (
             # origins are the same
@@ -2573,6 +2608,16 @@ class Plane(metaclass=PlaneMeta):
             and abs(self.z_dir.dot(other.z_dir) - 1) < eq_tolerance_dot
             # x-axis vectors are parallel (assumption: both are unit vectors)
             and abs(self.x_dir.dot(other.x_dir) - 1) < eq_tolerance_dot
+        )
+
+    def __hash__(self) -> int:
+        """Hash of Plane"""
+        return hash(
+            (
+                round(v, TOL_DIGITS - 1)
+                for vector in [self.origin, self.x_dir, self.z_dir]
+                for v in vector
+            )
         )
 
     def __neg__(self) -> Plane:

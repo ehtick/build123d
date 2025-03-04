@@ -230,6 +230,19 @@ class TestAxis(unittest.TestCase):
         random_obj = object()
         self.assertNotEqual(Axis.X, random_obj)
 
+    def test_set(self):
+        a0 = Axis((0, 1, 2), (3, 4, 5))
+        for i in range(1, 8):
+            for j in range(1, 8):
+                a1 = Axis(
+                    (a0.position.X + 1.0 / (10**i), a0.position.Y, a0.position.Z),
+                    (a0.direction.X + 1.0 / (10**j), a0.direction.Y, a0.direction.Z),
+                )
+                if a0 == a1:
+                    self.assertEqual(len(set([a0, a1])), 1)
+                else:
+                    self.assertEqual(len(set([a0, a1])), 2)
+
     def test_position_property(self):
         axis = Axis.X
         axis.position = 1, 2, 3
