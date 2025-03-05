@@ -22,5 +22,4 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: benchmark
         run: |
-          pip install pytest-benchmark
           python -m pytest --benchmark-only
