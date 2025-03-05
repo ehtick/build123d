@@ -31,7 +31,6 @@ from __future__ import annotations
 import copy as copy_module
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
-from typing import Union
 
 from collections.abc import Iterable
 
@@ -46,8 +45,8 @@ def _add_curve_to_context(curve, mode: Mode):
     """Helper function to add a curve to the context.
 
     Args:
-        curve (Union[Wire, Edge]): curve to add to the context (either a Wire or an Edge).
-        mode (Mode): combination mode.
+        curve (Wire | Edge): curve to add to the context (either a Wire or an Edge)
+        mode (Mode): combination mode
     """
     context: BuildLine | None = BuildLine._get_context(log=False)
 
@@ -62,8 +61,8 @@ class BaseLineObject(Wire):
     """BaseLineObject specialized for Wire.
 
     Args:
-        curve (Wire): wire to create.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        curve (Wire): wire to create
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -78,8 +77,8 @@ class BaseEdgeObject(Edge):
     """BaseEdgeObject specialized for Edge.
 
     Args:
-        curve (Edge): edge to create.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        curve (Edge): edge to create
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -93,14 +92,14 @@ class BaseEdgeObject(Edge):
 class Bezier(BaseEdgeObject):
     """Line Object: Bezier Curve
 
-    Create a rational (with weights) or non-rational bezier curve.  The first and last
-    control points represent the start and end of the curve respectively.  If weights
-    are provided, there must be one provided for each control point.
+    Add a non-rational bezier curve defined by a sequence of points and include optional
+    weights to add a rational bezier curve. The number of weights must match the number
+    of control points.
 
     Args:
         cntl_pnts (sequence[VectorLike]): points defining the curve
-        weights (list[float], optional): control point weights list. Defaults to None.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        weights (list[float], optional): control point weights. Defaults to None
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -124,14 +123,14 @@ class Bezier(BaseEdgeObject):
 class CenterArc(BaseEdgeObject):
     """Line Object: Center Arc
 
-    Add center arc to the line.
+    Add a circular arc defined by a center point and radius.
 
     Args:
         center (VectorLike): center point of arc
         radius (float): arc radius
-        start_angle (float): arc staring angle
-        arc_size (float): arc size
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        start_angle (float): arc starting angle from x-axis
+        arc_size (float): angular size of arc
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -177,19 +176,19 @@ class CenterArc(BaseEdgeObject):
 class DoubleTangentArc(BaseEdgeObject):
     """Line Object: Double Tangent Arc
 
-    Create an arc defined by a point/tangent pair and another line which the other end
-    is tangent to.
+    Add a circular arc defined by a point/tangent pair and another line find a tangent to.
+
+    The arc specified with TOP or BOTTOM depends on the geometry and isn't predictable.
 
     Contains a solver.
 
     Args:
-        pnt (VectorLike): starting point of tangent arc
-        tangent (VectorLike): tangent at starting point of tangent arc
-        other (Union[Curve, Edge, Wire]): reference line
-        keep (Keep, optional): selector for which arc to keep when two arcs are
-            possible. The arc generated with TOP or BOTTOM depends on the geometry
-            and isn't necessarily easy to predict. Defaults to Keep.TOP.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pnt (VectorLike): start point
+        tangent (VectorLike): tangent at start point
+        other (Curve | Edge | Wire): line object to tangent
+        keep (Keep, optional): specify which arc if more than one, TOP or BOTTOM.
+            Defaults to Keep.TOP
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         RunTimeError: no double tangent arcs found
@@ -276,21 +275,21 @@ class DoubleTangentArc(BaseEdgeObject):
 class EllipticalStartArc(BaseEdgeObject):
     """Line Object: Elliptical Start Arc
 
-    Makes an arc of an ellipse from the start point.
+    Add an elliptical arc defined by a start point, end point, x- and y- radii.
 
     Args:
-        start (VectorLike): initial point of arc
-        end (VectorLike): final point of arc
-        x_radius (float): semi-major radius
-        y_radius (float): semi-minor radius
+        start (VectorLike): start point
+        end (VectorLike): end point
+        x_radius (float): x radius of the ellipse (along the x-axis of plane)
+        y_radius (float): y radius of the ellipse (along the y-axis of plane)
         rotation (float, optional): the angle from the x-axis of the plane to the x-axis
-            of the ellipse. Defaults to 0.0.
+            of the ellipse. Defaults to 0.0
         large_arc (bool, optional): True if the arc spans greater than 180 degrees.
-            Defaults to True.
+            Defaults to True
         sweep_flag (bool, optional): False if the line joining center to arc sweeps through
-            decreasing angles, or True if it sweeps through increasing angles. Defaults to True.
-        plane (Plane, optional): base plane. Defaults to Plane.XY.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+            decreasing angles, or True if it sweeps through increasing angles. Defaults to True
+        plane (Plane, optional): base plane. Defaults to Plane.XY
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -382,19 +381,21 @@ class EllipticalStartArc(BaseEdgeObject):
 class EllipticalCenterArc(BaseEdgeObject):
     """Line Object: Elliptical Center Arc
 
-    Makes an arc of an ellipse from a center point.
+    Adds an elliptical arc defined by a center point, x- and y- radii.
 
     Args:
         center (VectorLike): ellipse center
         x_radius (float): x radius of the ellipse (along the x-axis of plane)
         y_radius (float): y radius of the ellipse (along the y-axis of plane)
-        start_angle (float, optional): Defaults to 0.0.
-        end_angle (float, optional): Defaults to 90.0.
-        rotation (float, optional): amount to rotate arc. Defaults to 0.0.
+        start_angle (float, optional): arc start angle from x-axis.
+            Defaults to 0.0
+        end_angle (float, optional): arc end angle from x-axis.
+            Defaults to 90.0
+        rotation (float, optional): angle to rotate arc. Defaults to 0.0
         angular_direction (AngularDirection, optional): arc direction.
-            Defaults to AngularDirection.COUNTER_CLOCKWISE.
-        plane (Plane, optional): base plane. Defaults to Plane.XY.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        plane (Plane, optional): base plane. Defaults to Plane.XY
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -438,17 +439,20 @@ class EllipticalCenterArc(BaseEdgeObject):
 class Helix(BaseEdgeObject):
     """Line Object: Helix
 
-    Add a helix to the line.
+    Add a helix defined by pitch, height, and radius. The helix may have a taper
+    defined by cone_angle.
+
 
     Args:
-        pitch (float): distance between successive loops
-        height (float): helix size
+        pitch (float): distance between loops
+        height (float): helix height
         radius (float): helix radius
         center (VectorLike, optional): center point. Defaults to (0, 0, 0).
         direction (VectorLike, optional): direction of central axis. Defaults to (0, 0, 1).
-        cone_angle (float, optional): conical angle. Defaults to 0.
-        lefthand (bool, optional): left handed helix. Defaults to False.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        cone_angle (float, optional): conical angle from direction.
+            Defaults to 0
+        lefthand (bool, optional): left handed helix. Defaults to False
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -475,16 +479,17 @@ class Helix(BaseEdgeObject):
 
 
 class FilletPolyline(BaseLineObject):
-    """Line Object: FilletPolyline
+    """Line Object: Fillet Polyline
 
-    Add a sequence of straight lines defined by successive points that
-    are filleted to a given radius.
+    Add a sequence of straight lines defined by successive points that are filleted
+    to a given radius.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of two or more points
-        radius (float): radius of filleted corners
-        close (bool, optional): close by generating an extra Edge. Defaults to False.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
+        radius (float): fillet radius
+        close (bool, optional): close end points with extra Edge and corner fillets.
+            Defaults to False
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Two or more points not provided
@@ -570,16 +575,16 @@ class FilletPolyline(BaseLineObject):
 
 
 class JernArc(BaseEdgeObject):
-    """JernArc
+    """Line Object: Jern Arc
 
-    Circular tangent arc with given radius and arc_size
+    Add a circular arc defined by a start point/tangent pair, radius and arc size.
 
     Args:
         start (VectorLike): start point
         tangent (VectorLike): tangent at start point
         radius (float): arc radius
-        arc_size (float): arc size in degrees (negative to change direction)
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        arc_size (float): angular size of arc (negative to change direction)
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Attributes:
         start (Vector): start point
@@ -634,11 +639,11 @@ class JernArc(BaseEdgeObject):
 class Line(BaseEdgeObject):
     """Line Object: Line
 
-    Add a straight line defined by two end points.
+    Add a straight line defined by two points.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of two points
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pts (VectorLike | Iterable[VectorLike]): sequence of two points
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Two point not provided
@@ -665,13 +670,13 @@ class Line(BaseEdgeObject):
 class IntersectingLine(BaseEdgeObject):
     """Intersecting Line Object: Line
 
-    Add a straight line that intersects another line at a given parameter and angle.
+    Add a straight line defined by a point/direction pair and another line to intersect.
 
     Args:
         start (VectorLike): start point
         direction (VectorLike): direction to make line
-        other (Edge): stop at the intersection of other
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        other (Edge): line object to intersect
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     """
 
@@ -706,15 +711,17 @@ class IntersectingLine(BaseEdgeObject):
 class PolarLine(BaseEdgeObject):
     """Line Object: Polar Line
 
-    Add line defined by a start point, length and angle.
+    Add a straight line defined by a start point, length, and angle.
+    The length can specify the DIAGONAL, HORIZONTAL, or VERTICAL component of the triangle
+    defined by the angle.
 
     Args:
         start (VectorLike): start point
         length (float): line length
-        angle (float): angle from the local "X" axis.
-        length_mode (LengthMode, optional): length value specifies a diagonal, horizontal
-            or vertical value. Defaults to LengthMode.DIAGONAL
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        angle (float, optional): angle from the local x-axis
+        length_mode (LengthMode, optional): how length defines the line.
+            Defaults to LengthMode.DIAGONAL
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Either angle or direction must be provided
@@ -768,12 +775,12 @@ class PolarLine(BaseEdgeObject):
 class Polyline(BaseLineObject):
     """Line Object: Polyline
 
-    Add a sequence of straight lines defined by successive point pairs.
+    Add a sequence of straight lines defined by successive points.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of two or more points
-        close (bool, optional): close by generating an extra Edge. Defaults to False.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
+        close (bool, optional): close by generating an extra Edge. Defaults to False
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Two or more points not provided
@@ -809,15 +816,15 @@ class Polyline(BaseLineObject):
 class RadiusArc(BaseEdgeObject):
     """Line Object: Radius Arc
 
-    Add an arc defined by two end points and a radius
+    Add a circular arc defined by two points and a radius.
 
     Args:
-        start_point (VectorLike): start
-        end_point (VectorLike): end
-        radius (float): radius
-        short_sagitta (bool): If True selects the short sagitta, else the
-            long sagitta crossing the center. Defaults to True.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        start_point (VectorLike): start point
+        end_point (VectorLike): end point
+        radius (float): arc radius
+        short_sagitta (bool): If True selects the short sagitta (height of arc from
+            chord), else the long sagitta crossing the center. Defaults to True
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Insufficient radius to connect end points
@@ -861,13 +868,13 @@ class RadiusArc(BaseEdgeObject):
 class SagittaArc(BaseEdgeObject):
     """Line Object: Sagitta Arc
 
-    Add an arc defined by two points and the height of the arc (sagitta).
+    Add a circular arc defined by two points and the sagitta (height of the arc from chord).
 
     Args:
-        start_point (VectorLike): start
-        end_point (VectorLike): end
-        sagitta (float): arc height
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        start_point (VectorLike): start point
+        end_point (VectorLike): end point
+        sagitta (float): arc height from chord between points
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -905,15 +912,16 @@ class SagittaArc(BaseEdgeObject):
 class Spline(BaseEdgeObject):
     """Line Object: Spline
 
-    Add a spline through the provided points optionally constrained by tangents.
+    Add a spline defined by a sequence of points, optionally constrained by tangents.
+    Tangents and tangent scalars must have length of 2 for only the end points or a length
+    of the number of points.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of two or more points
-        tangents (Iterable[VectorLike], optional): tangents at end points. Defaults to None.
-        tangent_scalars (Iterable[float], optional): change shape by amplifying tangent.
-            Defaults to None.
-        periodic (bool, optional): make the spline periodic. Defaults to False.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
+        tangents (Iterable[VectorLike], optional): tangent directions. Defaults to None
+        tangent_scalars (Iterable[float], optional): tangent scales. Defaults to None
+        periodic (bool, optional): make the spline periodic (closed). Defaults to False
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
     _applies_to = [BuildLine._tag]
@@ -963,14 +971,14 @@ class Spline(BaseEdgeObject):
 class TangentArc(BaseEdgeObject):
     """Line Object: Tangent Arc
 
-    Add an arc defined by two points and a tangent.
+    Add a circular arc defined by two points and a tangent.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of two points
+        pts (VectorLike | Iterable[VectorLike]): sequence of two points
         tangent (VectorLike): tangent to constrain arc
-        tangent_from_first (bool, optional): apply tangent to first point. Note, applying
-            tangent to end point will flip the orientation of the arc. Defaults to True.
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        tangent_from_first (bool, optional): apply tangent to first point. Applying
+            tangent to end point will flip the orientation of the arc. Defaults to True
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Two points are required
@@ -1005,11 +1013,11 @@ class TangentArc(BaseEdgeObject):
 class ThreePointArc(BaseEdgeObject):
     """Line Object: Three Point Arc
 
-    Add an arc generated by three points.
+    Add a circular arc defined by three points.
 
     Args:
-        pts (Union[VectorLike, Iterable[VectorLike]]): sequence of three points
-        mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+        pts (VectorLike | Iterable[VectorLike]): sequence of three points
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Three points must be provided
