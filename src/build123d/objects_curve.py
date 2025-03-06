@@ -706,13 +706,13 @@ class IntersectingLine(BaseEdgeObject):
 class PolarLine(BaseEdgeObject):
     """Line Object: Polar Line
 
-    Add line defined by a start point, length and angle.
+    Add line defined by a start point, length and angle or direction.
 
     Args:
         start (VectorLike): start point
         length (float): line length
         angle (float, optional): angle from the local "X" axis
-        direction (VectorLike, optional): point to determine angle
+        direction (VectorLike, optional): vector direction to determine angle
         length_mode (LengthMode, optional): length value specifies a diagonal, horizontal
             or vertical value. Defaults to LengthMode.DIAGONAL
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
