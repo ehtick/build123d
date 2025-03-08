@@ -203,6 +203,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
             ta.TopAbs_SHELL: Shell,
             ta.TopAbs_SOLID: Solid,
             ta.TopAbs_COMPOUND: Compound,
+            ta.TopAbs_COMPSOLID: Compound,
         }
 
         shape_type = shapetype(obj)
