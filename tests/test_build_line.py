@@ -247,35 +247,37 @@ class BuildLineTests(unittest.TestCase):
 
     def test_polar_line(self):
         """Test 2D and 3D polar lines"""
-        with BuildLine() as bl:
-            PolarLine((0, 0), sqrt(2), 45)
-        self.assertTupleAlmostEquals((bl.edges()[0] @ 1).to_tuple(), (1, 1, 0), 5)
+        with BuildLine():
+            a1 = PolarLine((0, 0), sqrt(2), 45)
+            d1 = PolarLine((0, 0), sqrt(2), direction=(1, 1))
+        self.assertTupleAlmostEquals((a1 @ 1).to_tuple(), (1, 1, 0), 5)
+        self.assertTupleAlmostEquals((a1 @ 1).to_tuple(), (d1 @ 1).to_tuple(), 5)
+        self.assertTrue(isinstance(a1, Edge))
+        self.assertTrue(isinstance(d1, Edge))
 
-        with BuildLine() as bl:
-            PolarLine((0, 0), 1, 30)
-        self.assertTupleAlmostEquals(
-            (bl.edges()[0] @ 1).to_tuple(), (sqrt(3) / 2, 0.5, 0), 5
-        )
+        with BuildLine():
+            a2 = PolarLine((0, 0), 1, 30)
+            d2 = PolarLine((0, 0), 1, direction=(sqrt(3), 1))
+        self.assertTupleAlmostEquals((a2 @ 1).to_tuple(), (sqrt(3) / 2, 0.5, 0), 5)
+        self.assertTupleAlmostEquals((a2 @ 1).to_tuple(), (d2 @ 1).to_tuple(), 5)
 
-        with BuildLine() as bl:
-            PolarLine((0, 0), 1, 150)
-        self.assertTupleAlmostEquals(
-            (bl.edges()[0] @ 1).to_tuple(), (-sqrt(3) / 2, 0.5, 0), 5
-        )
+        with BuildLine():
+            a3 = PolarLine((0, 0), 1, 150)
+            d3 = PolarLine((0, 0), 1, direction=(-sqrt(3), 1))
+        self.assertTupleAlmostEquals((a3 @ 1).to_tuple(), (-sqrt(3) / 2, 0.5, 0), 5)
+        self.assertTupleAlmostEquals((a3 @ 1).to_tuple(), (d3 @ 1).to_tuple(), 5)
 
-        with BuildLine() as bl:
-            PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.HORIZONTAL)
-        self.assertTupleAlmostEquals(
-            (bl.edges()[0] @ 1).to_tuple(), (1, 1 / sqrt(3), 0), 5
-        )
+        with BuildLine():
+            a4 = PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.HORIZONTAL)
+            d4 = PolarLine((0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.HORIZONTAL)
+        self.assertTupleAlmostEquals((a4 @ 1).to_tuple(), (1, 1 / sqrt(3), 0), 5)
+        self.assertTupleAlmostEquals((a4 @ 1).to_tuple(), (d4 @ 1).to_tuple(), 5)
 
-        with BuildLine(Plane.XZ) as bl:
-            PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.VERTICAL)
-        self.assertTupleAlmostEquals((bl.edges()[0] @ 1).to_tuple(), (sqrt(3), 0, 1), 5)
-
-        l1 = PolarLine((0, 0), 10, direction=(1, 1))
-        self.assertTupleAlmostEquals((l1 @ 1).to_tuple(), (10, 10, 0), 5)
-        self.assertTrue(isinstance(l1, Edge))
+        with BuildLine(Plane.XZ):
+            a5 = PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.VERTICAL)
+            d5 = PolarLine((0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.VERTICAL)
+        self.assertTupleAlmostEquals((a5 @ 1).to_tuple(), (sqrt(3), 0, 1), 5)
+        self.assertTupleAlmostEquals((a5 @ 1).to_tuple(), (d5 @ 1).to_tuple(), 5)
 
         with self.assertRaises(ValueError):
             PolarLine((0, 0), 1)

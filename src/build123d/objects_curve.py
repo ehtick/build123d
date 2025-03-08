@@ -719,6 +719,7 @@ class PolarLine(BaseEdgeObject):
         start (VectorLike): start point
         length (float): line length
         angle (float, optional): angle from the local x-axis
+        direction (VectorLike, optional): vector direction to determine angle        
         length_mode (LengthMode, optional): how length defines the line.
             Defaults to LengthMode.DIAGONAL
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -750,7 +751,7 @@ class PolarLine(BaseEdgeObject):
             )
 
         if direction is not None:
-            direction_localized = WorkplaneList.localize(direction)
+            direction_localized = WorkplaneList.localize(direction).normalized()
             angle = Vector(1, 0, 0).get_angle(direction_localized)
         elif angle is not None:
             direction_localized = polar_workplane.x_dir.rotate(

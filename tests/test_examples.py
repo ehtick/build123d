@@ -18,6 +18,7 @@ import unittest
 
 
 _examples_dir = Path(os.path.abspath(os.path.dirname(__file__))).parent / "examples"
+_ttt_dir = Path(os.path.abspath(os.path.dirname(__file__))).parent / "docs/assets/ttt"
 
 _MOCK_OCP_VSCODE_CONTENTS = """
 from pathlib import Path
@@ -72,8 +73,7 @@ def generate_example_test(path: Path):
 class TestExamples(unittest.TestCase):
     """Tests build123d examples."""
 
-
-for example in sorted(_examples_dir.iterdir()):
+for example in sorted(list(_examples_dir.iterdir()) + list(_ttt_dir.iterdir())):
     if example.name.startswith("_") or not example.name.endswith(".py"):
         continue
     setattr(
