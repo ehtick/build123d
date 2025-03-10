@@ -122,6 +122,9 @@ Benchy
 The Benchy examples shows how to import a STL model as a `Solid` object with the class `Mesher` and
 modify it by replacing chimney with a BREP version.
 
+- Benchy STL model: :download:`low_poly_benchy.stl <../examples/low_poly_benchy.stl>`
+
+
 .. note
 
      *Attribution:*
