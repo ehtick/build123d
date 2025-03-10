@@ -2722,19 +2722,16 @@ class Plane(metaclass=PlaneMeta):
     ) -> Plane:
         """Returns a copy of this plane, rotated about the specified axes
 
-        Since the z axis is always normal the plane, rotating around Z will
-        always produce a plane that is parallel to this one.
-
         The origin of the workplane is unaffected by the rotation.
 
         Rotations are done in order x, y, z. If you need a different order,
-        manually chain together multiple rotate() commands.
+        manually chain together multiple rotated() commands.
 
         Args:
             rotation (VectorLike, optional): (xDegrees, yDegrees, zDegrees).
-                Defaults to (0, 0, 0).
+                Defaults to (0, 0, 0)
             ordering (Intrinsic |  Extrinsic, optional): order of rotations in
-                Intrinsic or Extrinsic rotation mode, defaults to Intrinsic.XYZ
+                Intrinsic or Extrinsic rotation mode. Defaults to Intrinsic.XYZ
 
         Returns:
             Plane: a copy of this plane rotated as requested.
