@@ -267,6 +267,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     _ordered_shapes = [
         TopAbs_ShapeEnum.TopAbs_COMPOUND,
+        TopAbs_ShapeEnum.TopAbs_COMPSOLID,
         TopAbs_ShapeEnum.TopAbs_SOLID,
         TopAbs_ShapeEnum.TopAbs_SHELL,
         TopAbs_ShapeEnum.TopAbs_FACE,
