@@ -442,13 +442,15 @@ class Helix(BaseEdgeObject):
     Create a helix defined by pitch, height, and radius. The helix may have a taper
     defined by cone_angle.
 
+    If cone_angle is not 0, radius is the initial helix radius at center. cone_angle > 0
+    increases the final radius. cone_angle < 0 decreases the final radius. 
 
     Args:
         pitch (float): distance between loops
         height (float): helix height
         radius (float): helix radius
-        center (VectorLike, optional): center point. Defaults to (0, 0, 0).
-        direction (VectorLike, optional): direction of central axis. Defaults to (0, 0, 1).
+        center (VectorLike, optional): center point. Defaults to (0, 0, 0)
+        direction (VectorLike, optional): direction of central axis. Defaults to (0, 0, 1)
         cone_angle (float, optional): conical angle from direction.
             Defaults to 0
         lefthand (bool, optional): left handed helix. Defaults to False
