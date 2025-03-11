@@ -14,4 +14,4 @@ runs:
     - name: Install Requirements
       shell: bash
       run: |
-        uv install .[development]
+        uv pip install .[development]
