@@ -1062,7 +1062,7 @@ class PointArcTangentLine(BaseEdgeObject):
         arc: Curve | Edge | Wire,
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
-        ):
+    ):
 
         side_sign = {
             Side.LEFT: -1,
@@ -1142,7 +1142,6 @@ class PointArcTangentArc(BaseEdgeObject):
         arc: Curve | Edge | Wire,
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
-        use_sympy: bool = False
     ):
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
@@ -1184,117 +1183,58 @@ class PointArcTangentArc(BaseEdgeObject):
         if keep_sign * ref_to_point == arc.radius:
             raise RuntimeError("Point is already tangent to arc, use tangent line")
 
-        if not use_sympy:
-            # Use magnitude and sign of ref to arc point along with keep to determine
-            #   which "side" angle the arc center will be on
-            # - the arc center is the same side if the point is further from ref than arc radius
-            # - minimize type determines near or far side arc to minimize to
-            side_sign = 1 if ref_to_point < 0 else -1
-            if abs(ref_to_point) < arc.radius:
-                # point/tangent pointing inside arc, both arcs near
-                arc_type = 1
-                angle = keep_sign * -90
-                if ref_scale > 1:
-                    angle = -angle
-            else:
-                # point/tangent pointing outside arc, one near arc one far
-                angle = side_sign * -90
-                if side == side.LEFT:
-                    arc_type = -side_sign
-                else:
-                    arc_type = side_sign
-
-            # Protect against massive circles that are effectively straight lines
-            max_size = 1000 * arc.bounding_box().add(arc_point).diagonal
-
-            # Function to be minimized - note radius is a numpy array
-            def func(radius, perpendicular_bisector, minimize_type):
-                center = arc_point + perpendicular_bisector * radius[0]
-                separation = (arc.arc_center - center).length - arc.radius
-
-                if minimize_type == 1:
-                    # near side arc
-                    target = abs(separation - radius)
-                elif minimize_type == -1:
-                    # far side arc
-                    target = abs(separation - radius + arc.radius * 2)
-                return target
-
-            # Find arc center by minimizing func result
-            rotation_axis = Axis(workplane.origin, workplane.z_dir)
-            perpendicular_bisector = arc_tangent.rotate(rotation_axis, angle)
-            result = minimize(
-                func,
-                x0=0,
-                args=(perpendicular_bisector, arc_type),
-                method="Nelder-Mead",
-                bounds=[(0.0, max_size)],
-                tol=TOLERANCE,
-            )
-            tangent_radius = result.x[0]
-            tangent_center = arc_point + perpendicular_bisector * tangent_radius
-
-            # Check if minimizer hit max size
-            if tangent_radius == max_size:
-                raise RuntimeError("Arc radius very large. Can tangent line be used?")
-
+        # Use magnitude and sign of ref to arc point along with keep to determine
+        #   which "side" angle the arc center will be on
+        # - the arc center is the same side if the point is further from ref than arc radius
+        # - minimize type determines near or far side arc to minimize to
+        side_sign = 1 if ref_to_point < 0 else -1
+        if abs(ref_to_point) < arc.radius:
+            # point/tangent pointing inside arc, both arcs near
+            arc_type = 1
+            angle = keep_sign * -90
+            if ref_scale > 1:
+                angle = -angle
         else:
-            # Method:
-            # - Draw line perpendicular to direction with length of arc radius away from arc
-            # - Draw line from this point (ref_perp) to arc center, find angle with ref_perp
-            # - Find length of segment along this line from ref_perp to direction intercept
-            # - This segment is + or - from length ref_prep to arc center to find ref_radius
-            # - Find intersections arcs with ref_radius from ref_center and arc center
-            # - The intercept of this line with perpendicular is the tangent arc center
-            # Side.LEFT is always the arc further ccw per right hand rule
-
-            # ref_radius and ref_center determined by table below
-            # Position    Arc    Ref_radius Ref_center
-            # outside     near   -seg       +perp
-            # outside     far    +seg       -perp
-            # inside to   near   +seg       +perp
-            # inside from near   +seg       -perp
-
-            pos_sign = 1 if round(ref_to_point, 6) < 0 else -1
-            if abs(ref_to_point) <= arc.radius:
-                arc_type = -1
-                if ref_scale > 1:
-                    # point/tangent pointing from inside arc, two near arcs
-                    other_sign = pos_sign * keep_sign
-                else:
-                    # point/tangent pointing to inside arc, two near arcs
-                    other_sign = -pos_sign * keep_sign
+            # point/tangent pointing outside arc, one near arc one far
+            angle = side_sign * -90
+            if side == side.LEFT:
+                arc_type = -side_sign
             else:
-                # point/tangent pointing outside arc, one near arc one far
-                other_sign = 1
-                arc_type = keep_sign * pos_sign
+                arc_type = side_sign
 
-            # Find perpendicular and located it to ref_perp and ref_center
-            perpendicular = -pos_sign * arc_tangent.cross(workplane.z_dir).normalized() * arc.radius
-            ref_perp = perpendicular + arc_point
-            ref_center = other_sign * arc_type * perpendicular + arc_point
+        # Protect against massive circles that are effectively straight lines
+        max_size = 1000 * arc.bounding_box().add(arc_point).diagonal
 
-            # Find ref_radius
-            angle = perpendicular.get_angle(ref_perp - arc.arc_center)
-            center_dist = (ref_perp - arc.arc_center).length
-            segment = arc.radius / cos(radians(angle))
-            if arc_type == 1:
-                ref_radius = center_dist - segment
-            elif arc_type == -1:
-                ref_radius = center_dist + segment
+        # Function to be minimized - note radius is a numpy array
+        def func(radius, perpendicular_bisector, minimize_type):
+            center = arc_point + perpendicular_bisector * radius[0]
+            separation = (arc.arc_center - center).length - arc.radius
 
-            # Use ref arc intersections to find perp intercept as tangent_center
-            local = [workplane.to_local_coords(p) for p in [ref_center, arc.arc_center, arc_point]]
-            ref_circles = [sympy.Circle(sympy.Point(local[i].X, local[i].Y), ref_radius) for i in range(2)]
-            ref_intersections = sympy.intersection(*ref_circles)
+            if minimize_type == 1:
+                # near side arc
+                target = abs(separation - radius)
+            elif minimize_type == -1:
+                # far side arc
+                target = abs(separation - radius + arc.radius * 2)
+            return target
 
-            line1 = sympy.Line(sympy.Point(local[2].X, local[2].Y), sympy.Point(local[0].X, local[0].Y))
-            line2 = sympy.Line(*ref_intersections)
-            intercept = line1.intersect(line2)
-            intercept = sympy.N(intercept.args[0])
+        # Find arc center by minimizing func result
+        rotation_axis = Axis(workplane.origin, workplane.z_dir)
+        perpendicular_bisector = arc_tangent.rotate(rotation_axis, angle)
+        result = minimize(
+            func,
+            x0=0,
+            args=(perpendicular_bisector, arc_type),
+            method="Nelder-Mead",
+            bounds=[(0.0, max_size)],
+            tol=TOLERANCE,
+        )
+        tangent_radius = result.x[0]
+        tangent_center = arc_point + perpendicular_bisector * tangent_radius
 
-            tangent_center = workplane.from_local_coords((float(intercept.x), float(intercept.y)))
-            tangent_radius = (tangent_center - arc_point).length
+        # Check if minimizer hit max size
+        if tangent_radius == max_size:
+            raise RuntimeError("Arc radius very large. Can tangent line be used?")
 
         # dir needs to be flipped for far arc
         tangent_normal = (arc.arc_center - tangent_center).normalized()
@@ -1339,7 +1279,7 @@ class ArcArcTangentLine(BaseEdgeObject):
         side: Side = Side.LEFT,
         keep: Keep = Keep.INSIDE,
         mode: Mode = Mode.ADD,
-        ):
+    ):
 
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
@@ -1432,8 +1372,7 @@ class ArcArcTangentArc(BaseEdgeObject):
         side: Side = Side.LEFT,
         keep: Keep = Keep.INSIDE,
         mode: Mode = Mode.ADD,
-        use_sympy: bool = False
-        ):
+    ):
 
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
@@ -1472,23 +1411,6 @@ class ArcArcTangentArc(BaseEdgeObject):
         if min_radius >= radius:
             raise ValueError(f"The arc radius is too small. Should be greater than {min_radius}.")
 
-        if not use_sympy:
-            net_radius = radius + keep_sign * (radii[0] + radii[1]) / 2
-
-            # Technically the range midline.length / 2 < radius < math.inf should be valid
-            if net_radius <= midline.length / 2:
-                raise ValueError(f"The arc radius is too small. Should be greater than {(midline.length - keep_sign * (radii[0] + radii[1])) / 2} (and probably larger).")
-
-            # Current intersection method doesn't work out to expected range and may return 0
-            # Workaround to catch error midline.length / net_radius needs to be less than 1.888 or greater than .666 from testing
-            max_ratio = 1.888
-            min_ratio = .666
-            if midline.length / net_radius > max_ratio:
-                raise ValueError(f"The arc radius is too small. Should be greater than {midline.length / max_ratio - keep_sign * (radii[0] + radii[1]) / 2}.")
-
-            if midline.length / net_radius < min_ratio:
-                raise ValueError(f"The arc radius is too large. Should be less than {midline.length / min_ratio - keep_sign * (radii[0] + radii[1]) / 2}.")
-
         # Method:
         # https://www.youtube.com/watch?v=-STj2SSv6TU
         # - the centerpoint of the inner arc is found by the intersection of the
@@ -1497,21 +1419,10 @@ class ArcArcTangentArc(BaseEdgeObject):
         #   arcs made by subtracting the outer radius from the point radii
         # - then it's a matter of finding the points where the connecting lines
         #   intersect the point circles
-
-        if not use_sympy:
-            ref_arcs = [CenterArc(points[i], keep_sign * radii[i] + radius, start_angle=0, arc_size=360) for i in range(len(arcs))]
-            ref_intersections = ref_arcs[0].edge().intersect(ref_arcs[1].edge())
-
-            try:
-                arc_center = ref_intersections.sort_by(Axis(points[0], normal))[0]
-            except AttributeError as exception:
-                raise RuntimeError("Arc radius thought to be okay, but is too big or small to find intersection.")
-
-        else:
-            local = [workplane.to_local_coords(p) for p in points]
-            ref_circles = [sympy.Circle(sympy.Point2D(local[i].X, local[i].Y), keep_sign * radii[i] + radius) for i in range(len(arcs))]
-            ref_intersections = ShapeList([workplane.from_local_coords(Vector(float(sympy.N(p.x)), float(sympy.N(p.y)))) for p in sympy.intersection(*ref_circles)])
-            arc_center = ref_intersections.sort_by(Axis(points[0], normal))[0]
+        local = [workplane.to_local_coords(p) for p in points]
+        ref_circles = [sympy.Circle(sympy.Point2D(local[i].X, local[i].Y), keep_sign * radii[i] + radius) for i in range(len(arcs))]
+        ref_intersections = ShapeList([workplane.from_local_coords(Vector(float(sympy.N(p.x)), float(sympy.N(p.y)))) for p in sympy.intersection(*ref_circles)])
+        arc_center = ref_intersections.sort_by(Axis(points[0], normal))[0]
 
         intersect = [points[i] + keep_sign * radii[i] * (Vector(arc_center) - points[i]).normalized() for i in range(len(arcs))]
 
