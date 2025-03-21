@@ -1075,7 +1075,7 @@ class PointArcTangentLine(BaseEdgeObject):
         if arc.geom_type != GeomType.CIRCLE:
             raise ValueError("Arc must have GeomType.CIRCLE")
 
-        tangent_point  = WorkplaneList.localize(point)
+        tangent_point = WorkplaneList.localize(point)
         if context is None:
             # Making the plane validates points and arc are coplanar
             coplane = Edge.make_line(tangent_point, arc.arc_center).common_plane(
@@ -1110,7 +1110,7 @@ class PointArcTangentLine(BaseEdgeObject):
             radius * sin(radians(angle)))
             ) + arc_center
 
-        tangent = Edge.make_line(intersect, tangent_point)
+        tangent = Edge.make_line(tangent_point, intersect)
         super().__init__(tangent, mode)
 
 
@@ -1129,7 +1129,7 @@ class PointArcTangentArc(BaseEdgeObject):
 
     Raises:
         ValueError: Arc must have GeomType.CIRCLE
-        RuntimeError: Point is already tangent to arc
+        ValueError: Point is already tangent to arc
         RuntimeError: No tangent arc found
     """
 
@@ -1181,7 +1181,7 @@ class PointArcTangentArc(BaseEdgeObject):
         keep_sign = -1 if side == Side.LEFT else 1
         # Tangent radius to infinity (and beyond)
         if keep_sign * ref_to_point == arc.radius:
-            raise RuntimeError("Point is already tangent to arc, use tangent line")
+            raise ValueError("Point is already tangent to arc, use tangent line")
 
         # Use magnitude and sign of ref to arc point along with keep to determine
         #   which "side" angle the arc center will be on
