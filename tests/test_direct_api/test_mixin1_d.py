@@ -29,8 +29,16 @@ license:
 import math
 import unittest
 
-from build123d.build_enums import CenterOf, GeomType, PositionMode, Side, SortBy
+from build123d.build_enums import (
+    CenterOf,
+    FrameMethod,
+    GeomType,
+    PositionMode,
+    Side,
+    SortBy,
+)
 from build123d.geometry import Axis, Location, Plane, Vector
+from build123d.objects_curve import Polyline
 from build123d.objects_part import Box, Cylinder
 from build123d.topology import Compound, Edge, Face, Wire
 
@@ -201,6 +209,18 @@ class TestMixin1D(unittest.TestCase):
         self.assertAlmostEqual(loc.position, (0, 1, 0), 5)
         self.assertAlmostEqual(loc.orientation, (0, -90, -90), 5)
 
+    def test_location_at_x_dir(self):
+        path = Polyline((-50, -40), (50, -40), (50, 40), (-50, 40), close=True)
+        l1 = path.location_at(0)
+        l2 = path.location_at(0, x_dir=(0, 1, 0))
+        self.assertAlmostEqual(l1.position, l2.position, 5)
+        self.assertAlmostEqual(l1.z_axis, l2.z_axis, 5)
+        self.assertNotEqual(l1.x_axis, l2.x_axis, 5)
+        self.assertAlmostEqual(l2.x_axis, Axis(path @ 0, (0, 1, 0)), 5)
+
+        with self.assertRaises(ValueError):
+            path.location_at(0, x_dir=(1, 0, 0))
+
     def test_locations(self):
         locs = Edge.make_circle(1).locations([i / 4 for i in range(4)])
         self.assertAlmostEqual(locs[0].position, (1, 0, 0), 5)
@@ -211,6 +231,37 @@ class TestMixin1D(unittest.TestCase):
         self.assertAlmostEqual(locs[2].orientation, (90, 0, 0), 5)
         self.assertAlmostEqual(locs[3].position, (0, -1, 0), 5)
         self.assertAlmostEqual(locs[3].orientation, (0, 90, 90), 5)
+
+    def test_location_at_corrected_frenet(self):
+        # A polyline with sharp corners — problematic for classic Frenet
+        path = Polyline((0, 0), (10, 0), (10, 10), (0, 10))
+
+        # Request multiple locations along the curve
+        locations = [
+            path.location_at(t, frame_method=FrameMethod.CORRECTED)
+            for t in [0.0, 0.25, 0.5, 0.75, 1.0]
+        ]
+        # Ensure all locations were created and have consistent orientation
+        self.assertTrue(
+            all(
+                locations[0].x_axis.direction == l.x_axis.direction
+                for l in locations[1:]
+            )
+        )
+
+        # Check that Z-axis is approximately orthogonal to X-axis
+        for loc in locations:
+            self.assertLess(abs(loc.z_axis.direction.dot(loc.x_axis.direction)), 1e-6)
+
+        # Check continuity of rotation (not flipping wildly)
+        # Check angle between x_axes doesn't flip more than ~90 degrees
+        angles = []
+        for i in range(len(locations) - 1):
+            a1 = locations[i].x_axis.direction
+            a2 = locations[i + 1].x_axis.direction
+            angle = a1.get_angle(a2)
+            angles.append(angle)
+        self.assertTrue(all(abs(angle) < 90 for angle in angles))
 
     def test_project(self):
         target = Face.make_rect(10, 10, Plane.XY.rotated((0, 45, 0)))

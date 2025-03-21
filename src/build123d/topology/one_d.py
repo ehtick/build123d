@@ -120,7 +120,11 @@ from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCP.ShapeFix import ShapeFix_Shape, ShapeFix_Wireframe
-from OCP.Standard import Standard_Failure, Standard_NoSuchObject
+from OCP.Standard import (
+    Standard_Failure,
+    Standard_NoSuchObject,
+    Standard_ConstructionError,
+)
 from OCP.TColStd import (
     TColStd_Array1OfReal,
     TColStd_HArray1OfBoolean,
@@ -511,7 +515,8 @@ class Mixin1D(Shape):
         distance: float,
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool = False,
+        planar: bool | None = None,
+        x_dir: VectorLike | None = None,
     ) -> Location:
         """Locations along curve
 
@@ -522,8 +527,18 @@ class Mixin1D(Shape):
             position_mode (PositionMode, optional): position calculation mode.
                 Defaults to PositionMode.PARAMETER.
             frame_method (FrameMethod, optional): moving frame calculation method.
+                The FRENET frame can “twist” or flip unexpectedly, especially near flat
+                spots. The CORRECTED frame behaves more like a “camera dolly” or
+                sweep profile would — it's smoother and more stable.
                 Defaults to FrameMethod.FRENET.
-            planar (bool, optional): planar mode. Defaults to False.
+            planar (bool, optional): planar mode. Defaults to None.
+            x_dir (VectorLike, optional): override the x_dir to help with plane
+                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                Defaults to None.
+
+        .. deprecated::
+            The `planar` parameter is deprecated and will be removed in a future release.
+            Use `x_dir` to specify orientation instead.
 
         Returns:
             Location: A Location object representing local coordinate system
@@ -550,23 +565,45 @@ class Mixin1D(Shape):
         pnt = curve.Value(param)
 
         transformation = gp_Trsf()
-        if planar:
+        if planar is not None:
+            warnings.warn(
+                "The 'planar' parameter is deprecated and will be removed in a future version. "
+                "Use 'x_dir' to control orientation instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if planar is not None and planar:
             transformation.SetTransformation(
                 gp_Ax3(pnt, gp_Dir(0, 0, 1), gp_Dir(normal.XYZ())), gp_Ax3()
             )
+        elif x_dir is not None:
+            try:
+
+                transformation.SetTransformation(
+                    gp_Ax3(pnt, gp_Dir(tangent.XYZ()), Vector(x_dir).to_dir()), gp_Ax3()
+                )
+            except Standard_ConstructionError:
+                raise ValueError(
+                    f"Unable to create location with given x_dir {x_dir}. "
+                    f"x_dir must be perpendicular to shape's tangent "
+                    f"{tuple(Vector(tangent))}."
+                )
+
         else:
             transformation.SetTransformation(
                 gp_Ax3(pnt, gp_Dir(tangent.XYZ()), gp_Dir(normal.XYZ())), gp_Ax3()
             )
+        loc = Location(TopLoc_Location(transformation))
 
-        return Location(TopLoc_Location(transformation))
+        return loc
 
     def locations(
         self,
         distances: Iterable[float],
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool = False,
+        planar: bool | None = None,
+        x_dir: VectorLike | None = None,
     ) -> list[Location]:
         """Locations along curve
 
@@ -579,13 +616,21 @@ class Mixin1D(Shape):
             frame_method (FrameMethod, optional): moving frame calculation method.
                 Defaults to FrameMethod.FRENET.
             planar (bool, optional): planar mode. Defaults to False.
+            x_dir (VectorLike, optional): override the x_dir to help with plane
+                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                Defaults to None.
+
+        .. deprecated::
+            The `planar` parameter is deprecated and will be removed in a future release.
+            Use `x_dir` to specify orientation instead.
 
         Returns:
             list[Location]: A list of Location objects representing local coordinate
                 systems at the specified distances.
         """
         return [
-            self.location_at(d, position_mode, frame_method, planar) for d in distances
+            self.location_at(d, position_mode, frame_method, planar, x_dir)
+            for d in distances
         ]
 
     def normal(self) -> Vector:
