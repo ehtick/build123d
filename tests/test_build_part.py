@@ -442,6 +442,12 @@ class TestSection(unittest.TestCase):
             s = section(section_by=Plane.XZ)
         self.assertAlmostEqual(s.area, 100 * pi, 5)
 
+    def test_moved_object(self):
+        sec = section(Pos(-100, 100) * Sphere(10), Plane.XY)
+        self.assertEqual(len(sec.faces()), 1)
+        self.assertAlmostEqual(sec.face().edge().radius, 10, 5)
+        self.assertAlmostEqual(sec.face().center(), (-100, 100, 0), 5)
+
 
 class TestSplit(unittest.TestCase):
     def test_split(self):

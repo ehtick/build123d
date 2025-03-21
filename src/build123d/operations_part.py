@@ -516,7 +516,8 @@ def section(
     else:
         raise ValueError("No object to section")
 
-    max_size = to_section.bounding_box(optimal=False).diagonal
+    bbox = to_section.bounding_box(optimal=False)
+    max_size = max(abs(v) for v in list(bbox.min) + list(bbox.max)) + bbox.diagonal
 
     if section_by is not None:
         section_planes = (
