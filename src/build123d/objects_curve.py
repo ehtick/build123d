@@ -29,14 +29,20 @@ license:
 from __future__ import annotations
 
 import copy as copy_module
+from collections.abc import Iterable
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
-import sympy
-
-from collections.abc import Iterable
+import sympy # type: ignore
 
 from build123d.build_common import WorkplaneList, flatten_sequence, validate_inputs
-from build123d.build_enums import AngularDirection, GeomType, Keep, LengthMode, Mode, Side
+from build123d.build_enums import (
+    AngularDirection,
+    GeomType,
+    LengthMode,
+    Keep,
+    Mode,
+    Side,
+)
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Plane, Vector, VectorLike, TOLERANCE
 from build123d.topology import Edge, Face, Wire, Curve
@@ -721,7 +727,7 @@ class PolarLine(BaseEdgeObject):
         start (VectorLike): start point
         length (float): line length
         angle (float, optional): angle from the local x-axis
-        direction (VectorLike, optional): vector direction to determine angle        
+        direction (VectorLike, optional): vector direction to determine angle
         length_mode (LengthMode, optional): how length defines the line.
             Defaults to LengthMode.DIAGONAL
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -1049,7 +1055,7 @@ class PointArcTangentLine(BaseEdgeObject):
     Args:
         point (VectorLike): intersection point for tangent
         arc (Curve | Edge | Wire): circular arc to tangent, must be GeomType.CIRCLE
-        side (Side, optional): side of arcs to place tangent arc center, LEFT or RIGHT. 
+        side (Side, optional): side of arcs to place tangent arc center, LEFT or RIGHT.
             Defaults to Side.LEFT
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
@@ -1079,16 +1085,14 @@ class PointArcTangentLine(BaseEdgeObject):
         if context is None:
             # Making the plane validates points and arc are coplanar
             coplane = Edge.make_line(tangent_point, arc.arc_center).common_plane(
-                *arc.edges()
+                arc
             )
             if coplane is None:
                 raise ValueError("PointArcTangentLine only works on a single plane.")
 
             workplane = Plane(coplane.origin, z_dir=arc.normal())
         else:
-            workplane = copy_module.copy(
-                WorkplaneList._get_context().workplanes[0]
-            )
+            workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
 
         arc_center = arc.arc_center
         radius = arc.radius
@@ -1102,13 +1106,17 @@ class PointArcTangentLine(BaseEdgeObject):
         # add the resulting angles with a sign on theta to pick a direction
         # This angle is the tangent location around the circle from x
         phi = midline.get_signed_angle(workplane.x_dir)
-        other_leg = sqrt(midline.length ** 2 - radius ** 2)
-        theta = WorkplaneList.localize((radius, other_leg)).get_signed_angle(workplane.x_dir)
+        other_leg = sqrt(midline.length**2 - radius**2)
+        theta = WorkplaneList.localize((radius, other_leg)).get_signed_angle(
+            workplane.x_dir
+        )
         angle = side_sign[side] * theta + phi
-        intersect = WorkplaneList.localize((
-            radius * cos(radians(angle)),
-            radius * sin(radians(angle)))
-            ) + arc_center
+        intersect = (
+            WorkplaneList.localize(
+                (radius * cos(radians(angle)), radius * sin(radians(angle)))
+            )
+            + arc_center
+        )
 
         tangent = Edge.make_line(tangent_point, intersect)
         super().__init__(tangent, mode)
@@ -1155,20 +1163,20 @@ class PointArcTangentArc(BaseEdgeObject):
         if context is None:
             # Making the plane validates point, tangent, and arc are coplanar
             coplane = Edge.make_line(arc_point, arc_point + wp_tangent).common_plane(
-                *arc.edges()
+                arc
             )
             if coplane is None:
                 raise ValueError("PointArcTangentArc only works on a single plane.")
 
             workplane = Plane(coplane.origin, z_dir=arc.normal())
         else:
-            workplane = copy_module.copy(
-                WorkplaneList._get_context().workplanes[0]
-            )
+            workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
 
-        arc_tangent = Vector(direction).transform(
-            workplane.reverse_transform, is_direction=True
-        ).normalized()
+        arc_tangent = (
+            Vector(direction)
+            .transform(workplane.reverse_transform, is_direction=True)
+            .normalized()
+        )
 
         midline = arc_point - arc.arc_center
         if midline.length == arc.radius:
@@ -1270,9 +1278,9 @@ class ArcArcTangentLine(BaseEdgeObject):
     Args:
         start_arc (Curve | Edge | Wire): starting arc, must be GeomType.CIRCLE
         end_arc (Curve | Edge | Wire): ending arc, must be GeomType.CIRCLE
-        side (Side): side of arcs to place tangent arc center, LEFT or RIGHT. 
+        side (Side): side of arcs to place tangent arc center, LEFT or RIGHT.
             Defaults to Side.LEFT
-        keep (Keep): which tangent arc to keep, INSIDE or OUTSIDE. 
+        keep (Keep): which tangent arc to keep, INSIDE or OUTSIDE.
             Defaults to Keep.INSIDE
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
@@ -1299,17 +1307,13 @@ class ArcArcTangentLine(BaseEdgeObject):
 
         if context is None:
             # Making the plane validates start arc and end arc are coplanar
-            coplane = start_arc.edge().common_plane(
-                *end_arc.edges()
-            )
+            coplane = start_arc.common_plane(end_arc)
             if coplane is None:
                 raise ValueError("ArcArcTangentLine only works on a single plane.")
 
             workplane = Plane(coplane.origin, z_dir=start_arc.normal())
         else:
-            workplane = copy_module.copy(
-                WorkplaneList._get_context().workplanes[0]
-            )
+            workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
 
         side_sign = 1 if side == Side.LEFT else -1
         arcs = [start_arc, end_arc]
@@ -1320,7 +1324,7 @@ class ArcArcTangentLine(BaseEdgeObject):
         if midline.length <= abs(radii[1] - radii[0]):
             raise ValueError("Cannot find tangent when one arc contains the other.")
 
-        if (keep == Keep.INSIDE or keep == Keep.BOTH):
+        if keep == Keep.INSIDE:
             if midline.length < sum(radii):
                 raise ValueError("Cannot find INSIDE tangent for overlapping arcs.")
 
@@ -1337,17 +1341,21 @@ class ArcArcTangentLine(BaseEdgeObject):
 
         phi = midline.get_signed_angle(workplane.x_dir)
         radius = radii[0] + radii[1] if keep == Keep.INSIDE else radii[0] - radii[1]
-        other_leg = sqrt(midline.length ** 2 - radius ** 2)
-        theta = WorkplaneList.localize((radius, other_leg)).get_signed_angle(workplane.x_dir)
+        other_leg = sqrt(midline.length**2 - radius**2)
+        theta = WorkplaneList.localize((radius, other_leg)).get_signed_angle(
+            workplane.x_dir
+        )
         angle = side_sign * theta + phi
 
         intersect = []
         for i in range(len(arcs)):
             angle = i * 180 + angle if keep == Keep.INSIDE else angle
-            intersect.append(WorkplaneList.localize((
-                radii[i] * cos(radians(angle)),
-                radii[i] * sin(radians(angle)))
-                ) + points[i])
+            intersect.append(
+                WorkplaneList.localize(
+                    (radii[i] * cos(radians(angle)), radii[i] * sin(radians(angle)))
+                )
+                + points[i]
+            )
 
         tangent = Edge.make_line(intersect[0], intersect[1])
         super().__init__(tangent, mode)
@@ -1362,9 +1370,9 @@ class ArcArcTangentArc(BaseEdgeObject):
         start_arc (Curve | Edge | Wire): starting arc, must be GeomType.CIRCLE
         end_arc (Curve | Edge | Wire): ending arc, must be GeomType.CIRCLE
         radius (float): radius of tangent arc
-        side (Side): side of arcs to place tangent arc center, LEFT or RIGHT. 
+        side (Side): side of arcs to place tangent arc center, LEFT or RIGHT.
             Defaults to Side.LEFT
-        keep (Keep): which tangent arc to keep, INSIDE or OUTSIDE. 
+        keep (Keep): which tangent arc to keep, INSIDE or OUTSIDE.
             Defaults to Keep.INSIDE
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
@@ -1392,15 +1400,13 @@ class ArcArcTangentArc(BaseEdgeObject):
 
         if context is None:
             # Making the plane validates start arc and end arc are coplanar
-            coplane = start_arc.edge().common_plane(end_arc.edge())
+            coplane = start_arc.common_plane(end_arc)
             if coplane is None:
                 raise ValueError("ArcArcTangentArc only works on a single plane.")
 
             workplane = Plane(coplane.origin, z_dir=start_arc.normal())
         else:
-            workplane = copy_module.copy(
-                WorkplaneList._get_context().workplanes[0]
-            )
+            workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
 
         side_sign = 1 if side == Side.LEFT else -1
         keep_sign = 1 if keep == Keep.INSIDE else -1
@@ -1422,7 +1428,9 @@ class ArcArcTangentArc(BaseEdgeObject):
         # Sometimes fails if min_radius == radius, so using >=
         min_radius = (midline.length - keep_sign * (radii[0] + radii[1])) / 2
         if min_radius >= radius:
-            raise ValueError(f"The arc radius is too small. Should be greater than {min_radius}.")
+            raise ValueError(
+                f"The arc radius is too small. Should be greater than {min_radius}."
+            )
 
         # Method:
         # https://www.youtube.com/watch?v=-STj2SSv6TU
@@ -1433,14 +1441,30 @@ class ArcArcTangentArc(BaseEdgeObject):
         # - then it's a matter of finding the points where the connecting lines
         #   intersect the point circles
         local = [workplane.to_local_coords(p) for p in points]
-        ref_circles = [sympy.Circle(sympy.Point2D(local[i].X, local[i].Y), keep_sign * radii[i] + radius) for i in range(len(arcs))]
-        ref_intersections = ShapeList([workplane.from_local_coords(Vector(float(sympy.N(p.x)), float(sympy.N(p.y)))) for p in sympy.intersection(*ref_circles)])
+        ref_circles = [
+            sympy.Circle(
+                sympy.Point(local[i].X, local[i].Y), keep_sign * radii[i] + radius
+            )
+            for i in range(len(arcs))
+        ]
+        ref_intersections = ShapeList(
+            [
+                workplane.from_local_coords(
+                    Vector(float(sympy.N(p.x)), float(sympy.N(p.y)))
+                )
+                for p in sympy.intersection(*ref_circles)
+            ]
+        )
         arc_center = ref_intersections.sort_by(Axis(points[0], normal))[0]
 
-        intersect = [points[i] + keep_sign * radii[i] * (Vector(arc_center) - points[i]).normalized() for i in range(len(arcs))]
+        intersect = [
+            points[i]
+            + keep_sign * radii[i] * (Vector(arc_center) - points[i]).normalized()
+            for i in range(len(arcs))
+        ]
 
         if side == Side.LEFT:
             intersect.reverse()
 
-        arc = RadiusArc(*intersect, radius=radius)
+        arc = RadiusArc(intersect[0], intersect[1], radius=radius)
         super().__init__(arc, mode)

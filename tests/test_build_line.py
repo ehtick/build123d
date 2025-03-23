@@ -269,13 +269,17 @@ class BuildLineTests(unittest.TestCase):
 
         with BuildLine():
             a4 = PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.HORIZONTAL)
-            d4 = PolarLine((0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.HORIZONTAL)
+            d4 = PolarLine(
+                (0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.HORIZONTAL
+            )
         self.assertTupleAlmostEquals((a4 @ 1).to_tuple(), (1, 1 / sqrt(3), 0), 5)
         self.assertTupleAlmostEquals((a4 @ 1).to_tuple(), (d4 @ 1).to_tuple(), 5)
 
         with BuildLine(Plane.XZ):
             a5 = PolarLine((0, 0), 1, angle=30, length_mode=LengthMode.VERTICAL)
-            d5 = PolarLine((0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.VERTICAL)
+            d5 = PolarLine(
+                (0, 0), 1, direction=(sqrt(3), 1), length_mode=LengthMode.VERTICAL
+            )
         self.assertTupleAlmostEquals((a5 @ 1).to_tuple(), (sqrt(3), 0, 1), 5)
         self.assertTupleAlmostEquals((a5 @ 1).to_tuple(), (d5 @ 1).to_tuple(), 5)
 
@@ -411,7 +415,7 @@ class BuildLineTests(unittest.TestCase):
 
             points = [1, 2, 3, 5, 7, 11, 13]
             for point in points:
-                start_point = point_arc @ (point/16)
+                start_point = point_arc @ (point / 16)
                 mid_vector = end_center - start_point
                 mid_perp = mid_vector.cross(workplane.z_dir)
                 for side in [Side.LEFT, Side.RIGHT]:
@@ -479,12 +483,19 @@ class BuildLineTests(unittest.TestCase):
 
             # Assortment of points in different regimes
             flip = separation * 2
-            value = (flip - end_r)
-            points = [start_point, (end_r - .1, 0), (-end_r - .1, 0),
-                      (end_r + .1, flip), (-end_r + .1, flip),
-                      (0, flip), (flip, flip),
-                      (-flip, -flip),
-                      (value, -value), (-value, value)]
+            value = flip - end_r
+            points = [
+                start_point,
+                (end_r - 0.1, 0),
+                (-end_r - 0.1, 0),
+                (end_r + 0.1, flip),
+                (-end_r + 0.1, flip),
+                (0, flip),
+                (flip, flip),
+                (-flip, -flip),
+                (value, -value),
+                (-value, value),
+            ]
             for point in points:
                 mid_vector = end_center - point
                 mid_perp = mid_vector.cross(workplane.z_dir)
@@ -518,7 +529,9 @@ class BuildLineTests(unittest.TestCase):
             PointArcTangentArc((end_r, 0), direction, end_arc, side=Side.RIGHT)
 
         with self.assertRaises(RuntimeError):
-            PointArcTangentArc((end_r-.00001, 0), direction, end_arc, side=Side.RIGHT)
+            PointArcTangentArc(
+                (end_r - 0.00001, 0), direction, end_arc, side=Side.RIGHT
+            )
 
     def test_arc_arc_tangent_line(self):
         """Test tangent line between arcs
@@ -528,7 +541,7 @@ class BuildLineTests(unittest.TestCase):
         - INSIDE arcs cross midline of arc centers
         - INSIDE lines should always have equal length as long as arcs are same distance
         - OUTSIDE lines should always have equal length as long as arcs are same distance
-        - LEFT lines should always start on start arc left of midline (angle > 0) 
+        - LEFT lines should always start on start arc left of midline (angle > 0)
         - Tangent should be GeomType.CIRCLE
         - Arcs must be coplanar
         - Cannot make tangent for concentric arcs
@@ -573,7 +586,7 @@ class BuildLineTests(unittest.TestCase):
 
             points = [1, 2, 3, 5, 7, 11, 13]
             for point in points:
-                start_center = point_arc @ (point/16)
+                start_center = point_arc @ (point / 16)
                 start_arc = CenterArc(start_center, start_r, 0, 360)
                 midline = Line(start_center, end_center)
                 mid_vector = end_center - start_center
@@ -628,7 +641,6 @@ class BuildLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             arc = CenterArc(start_point, separation - end_r + 1, 0, 360)
             ArcArcTangentLine(arc, end_arc, keep=Keep.INSIDE)
-
 
     def test_arc_arc_tangent_arc(self):
         """Test tangent arc between arcs
@@ -685,13 +697,15 @@ class BuildLineTests(unittest.TestCase):
 
             points = [1, 2, 3, 5, 7, 11, 13]
             for point in points:
-                start_center = point_arc @ (point/16)
-                start_arc = CenterArc(point_arc @ (point/16), start_r, 0, 360)
+                start_center = point_arc @ (point / 16)
+                start_arc = CenterArc(point_arc @ (point / 16), start_r, 0, 360)
                 mid_vector = end_center - start_center
                 mid_perp = mid_vector.cross(workplane.z_dir)
                 for keep in [Keep.INSIDE, Keep.OUTSIDE]:
                     for side in [Side.LEFT, Side.RIGHT]:
-                        l2 = ArcArcTangentArc(start_arc, end_arc, radius, side=side, keep=keep)
+                        l2 = ArcArcTangentArc(
+                            start_arc, end_arc, radius, side=side, keep=keep
+                        )
 
                         # Check length against algebraic length
                         if keep == Keep.INSIDE:
@@ -732,7 +746,6 @@ class BuildLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             r = (separation - (start_r + end_r)) / 2 - 1
             ArcArcTangentArc(CenterArc((0, 0, 1), 5, 0, 360), end_arc, r)
-
 
     def test_line_with_list(self):
         """Test line with a list of points"""
