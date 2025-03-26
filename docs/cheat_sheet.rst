@@ -75,6 +75,7 @@ Cheat Sheet
             | :func:`~operations_generic.bounding_box`
             | :func:`~operations_generic.mirror`
             | :func:`~operations_generic.offset`
+            | :func:`~operations_generic.project`
             | :func:`~operations_generic.scale`
             | :func:`~operations_generic.split`
 
@@ -88,6 +89,7 @@ Cheat Sheet
             | :func:`~operations_sketch.make_hull`
             | :func:`~operations_generic.mirror`
             | :func:`~operations_generic.offset`
+            | :func:`~operations_generic.project`
             | :func:`~operations_generic.scale`
             | :func:`~operations_generic.split`
             | :func:`~operations_generic.sweep`
@@ -103,6 +105,7 @@ Cheat Sheet
             | :func:`~operations_part.make_brake_formed`
             | :func:`~operations_generic.mirror`
             | :func:`~operations_generic.offset`
+            | :func:`~operations_generic.project`
             | :func:`~operations_part.revolve`
             | :func:`~operations_generic.scale`
             | :func:`~operations_part.section`
