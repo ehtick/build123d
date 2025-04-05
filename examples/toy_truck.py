@@ -167,5 +167,5 @@ with BuildPart() as cab:
 body.joints["body_top"].connect_to(cab.joints["cab_base"])
 
 # Show the result
-show(image, body.part, cab.part)
+show(body.part, cab.part)
 # [End]
