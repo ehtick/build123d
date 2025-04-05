@@ -66,8 +66,10 @@ def shape_to_html(shape: Any) -> HTML:
     )
 
     # A new div with a unique id, plus the JS code templated with the id
-    div_id = 'shape-' + uuid.uuid4().hex[:8]
-    code = Template(TEMPLATE_JS).substitute(data=dumps(payload), div_id=div_id, ratio=0.5)
+    div_id = "shape-" + uuid.uuid4().hex[:8]
+    code = Template(TEMPLATE_JS).substitute(
+        data=dumps(payload), div_id=div_id, ratio=0.5
+    )
     html = HTML(f"<div id={div_id}></div><script>{code}</script>")
 
     return html

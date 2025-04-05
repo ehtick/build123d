@@ -94,6 +94,11 @@ Most of the examples show the builder and algebra modes.
             :link: tea_cup
             :link-type: ref
 
+    .. grid-item-card:: Toy Truck |Builder|
+            :img-top: assets/examples/toy_truck.png
+            :link: toy_truck
+            :link-type: ref
+
     .. grid-item-card:: Vase |Builder| |Algebra|
             :img-top: assets/examples/vase.png
             :link: vase
@@ -514,6 +519,30 @@ The tea cup model involves several CAD techniques, such as:
 * Fillet Operations: There is 1 occurrence of a fillet operation which is used to
   round the edges for aesthetic improvement and to mimic real-world objects more
   closely.
+
+
+.. _toy_truck:
+
+Toy Truck
+---------
+.. image:: assets/examples/toy_truck.png
+    :align: center
+    
+.. image:: assets/examples/toy_truck_picture.jpg
+    :align: center
+
+.. dropdown:: |Builder| Reference Implementation (Builder Mode)
+
+    .. literalinclude:: ../examples/toy_truck.py
+        :start-after: [Code]
+        :end-before: [End]
+
+This example demonstrates how to design a toy truck using BuildPart and 
+BuildSketch in Builder mode. The model includes a detailed body, cab, grill, 
+and bumper, showcasing techniques like sketch reuse, symmetry, tapered 
+extrusions, selective filleting, and the use of joints for part assembly. 
+Ideal for learning complex part construction and hierarchical modeling in 
+build123d.
 
 .. _vase:
 

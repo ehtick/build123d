@@ -5,7 +5,7 @@ name: __init__.py
 by:   Gumyr
 date: January 07, 2025
 
-desc: 
+desc:
     This package contains modules for representing and manipulating 3D geometric shapes,
     including operations on vertices, edges, faces, solids, and composites.
     The package provides foundational classes to work with 3D objects, and methods to
