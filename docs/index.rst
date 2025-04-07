@@ -42,9 +42,9 @@ somewhat restrictive Fluent API (method chaining) is replaced with stateful
 context managers - i.e. `with` blocks - thus enabling the full python toolbox:
 for loops, references to objects, object sorting and filtering, etc.
 
-Note that this documentation is available in 
+Note that this documentation is available in
 `pdf <https://build123d.readthedocs.io/_/downloads/en/latest/pdf/>`_ and
-`epub <https://build123d.readthedocs.io/_/downloads/en/latest/epub/>`_ formats 
+`epub <https://build123d.readthedocs.io/_/downloads/en/latest/epub/>`_ formats
 for reference while offline.
 
 ########
@@ -113,6 +113,7 @@ Table Of Contents
     introductory_examples.rst
     tutorials.rst
     objects.rst
+    selectors_operators.rst
     operations.rst
     builders.rst
     joints.rst
