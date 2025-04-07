@@ -426,10 +426,10 @@ class SlotCenterPoint(BaseSketchObject):
 
         half_line = point_v - center_v
 
-        if half_line.length * 2 <= height:
+        if half_line.length <= 0:
             raise ValueError(
-                f"Slots must have width > height. "
-                "Got: {height=} width={half_line.length * 2} (computed)"
+                "Distance between center and point must be greater than 0 "
+                f"Got: distance = {half_line.length} (computed)"
             )
 
         face = Face(
