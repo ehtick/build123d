@@ -379,6 +379,9 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
             )
         )
 
+        # Fuse glyphs with multiple overlapping faces
+        text_flat = Compound(Face.fuse(*text_flat.faces()))
+
         # Align the text from the bounding box
         align_text = tuplify(align, 2)
         text_flat = text_flat.translate(
