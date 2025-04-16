@@ -373,6 +373,382 @@ class BuildLineTests(unittest.TestCase):
         self.assertEqual(len(test.edges()), 4)
         self.assertAlmostEqual(test.wires()[0].length, 4)
 
+    def test_point_arc_tangent_line(self):
+        """Test tangent line between point and arc
+
+        Considerations:
+        - Should produce a GeomType.LINE located on and tangent to arc
+        - Should start on point
+        - Lines should always have equal length as long as point is same distance
+        - LEFT lines should always end on end arc left of midline (angle > 0)
+        - Arc should be GeomType.CIRCLE
+        - Point and arc must be coplanar
+        - Cannot make tangent from point inside arc
+        """
+        # Test line properties in algebra mode
+        point = (0, 0)
+        separation = 10
+        end_point = (0, separation)
+        end_r = 5
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+
+        lines = []
+        for side in [Side.LEFT, Side.RIGHT]:
+            l1 = PointArcTangentLine(point, end_arc, side=side)
+            self.assertEqual(l1.geom_type, GeomType.LINE)
+
+            self.assertTupleAlmostEquals(tuple(point), tuple(l1 @ 0), 5)
+
+            _, p1, p2 = end_arc.distance_to_with_closest_points(l1 @ 1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+            lines.append(l1)
+
+        self.assertAlmostEqual(lines[0].length, lines[1].length, 5)
+
+        # Test in off-axis builder mode at multiple angles and compare to prev result
+        workplane = Plane.XY.rotated((45, 45, 45))
+        with BuildLine(workplane):
+            end_center = workplane.from_local_coords(end_point)
+            point_arc = CenterArc(end_center, separation, 0, 360)
+            end_arc = CenterArc(end_center, end_r, 0, 360)
+
+            points = [1, 2, 3, 5, 7, 11, 13]
+            for point in points:
+                start_point = point_arc @ (point / 16)
+                mid_vector = end_center - start_point
+                mid_perp = mid_vector.cross(workplane.z_dir)
+                for side in [Side.LEFT, Side.RIGHT]:
+                    l2 = PointArcTangentLine(start_point, end_arc, side=side)
+                    self.assertAlmostEqual(lines[0].length, l2.length, 5)
+
+                    # Check side
+                    coincident_dir = mid_perp.dot(l2 @ 1 - end_center)
+                    if side == Side.LEFT:
+                        self.assertLess(coincident_dir, 0)
+
+                    elif side == Side.RIGHT:
+                        self.assertGreater(coincident_dir, 0)
+
+        # Error Handling
+        bad_type = Line((0, 0), (0, 10))
+        with self.assertRaises(ValueError):
+            PointArcTangentLine(start_point, bad_type)
+
+        with self.assertRaises(ValueError):
+            PointArcTangentLine(start_point, CenterArc((0, 1, 1), end_r, 0, 360))
+
+        with self.assertRaises(ValueError):
+            PointArcTangentLine(start_point, CenterArc((0, 1), end_r, 0, 360))
+
+    def test_point_arc_tangent_arc(self):
+        """Test tangent arc between point and arc
+
+        Considerations:
+        - Should produce a GeomType.CIRCLE located on and tangent to arc
+        - Should start on point tangent to direction
+        - LEFT lines should always end on end arc left of midline (angle > 0)
+        - Tangent should be GeomType.CIRCLE
+        - Point and arc must be coplanar
+        - Cannot make tangent arc from point/direction already tangent with arc
+        - (Due to minimizer limit) Cannot make tangent with very large radius
+        """
+        # Test line properties in algebra mode
+        start_point = (0, 0)
+        direction = (0, 1)
+        separation = 10
+        end_point = (0, separation)
+        end_r = 5
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+        lines = []
+        for side in [Side.LEFT, Side.RIGHT]:
+            l1 = PointArcTangentArc(start_point, direction, end_arc, side=side)
+            self.assertEqual(l1.geom_type, GeomType.CIRCLE)
+
+            self.assertTupleAlmostEquals(tuple(start_point), tuple(l1 @ 0), 5)
+            self.assertAlmostEqual(Vector(direction).cross(l1 % 0).length, 0, 5)
+
+            _, p1, p2 = end_arc.distance_to_with_closest_points(l1 @ 1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+            lines.append(l1)
+
+        # Test in off-axis builder mode at multiple angles and compare to prev result
+        workplane = Plane.XY.rotated((45, 45, 45))
+        with BuildLine(workplane):
+            end_center = workplane.from_local_coords(end_point)
+            end_arc = CenterArc(end_center, end_r, 0, 360)
+
+            # Assortment of points in different regimes
+            flip = separation * 2
+            value = flip - end_r
+            points = [
+                start_point,
+                (end_r - 0.1, 0),
+                (-end_r - 0.1, 0),
+                (end_r + 0.1, flip),
+                (-end_r + 0.1, flip),
+                (0, flip),
+                (flip, flip),
+                (-flip, -flip),
+                (value, -value),
+                (-value, value),
+            ]
+            for point in points:
+                mid_vector = end_center - point
+                mid_perp = mid_vector.cross(workplane.z_dir)
+                centers = {}
+                for side in [Side.LEFT, Side.RIGHT]:
+                    l2 = PointArcTangentArc(point, direction, end_arc, side=side)
+
+                    centers[side] = l2.center()
+                    if point == start_point:
+                        self.assertAlmostEqual(lines[0].length, l2.length, 5)
+
+                # Rudimentary side check. Somewhat surprised this works
+                center_dif = centers[Side.RIGHT] - centers[Side.LEFT]
+                self.assertGreater(mid_perp.dot(center_dif), 0)
+
+        # Error Handling
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+
+        # GeomType
+        bad_type = Line((0, 0), (0, 10))
+        with self.assertRaises(ValueError):
+            PointArcTangentArc(start_point, direction, bad_type)
+
+        # Coplanar
+        with self.assertRaises(ValueError):
+            arc = CenterArc((0, 1, 1), end_r, 0, 360)
+            PointArcTangentArc(start_point, direction, arc)
+
+        # Positional
+        with self.assertRaises(ValueError):
+            PointArcTangentArc((end_r, 0), direction, end_arc, side=Side.RIGHT)
+
+        with self.assertRaises(RuntimeError):
+            PointArcTangentArc(
+                (end_r - 0.00001, 0), direction, end_arc, side=Side.RIGHT
+            )
+
+    def test_arc_arc_tangent_line(self):
+        """Test tangent line between arcs
+
+        Considerations:
+        - Should produce a GeomType.LINE located on and tangent to arcs
+        - INSIDE arcs cross midline of arc centers
+        - INSIDE lines should always have equal length as long as arcs are same distance
+        - OUTSIDE lines should always have equal length as long as arcs are same distance
+        - LEFT lines should always start on start arc left of midline (angle > 0)
+        - Tangent should be GeomType.CIRCLE
+        - Arcs must be coplanar
+        - Cannot make tangent for concentric arcs
+        - Cannot make INSIDE tangent from overlapping or tangent arcs
+        """
+        # Test line properties in algebra mode
+        start_r = 2
+        end_r = 5
+        separation = 10
+        start_point = (0, 0)
+        end_point = (0, separation)
+
+        start_arc = CenterArc(start_point, start_r, 0, 360)
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+        lines = []
+        for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+            for side in [Side.LEFT, Side.RIGHT]:
+                l1 = ArcArcTangentLine(start_arc, end_arc, side=side, keep=keep)
+                self.assertEqual(l1.geom_type, GeomType.LINE)
+
+                # Check coincidence, tangency with each arc
+                _, p1, p2 = start_arc.distance_to_with_closest_points(l1 @ 0)
+                self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+                self.assertAlmostEqual(
+                    start_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+                )
+                _, p1, p2 = end_arc.distance_to_with_closest_points(l1 @ 1)
+                self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+                self.assertAlmostEqual(
+                    end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+                )
+                lines.append(l1)
+
+            self.assertAlmostEqual(lines[-2].length, lines[-1].length, 5)
+
+        # Test in off-axis builder mode at multiple angles and compare to prev result
+        workplane = Plane.XY.rotated((45, 45, 45))
+        with BuildLine(workplane):
+            end_center = workplane.from_local_coords(end_point)
+            point_arc = CenterArc(end_center, separation, 0, 360)
+            end_arc = CenterArc(end_center, end_r, 0, 360)
+
+            points = [1, 2, 3, 5, 7, 11, 13]
+            for point in points:
+                start_center = point_arc @ (point / 16)
+                start_arc = CenterArc(start_center, start_r, 0, 360)
+                midline = Line(start_center, end_center)
+                mid_vector = end_center - start_center
+                mid_perp = mid_vector.cross(workplane.z_dir)
+                for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+                    for side in [Side.LEFT, Side.RIGHT]:
+                        l2 = ArcArcTangentLine(start_arc, end_arc, side=side, keep=keep)
+
+                        # Check length and cross/does not cross midline
+                        d1 = midline.distance_to(l2)
+                        if keep == Keep.INSIDE:
+                            self.assertAlmostEqual(d1, 0, 5)
+                            self.assertAlmostEqual(lines[0].length, l2.length, 5)
+
+                        elif keep == Keep.OUTSIDE:
+                            self.assertNotAlmostEqual(d1, 0, 5)
+                            self.assertAlmostEqual(lines[2].length, l2.length, 5)
+
+                        # Check side of midline
+                        _, _, p2 = start_arc.distance_to_with_closest_points(l2)
+                        coincident_dir = mid_perp.dot(p2 - start_center)
+                        if side == Side.LEFT:
+                            self.assertLess(coincident_dir, 0)
+
+                        elif side == Side.RIGHT:
+                            self.assertGreater(coincident_dir, 0)
+
+        ## Error Handling
+        start_arc = CenterArc(start_point, start_r, 0, 360)
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+
+        # GeomType
+        bad_type = Line((0, 0), (0, 10))
+        with self.assertRaises(ValueError):
+            ArcArcTangentLine(start_arc, bad_type)
+
+        with self.assertRaises(ValueError):
+            ArcArcTangentLine(bad_type, end_arc)
+
+        # Coplanar
+        with self.assertRaises(ValueError):
+            ArcArcTangentLine(CenterArc((0, 0, 1), 5, 0, 360), end_arc)
+
+        # Position conditions
+        with self.assertRaises(ValueError):
+            ArcArcTangentLine(CenterArc(end_point, start_r, 0, 360), end_arc)
+
+        with self.assertRaises(ValueError):
+            arc = CenterArc(start_point, separation - end_r, 0, 360)
+            ArcArcTangentLine(arc, end_arc, keep=Keep.INSIDE)
+
+        with self.assertRaises(ValueError):
+            arc = CenterArc(start_point, separation - end_r + 1, 0, 360)
+            ArcArcTangentLine(arc, end_arc, keep=Keep.INSIDE)
+
+    def test_arc_arc_tangent_arc(self):
+        """Test tangent arc between arcs
+
+        Considerations:
+        - Should produce a GeomType.CIRCLE located on and tangent to arcs
+        - Tangent arcs that share a side have arc centers on the same side of the midline
+        - LEFT arcs have centers to right of midline
+        - INSIDE lines should always have equal length as long as arcs are same distance
+        - OUTSIDE lines should always have equal length as long as arcs are same distance
+        - Tangent should be GeomType.CIRCLE
+        - Arcs must be coplanar
+        - Cannot make tangent for radius under certain size
+        - Cannot make tangent for concentric arcs
+        """
+        # Test line properties in algebra mode
+        start_r = 2
+        end_r = 5
+        separation = 10
+        start_point = (0, 0)
+        end_point = (0, separation)
+
+        start_arc = CenterArc(start_point, start_r, 0, 360)
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+        radius = 15
+        lines = []
+        for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+            for side in [Side.LEFT, Side.RIGHT]:
+                l1 = ArcArcTangentArc(start_arc, end_arc, radius, side=side, keep=keep)
+                self.assertEqual(l1.geom_type, GeomType.CIRCLE)
+                self.assertAlmostEqual(l1.radius, radius)
+
+                # Check coincidence, tangency with each arc
+                _, p1, p2 = start_arc.distance_to_with_closest_points(l1)
+                self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+                self.assertAlmostEqual(
+                    start_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+                )
+                _, p1, p2 = end_arc.distance_to_with_closest_points(l1)
+                self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+                self.assertAlmostEqual(
+                    end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+                )
+                lines.append(l1)
+
+            self.assertAlmostEqual(lines[-2].length, lines[-1].length, 5)
+
+        # Test in off-axis builder mode at multiple angles and compare to prev result
+        workplane = Plane.XY.rotated((45, 45, 45))
+        with BuildLine(workplane):
+            end_center = workplane.from_local_coords(end_point)
+            point_arc = CenterArc(end_center, separation, 0, 360)
+            end_arc = CenterArc(end_center, end_r, 0, 360)
+
+            points = [1, 2, 3, 5, 7, 11, 13]
+            for point in points:
+                start_center = point_arc @ (point / 16)
+                start_arc = CenterArc(point_arc @ (point / 16), start_r, 0, 360)
+                mid_vector = end_center - start_center
+                mid_perp = mid_vector.cross(workplane.z_dir)
+                for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+                    for side in [Side.LEFT, Side.RIGHT]:
+                        l2 = ArcArcTangentArc(
+                            start_arc, end_arc, radius, side=side, keep=keep
+                        )
+
+                        # Check length against algebraic length
+                        if keep == Keep.INSIDE:
+                            self.assertAlmostEqual(lines[0].length, l2.length, 5)
+                            side_sign = 1
+                        elif keep == Keep.OUTSIDE:
+                            self.assertAlmostEqual(lines[2].length, l2.length, 5)
+                            side_sign = -1
+
+                        # Check side of midline
+                        _, _, p2 = start_arc.distance_to_with_closest_points(l2)
+                        coincident_dir = mid_perp.dot(p2 - start_center)
+                        center_dir = mid_perp.dot(l2.arc_center - start_center)
+                        if side == Side.LEFT:
+                            self.assertLess(side_sign * coincident_dir, 0)
+                            self.assertLess(center_dir, 0)
+
+                        elif side == Side.RIGHT:
+                            self.assertGreater(side_sign * coincident_dir, 0)
+                            self.assertGreater(center_dir, 0)
+
+        ## Error Handling
+        start_arc = CenterArc(start_point, start_r, 0, 360)
+        end_arc = CenterArc(end_point, end_r, 0, 360)
+        # GeomType
+        bad_type = Line((0, 0), (0, 10))
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(start_arc, bad_type, radius)
+
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(bad_type, end_arc, radius)
+
+        # Coplanar
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(CenterArc((0, 0, 1), 5, 0, 360), end_arc, radius)
+
+        # Radius size
+        with self.assertRaises(ValueError):
+            r = (separation - (start_r + end_r)) / 2 - 1
+            ArcArcTangentArc(CenterArc((0, 0, 1), 5, 0, 360), end_arc, r)
+
     def test_line_with_list(self):
         """Test line with a list of points"""
         l = Line([(0, 0), (10, 0)])

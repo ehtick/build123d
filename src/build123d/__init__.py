@@ -93,6 +93,10 @@ __all__ = [
     "TangentArc",
     "JernArc",
     "ThreePointArc",
+    "PointArcTangentLine",
+    "ArcArcTangentLine",
+    "PointArcTangentArc",
+    "ArcArcTangentArc",
     # 2D Sketch Objects
     "ArrowHead",
     "Arrow",
