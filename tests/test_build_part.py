@@ -412,6 +412,25 @@ class TestRevolve(unittest.TestCase):
         self.assertLess(test.part.volume, 244 * pi * 20, 5)
         self.assertGreater(test.part.volume, 100 * pi * 20, 5)
 
+    def test_revolve_size(self):
+        """Verify revolution result matches revolution_arc size and direction"""
+        ax = Axis.X
+        sizes = [30, 90, 150, 180, 200, 360, 500, 720, 750]
+        sizes = [x * -1 for x in sizes[::-1]] + [0] + sizes
+        for size in sizes:
+            profile = RegularPolygon(10, 4, align=(Align.CENTER, Align.MIN))
+            solid = revolve(profile, axis=ax, revolution_arc=size)
+
+            # Find any rotation edge and and the start tangent normal to the profile
+            edge = solid.edges().filter_by(GeomType.CIRCLE).sort_by(Edge.length)[-1]
+            sign = (edge % 0).Z
+
+            expected = size % (sign * 360)
+            expected = sign * 360 if expected == 0 else expected
+            result = edge.length / edge.radius / pi * 180 * sign
+
+            self.assertAlmostEqual(expected, result)
+
     # Invalid test
     # def test_invalid_axis_origin(self):
     #     with BuildPart():

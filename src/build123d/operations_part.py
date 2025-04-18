@@ -464,8 +464,9 @@ def revolve(
 
     # Make sure we account for users specifying angles larger than 360 degrees, and
     # for OCCT not assuming that a 0 degree revolve means a 360 degree revolve
-    angle = revolution_arc % 360.0
-    angle = 360.0 if angle == 0 else angle
+    sign = 1 if revolution_arc >= 0 else -1
+    angle = revolution_arc % (sign * 360.0)
+    angle = sign * 360.0 if angle == 0 else angle
 
     if all([s is None for s in profile_list]):
         if context is None or (context is not None and not context.pending_faces):
