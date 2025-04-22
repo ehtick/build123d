@@ -1351,8 +1351,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
 
         if surface_point is None:
             u_val0, u_val1, v_val0, v_val1 = self._uv_bounds()
-            u_val = u * (u_val0 + u_val1)
-            v_val = v * (v_val0 + v_val1)
+            u_val = u_val0 + u * (u_val1 - u_val0)
+            v_val = v_val0 + v * (v_val1 - v_val0)
         else:
             # project point on surface
             projector = GeomAPI_ProjectPointOnSurf(
