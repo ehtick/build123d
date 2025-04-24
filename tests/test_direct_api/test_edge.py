@@ -29,7 +29,7 @@ license:
 import math
 import unittest
 
-from build123d.build_enums import AngularDirection, GeomType, Transition
+from build123d.build_enums import AngularDirection, GeomType, PositionMode, Transition
 from build123d.geometry import Axis, Plane, Vector
 from build123d.objects_curve import CenterArc, EllipticalCenterArc
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
@@ -282,6 +282,9 @@ class TestEdge(unittest.TestCase):
         e2r = e2.reversed()
         self.assertAlmostEqual((e2 @ 0.1).X, -(e2r @ 0.1).X, 5)
 
+        e2r = e2.reversed(reconstruct=True)
+        self.assertAlmostEqual((e2 @ 0.1).X, -(e2r @ 0.1).X, 5)
+
     def test_init(self):
         with self.assertRaises(TypeError):
             Edge(direction=(1, 0, 0))
@@ -293,6 +296,66 @@ class TestEdge(unittest.TestCase):
         inside_edges = target.edges().filter_by(lambda e: e.is_interior)
         self.assertEqual(len(inside_edges), 5)
         self.assertTrue(all(e.geom_type == GeomType.ELLIPSE for e in inside_edges))
+
+    def test_position_at(self):
+        line = Edge.make_line((1, 1), (2, 2))
+        self.assertEqual(line @ 0, Vector(1, 1, 0))
+        self.assertEqual(line @ 1, Vector(2, 2, 0))
+        self.assertEqual(line.reversed() @ 0, Vector(2, 2, 0))
+        self.assertEqual(line.reversed() @ 1, Vector(1, 1, 0))
+
+        self.assertEqual(
+            line.position_at(1, position_mode=PositionMode.LENGTH),
+            Vector(1, 1) + Vector(math.sqrt(2) / 2, math.sqrt(2) / 2),
+        )
+        self.assertEqual(
+            line.reversed().position_at(1, position_mode=PositionMode.LENGTH),
+            Vector(2, 2) - Vector(math.sqrt(2) / 2, math.sqrt(2) / 2),
+        )
+
+    def test_tangent_at(self):
+        arc = Edge.make_circle(1, start_angle=0, end_angle=180)
+        self.assertEqual(arc % 0, Vector(0, 1, 0))
+        self.assertEqual(arc % 1, Vector(0, -1, 0))
+        self.assertEqual(arc.reversed() % 0, Vector(0, 1, 0))
+        self.assertEqual(arc.reversed() % 1, Vector(0, -1, 0))
+        self.assertEqual(arc.reversed() @ 0, Vector(-1, 0, 0))
+        self.assertEqual(arc.reversed() @ 1, Vector(1, 0, 0))
+
+        self.assertEqual(
+            arc.tangent_at(math.pi, position_mode=PositionMode.LENGTH), Vector(0, -1, 0)
+        )
+        self.assertEqual(
+            arc.reversed().tangent_at(math.pi / 2, position_mode=PositionMode.LENGTH),
+            Vector(1, 0, 0),
+        )
+
+    def test_location_at(self):
+        arc = Edge.make_circle(1, start_angle=0, end_angle=180)
+        self.assertEqual(arc.location_at(0).position, Vector(1, 0, 0))
+        self.assertEqual(arc.location_at(1).position, Vector(-1, 0, 0))
+        self.assertEqual(arc.location_at(0).z_axis.direction, Vector(0, 1, 0))
+        self.assertEqual(arc.location_at(1).z_axis.direction, Vector(0, -1, 0))
+
+        self.assertEqual(arc.reversed().location_at(0).position, Vector(-1, 0, 0))
+        self.assertEqual(arc.reversed().location_at(1).position, Vector(1, 0, 0))
+        self.assertEqual(
+            arc.reversed().location_at(0).z_axis.direction, Vector(0, 1, 0)
+        )
+        self.assertEqual(
+            arc.reversed().location_at(1).z_axis.direction, Vector(0, -1, 0)
+        )
+
+        self.assertEqual(
+            arc.location_at(math.pi, position_mode=PositionMode.LENGTH).position,
+            Vector(-1, 0, 0),
+        )
+        self.assertEqual(
+            arc.reversed()
+            .location_at(math.pi, position_mode=PositionMode.LENGTH)
+            .position,
+            Vector(1, 0, 0),
+        )
 
 
 if __name__ == "__main__":

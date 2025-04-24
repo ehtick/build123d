@@ -182,8 +182,6 @@ class TestWire(unittest.TestCase):
             ]
         )
         ordered_edges = w1.order_edges()
-        self.assertFalse(all(e.is_forward for e in w1.edges()))
-        self.assertTrue(all(e.is_forward for e in ordered_edges))
         self.assertAlmostEqual(ordered_edges[0] @ 0, (0, 0, 0), 5)
         self.assertAlmostEqual(ordered_edges[1] @ 0, (1, 0, 0), 5)
         self.assertAlmostEqual(ordered_edges[2] @ 0, (1, 1, 0), 5)

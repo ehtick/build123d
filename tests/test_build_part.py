@@ -415,20 +415,32 @@ class TestRevolve(unittest.TestCase):
     def test_revolve_size(self):
         """Verify revolution result matches revolution_arc size and direction"""
         ax = Axis.X
+        profile = RegularPolygon(10, 4, align=(Align.CENTER, Align.MIN))
+        full_volume = revolve(profile, ax, 360).volume
         sizes = [30, 90, 150, 180, 200, 360, 500, 720, 750]
         sizes = [x * -1 for x in sizes[::-1]] + [0] + sizes
         for size in sizes:
-            profile = RegularPolygon(10, 4, align=(Align.CENTER, Align.MIN))
             solid = revolve(profile, axis=ax, revolution_arc=size)
 
-            # Find any rotation edge and and the start tangent normal to the profile
-            edge = solid.edges().filter_by(GeomType.CIRCLE).sort_by(Edge.length)[-1]
+            # Create a rotation edge and and the start tangent normal to the profile
+            edge = Edge.make_circle(
+                1,
+                Plane.YZ,
+                0,
+                size % 360,
+                (
+                    AngularDirection.COUNTER_CLOCKWISE
+                    if size > 0
+                    else AngularDirection.CLOCKWISE
+                ),
+            )
             sign = (edge % 0).Z
 
             expected = size % (sign * 360)
             expected = sign * 360 if expected == 0 else expected
             result = edge.length / edge.radius / pi * 180 * sign
 
+            self.assertAlmostEqual(solid.volume, full_volume * abs(expected) / 360)
             self.assertAlmostEqual(expected, result)
 
     # Invalid test
@@ -506,10 +518,10 @@ class TestThicken(unittest.TestCase):
         outer_sphere = thicken(non_planar, amount=0.1)
         self.assertAlmostEqual(outer_sphere.volume, (4 / 3) * pi * (1.1**3 - 1**3), 5)
 
-        wire = JernArc((0, 0), (-1, 0), 1, 180).edge().reversed() + JernArc(
-            (0, 0), (1, 0), 2, -90
-        )
-        part = thicken(sweep((wire ^ 0) * RadiusArc((0, 0), (0, -1), 1), wire), 0.4)
+        wire = JernArc((0, -2), (-1, 0), 1, -180) + JernArc((0, 0), (1, 0), 2, -90)
+
+        surface = sweep((wire ^ 0) * RadiusArc((0, 0), (0, -1), 1), wire)
+        part = thicken(surface, 0.4)
         self.assertAlmostEqual(part.volume, 2.241583787221904, 5)
 
         part = thicken(

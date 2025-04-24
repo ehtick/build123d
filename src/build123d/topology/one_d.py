@@ -506,7 +506,7 @@ class Mixin1D(Shape):
         Note that circles may have identical start and end points.
         """
         curve = self.geom_adaptor()
-        umax = curve.LastParameter()
+        umax = curve.LastParameter() if self.is_forward else curve.FirstParameter()
 
         return Vector(curve.Value(umax))
 
@@ -545,6 +545,12 @@ class Mixin1D(Shape):
                 at the specified distance.
         """
         curve = self.geom_adaptor()
+
+        if not self.is_forward:
+            if position_mode == PositionMode.PARAMETER:
+                distance = 1 - distance
+            else:
+                distance = self.length - distance
 
         if position_mode == PositionMode.PARAMETER:
             param = self.param_at(distance)
@@ -595,7 +601,9 @@ class Mixin1D(Shape):
             )
         loc = Location(TopLoc_Location(transformation))
 
-        return loc
+        if self.is_forward:
+            return loc
+        return -loc
 
     def locations(
         self,
@@ -822,8 +830,12 @@ class Mixin1D(Shape):
         curve = self.geom_adaptor()
 
         if position_mode == PositionMode.PARAMETER:
+            if not self.is_forward:
+                distance = 1 - distance
             param = self.param_at(distance)
         else:
+            if not self.is_forward:
+                distance = self.length - distance
             param = self.param_at(distance / self.length)
 
         return Vector(curve.Value(param))
@@ -1120,7 +1132,7 @@ class Mixin1D(Shape):
         Note that circles may have identical start and end points.
         """
         curve = self.geom_adaptor()
-        umin = curve.FirstParameter()
+        umin = curve.FirstParameter() if self.is_forward else curve.LastParameter()
 
         return Vector(curve.Value(umin))
 
@@ -1169,6 +1181,12 @@ class Mixin1D(Shape):
         Returns:
             Vector: tangent value
         """
+        if not self.is_forward:
+            if position_mode == PositionMode.PARAMETER:
+                position = 1 - position
+            else:
+                position = self.length - position
+
         if isinstance(position, (float, int)):
             curve = self.geom_adaptor()
             if position_mode == PositionMode.PARAMETER:
@@ -1198,7 +1216,9 @@ class Mixin1D(Shape):
         res = gp_Vec()
         curve.D1(parameter, tmp, res)
 
-        return Vector(gp_Dir(res))
+        if self.is_forward:
+            return Vector(gp_Dir(res))
+        return Vector(gp_Dir(res)) * -1
 
     def vertex(self) -> Vertex | None:
         """Return the Vertex"""
@@ -2089,16 +2109,29 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         projected_edges = [w.edges()[0] for w in projected_wires]
         return projected_edges
 
-    def reversed(self) -> Edge:
-        """Return a copy of self with the opposite orientation"""
+    def reversed(self, reconstruct: bool = False) -> Edge:
+        """reversed
+
+        Return a copy of self with the opposite orientation.
+
+        Args:
+            reconstruct (bool, optional): rebuild edge instead of setting OCCT flag.
+                Defaults to False.
+
+        Returns:
+            Edge: reversed
+        """
         reversed_edge = copy.deepcopy(self)
-        first: float = self.param_at(0)
-        last: float = self.param_at(1)
-        curve = BRep_Tool.Curve_s(self.wrapped, first, last)
-        first = curve.ReversedParameter(first)
-        last = curve.ReversedParameter(last)
-        topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
-        reversed_edge.wrapped = topods_edge
+        if reconstruct:
+            first: float = self.param_at(0)
+            last: float = self.param_at(1)
+            curve = BRep_Tool.Curve_s(self.wrapped, first, last)
+            first = curve.ReversedParameter(first)
+            last = curve.ReversedParameter(last)
+            topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
+            reversed_edge.wrapped = topods_edge
+        else:
+            reversed_edge.wrapped = downcast(self.wrapped.Reversed())
         return reversed_edge
 
     def to_axis(self) -> Axis:
@@ -2805,10 +2838,18 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
 
     def order_edges(self) -> ShapeList[Edge]:
         """Return the edges in self ordered by wire direction and orientation"""
-        ordered_edges = [
-            e if e.is_forward else e.reversed() for e in self.edges().sort_by(self)
-        ]
-        return ShapeList(ordered_edges)
+
+        sorted_edges = self.edges().sort_by(self)
+        ordered_edges = ShapeList([sorted_edges[0]])
+
+        for edge in sorted_edges[1:]:
+            last_edge = ordered_edges[-1]
+            if abs(last_edge @ 1 - edge @ 0) < TOLERANCE:
+                ordered_edges.append(edge)
+            else:
+                ordered_edges.append(edge.reversed())
+
+        return ordered_edges
 
     def param_at_point(self, point: VectorLike) -> float:
         """Parameter at point on Wire"""
