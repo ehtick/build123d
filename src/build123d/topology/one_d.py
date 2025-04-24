@@ -1181,13 +1181,14 @@ class Mixin1D(Shape):
         Returns:
             Vector: tangent value
         """
-        if not self.is_forward:
-            if position_mode == PositionMode.PARAMETER:
-                position = 1 - position
-            else:
-                position = self.length - position
 
         if isinstance(position, (float, int)):
+            if not self.is_forward:
+                if position_mode == PositionMode.PARAMETER:
+                    position = 1 - position
+                else:
+                    position = self.length - position
+
             curve = self.geom_adaptor()
             if position_mode == PositionMode.PARAMETER:
                 parameter = self.param_at(position)
@@ -2121,6 +2122,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         Returns:
             Edge: reversed
         """
+        if self.wrapped is None:
+            raise ValueError("An empty edge can't be reversed")
+
+        assert isinstance(self.wrapped, TopoDS_Edge)
+
         reversed_edge = copy.deepcopy(self)
         if reconstruct:
             first: float = self.param_at(0)
