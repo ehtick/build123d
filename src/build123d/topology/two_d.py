@@ -1325,7 +1325,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         surface_point, u, v = None, -1.0, -1.0
 
         if args:
-            if isinstance(args[0], Sequence):
+            if isinstance(args[0], (Vector, Sequence)):
                 surface_point = args[0]
             elif isinstance(args[0], (int, float)):
                 u = args[0]

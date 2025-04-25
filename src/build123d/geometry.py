@@ -144,6 +144,10 @@ class Vector:
 
     """
 
+    # Note: Vector can't be made into a Sequence as NumPy attempts to be "helpful" by
+    # auto-converting array-like objects (objects with __len__() and indexing) into NumPy
+    # arrays during certain arithmetic operations.
+
     # pylint: disable=too-many-public-methods
     _wrapped: gp_Vec
     _dim = 0
