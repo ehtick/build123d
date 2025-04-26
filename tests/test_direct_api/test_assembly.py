@@ -49,7 +49,7 @@ class TestAssembly(unittest.TestCase):
         actual_topo_lines = actual_topo.splitlines()
         self.assertEqual(len(actual_topo_lines), len(expected_topo_lines))
         for actual_line, expected_line in zip(actual_topo_lines, expected_topo_lines):
-            start, end = re.split(r"at 0x[0-9a-f]+,", expected_line, 2, re.I)
+            start, end = re.split(r"at 0x[0-9a-f]+,", expected_line, maxsplit=2, flags=re.I)
             self.assertTrue(actual_line.startswith(start))
             self.assertTrue(actual_line.endswith(end))
 
