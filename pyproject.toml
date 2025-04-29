@@ -46,6 +46,7 @@ dependencies = [
     "ocpsvg >= 0.5, < 0.6",
     "trianglesolver",
     "sympy",
+    "scipy",
 ]
 
 [project.urls]
