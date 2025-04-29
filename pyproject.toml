@@ -41,7 +41,7 @@ dependencies = [
     "svgpathtools >= 1.5.1, < 2",
     "anytree >= 2.8.0, < 3",
     "ezdxf >= 1.1.0, < 2",
-    "ipython >= 8.0.0, < 9",
+    "ipython >= 8.0.0, < 10",
     "lib3mf >= 2.4.1",
     "ocpsvg >= 0.5, < 0.6",
     "trianglesolver",
