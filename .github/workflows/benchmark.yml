@@ -22,5 +22,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: benchmark
         run: |
-          python -m pytest --benchmark-only --csv="results.csv"
+          python -m pytest --benchmark-only --benchmark-save
+          pytest-benchmark compare --csv="results.csv"
           echo results.csv
