@@ -73,8 +73,7 @@ def full_round(
         ValueError: Invalid geometry
 
     Returns:
-        (Sketch, Vector, float): A tuple where the first value is the modified shape, the second the
-        geometric center of the arc, and the third the radius of the arc
+        Sketch: the modified shape
 
     """
     context: BuildSketch | None = BuildSketch._get_context("full_round")
@@ -192,7 +191,7 @@ def full_round(
         context.pending_edges = ShapeList()
 
     # return Sketch(Compound([pending_face]).wrapped)
-    return Sketch([pending_face]), new_arc.arc_center, new_arc.radius
+    return Sketch([pending_face])
 
 
 def make_face(
