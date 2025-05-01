@@ -43,10 +43,11 @@ from build123d.exporters3d import export_stl
 from build123d.geometry import Axis, Location, Plane, Pos, Vector
 from build123d.importers import import_stl
 from build123d.objects_curve import Line, Polyline, Spline, ThreePointArc
-from build123d.objects_part import Box, Cylinder, Sphere, Torus
+from build123d.objects_part import Box, Cone, Cylinder, Sphere, Torus
 from build123d.objects_sketch import (
     Circle,
     Ellipse,
+    Polygon,
     Rectangle,
     RegularPolygon,
     Triangle,
@@ -55,6 +56,7 @@ from build123d.operations_generic import fillet, offset
 from build123d.operations_part import extrude
 from build123d.operations_sketch import make_face
 from build123d.topology import Edge, Face, Solid, Wire
+from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
 
 
 class TestFace(unittest.TestCase):
@@ -829,6 +831,62 @@ class TestFace(unittest.TestCase):
         self.assertAlmostEqual(t.radii, (5, 1), 5)
         s = Sphere(1).face()
         self.assertIsNone(s.radii)
+
+    def test_wrap(self):
+        surfaces = [
+            part.faces().filter_by(GeomType.PLANE, reverse=True)[0]
+            for part in (Cylinder(5, 10), Sphere(5), Cone(5, 2, 10))
+        ]
+        inner = PolarLocations(1, 5, -18).local_locations
+        outer = PolarLocations(3, 5, -18 + 36).local_locations
+        points = [p.position for pair in zip(inner, outer) for p in pair]
+        star = (Polygon(*points, align=Align.NONE) - Circle(0.5)).face()
+        planar_edge = Edge.make_line((0, 0), (3, 3))
+        planar_wire = Wire([planar_edge, Edge.make_line(planar_edge @ 1, (3, 0))])
+        for surface in surfaces:
+            with self.subTest(surface=surface):
+                target = surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))
+
+                wrapped_face: Face = surface.wrap(star, target)
+                self.assertTrue(isinstance(wrapped_face, Face))
+                self.assertFalse(wrapped_face.is_planar_face)
+                self.assertTrue(wrapped_face.inner_wires())
+
+                wrapped_edge = surface.wrap(planar_edge, target)
+                self.assertTrue(wrapped_edge.geom_type == GeomType.BSPLINE)
+                self.assertAlmostEqual(planar_edge.length, wrapped_edge.length, 2)
+                self.assertAlmostEqual(wrapped_edge @ 0, target.position, 5)
+
+                wrapped_wire = surface.wrap(planar_wire, target)
+                self.assertAlmostEqual(planar_wire.length, wrapped_wire.length, 2)
+                self.assertAlmostEqual(wrapped_wire @ 0, target.position, 5)
+
+        with self.assertRaises(TypeError):
+            surface.wrap(Solid.make_box(1, 1, 1), target)
+
+    @patch.object(GeomAPI_ExtremaCurveCurve, "NbExtrema", return_value=0)
+    def test_wrap_intersect_error(self, mock_is_valid):
+        surface = Cone(5, 2, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
+        target = surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))
+        inner = PolarLocations(1, 5, -18).local_locations
+        outer = PolarLocations(3, 5, -18 + 36).local_locations
+        points = [p.position for pair in zip(inner, outer) for p in pair]
+        star = (Polygon(*points, align=Align.NONE) - Circle(0.5)).face()
+
+        with self.assertRaises(RuntimeError):
+            surface.wrap(star.outer_wire(), target)
+
+    @patch.object(Wire, "is_valid", return_value=False)
+    def test_wrap_invalid_wire(self, mock_is_valid):
+        surface = Cone(5, 2, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
+        target = surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))
+        inner = PolarLocations(1, 5, -18).local_locations
+        outer = PolarLocations(3, 5, -18 + 36).local_locations
+        points = [p.position for pair in zip(inner, outer) for p in pair]
+        star = (Polygon(*points, align=Align.NONE) - Circle(0.5)).face()
+
+        with self.assertRaises(RuntimeError):
+            surface.wrap(star, target)
 
 
 class TestAxesOfSymmetrySplitNone(unittest.TestCase):

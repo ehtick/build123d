@@ -29,12 +29,15 @@ license:
 import math
 import unittest
 
+from unittest.mock import patch, PropertyMock
+
 from build123d.build_enums import AngularDirection, GeomType, PositionMode, Transition
 from build123d.geometry import Axis, Plane, Vector
 from build123d.objects_curve import CenterArc, EllipticalCenterArc
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import sweep
-from build123d.topology import Edge
+from build123d.topology import Edge, Face
+from OCP.GeomProjLib import GeomProjLib
 
 
 class TestEdge(unittest.TestCase):
@@ -356,6 +359,18 @@ class TestEdge(unittest.TestCase):
             .position,
             Vector(1, 0, 0),
         )
+
+    def test_extend_spline(self):
+        geom_surface = Face.make_rect(4, 4).geom_adaptor()
+        with self.assertRaises(TypeError):
+            Edge.make_line((0, 0), (1, 0))._extend_spline(True, geom_surface)
+
+    @patch.object(GeomProjLib, "Project_s", return_value=None)
+    def test_extend_spline_failed_snap(self, mock_is_valid):
+        geom_surface = Face.make_rect(4, 4).geom_adaptor()
+        spline = Edge.make_spline([(0, 0), (1, 0), (2, 0)])
+        with self.assertRaises(RuntimeError):
+            spline._extend_spline(True, geom_surface)
 
 
 if __name__ == "__main__":

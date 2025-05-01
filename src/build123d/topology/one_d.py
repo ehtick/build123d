@@ -116,6 +116,7 @@ from OCP.GeomFill import (
     GeomFill_Frenet,
     GeomFill_TrihedronLaw,
 )
+from OCP.GeomProjLib import GeomProjLib
 from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
@@ -1809,6 +1810,47 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 loc.orientation = Vector(0, 0, 0)
 
         return locations
+
+    def _extend_spline(
+        self,
+        at_start: bool,
+        geom_surface: Geom_Surface,
+        extension_factor: float = 0.1,
+    ):
+        """Helper method to slightly extend an edge that is bound to a surface"""
+        if self.geom_type != GeomType.BSPLINE:
+            raise TypeError("_extend_spline only works with splines")
+
+        u_start: float = self.param_at(0)
+        u_end: float = self.param_at(1)
+
+        curve_original = BRep_Tool.Curve_s(self.wrapped, u_start, u_end)
+        n_poles = curve_original.NbPoles()
+        poles = [curve_original.Pole(i + 1) for i in range(n_poles)]
+        # Find position and tangent past end of spline to extend it
+        ends = (-extension_factor, 1) if at_start else (0, 1 + extension_factor)
+        if at_start:
+            new_pole = self.position_at(-extension_factor).to_pnt()
+            poles = [new_pole] + poles
+        else:
+            new_pole = self.position_at(1 + extension_factor).to_pnt()
+            poles = poles + [new_pole]
+        tangents: list[VectorLike] = [self.tangent_at(p) for p in ends]
+
+        pnts: list[VectorLike] = [Vector(p) for p in poles]
+        extended_edge = Edge.make_spline(pnts, tangents=tangents)
+
+        geom_curve = BRep_Tool.Curve_s(
+            extended_edge.wrapped, extended_edge.param_at(0), extended_edge.param_at(1)
+        )
+        snapped_geom_curve = GeomProjLib.Project_s(geom_curve, geom_surface)
+        if snapped_geom_curve is None:
+            raise RuntimeError("Failed to snap extended edge to surface")
+
+        # Build a new projected edge
+        snapped_edge = Edge(BRepBuilderAPI_MakeEdge(snapped_geom_curve).Edge())
+
+        return snapped_edge, snapped_geom_curve
 
     def find_intersection_points(
         self, other: Axis | Edge | None = None, tolerance: float = TOLERANCE

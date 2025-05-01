@@ -56,8 +56,9 @@ license:
 from __future__ import annotations
 
 import copy
+import sys
 import warnings
-from typing import Any, overload, TYPE_CHECKING
+from typing import Any, overload, TypeVar, TYPE_CHECKING
 
 from collections.abc import Iterable, Sequence
 
@@ -66,7 +67,11 @@ from OCP.BRep import BRep_Tool, BRep_Builder
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepAlgo import BRepAlgo
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeShell
+from OCP.BRepBuilderAPI import (
+    BRepBuilderAPI_MakeFace,
+    BRepBuilderAPI_MakeEdge,
+    BRepBuilderAPI_MakeWire,
+)
 from OCP.BRepClass3d import BRepClass3d_SolidClassifier
 from OCP.BRepFill import BRepFill
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
@@ -76,10 +81,15 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling, BRepOffsetAPI_MakePipeS
 from OCP.BRepTools import BRepTools, BRepTools_ReShape
 from OCP.GProp import GProp_GProps
 from OCP.Geom import Geom_BezierSurface, Geom_Surface, Geom_RectangularTrimmedSurface
-from OCP.GeomAPI import GeomAPI_PointsToBSplineSurface, GeomAPI_ProjectPointOnSurf
+from OCP.GeomAPI import (
+    GeomAPI_ExtremaCurveCurve,
+    GeomAPI_PointsToBSplineSurface,
+    GeomAPI_ProjectPointOnSurf,
+)
 from OCP.GeomAbs import GeomAbs_C0
+from OCP.GeomProjLib import GeomProjLib
 from OCP.Precision import Precision
-from OCP.ShapeFix import ShapeFix_Solid
+from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Wire
 from OCP.Standard import (
     Standard_Failure,
     Standard_NoSuchObject,
@@ -89,7 +99,7 @@ from OCP.StdFail import StdFail_NotDone
 from OCP.TColStd import TColStd_HArray2OfReal
 from OCP.TColgp import TColgp_HArray2OfPnt
 from OCP.TopExp import TopExp
-from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Shell, TopoDS_Solid
 from OCP.gce import gce_MakeLin
 from OCP.gp import gp_Pnt, gp_Vec
@@ -131,7 +141,9 @@ from .zero_d import Vertex
 
 if TYPE_CHECKING:  # pragma: no cover
     from .three_d import Solid  # pylint: disable=R0801
-    from .composite import Compound, Curve, Sketch, Part  # pylint: disable=R0801
+    from .composite import Compound, Curve  # pylint: disable=R0801
+
+T = TypeVar("T", Edge, Wire, "Face")
 
 
 class Mixin2D(Shape):
@@ -255,6 +267,132 @@ class Mixin2D(Shape):
     def shells(self) -> ShapeList[Shell]:
         """shells - all the shells in this Shape"""
         return Shape.get_shape_list(self, "Shell")
+
+    def _wrap_edge(
+        self,
+        planar_edge: Edge,
+        surface_loc: Location,
+        snap_to_face: bool = True,
+        tolerance: float = 0.001,
+    ) -> Edge:
+        """_wrap_edge
+
+        Helper method of wrap that handles wrapping edges on surfaces (Face or Shell).
+
+        Args:
+            planar_edge (Edge): edge to wrap around surface
+            surface_loc (Location): location on surface to wrap
+            snap_to_face (bool,optional): ensure wrapped edge is tight against surface.
+                Defaults to True.
+            tolerance (float, optional): maximum allowed length error during initial wrapping
+                operation. Defaults to 0.001
+
+        Raises:
+            RuntimeError: wrapping over surface boundary, try difference surface_loc
+        Returns:
+            Edge: wraped edge
+        """
+
+        def _intersect_surface_normal(
+            point: Vector, direction: Vector
+        ) -> tuple[Vector, Vector]:
+            """Return the intersection point and normal of the closest surface face
+            along direction"""
+            axis = Axis(point, direction)
+            face = self.faces_intersected_by_axis(axis).sort_by(
+                lambda f: f.distance_to(point)
+            )[0]
+            intersections = face.find_intersection_points(axis)
+            if not intersections:
+                raise RuntimeError(
+                    "wrapping over surface boundary, try difference surface_loc"
+                )
+            return min(intersections, key=lambda pair: abs(pair[0] - point))
+
+        def _find_point_on_surface(
+            current_point: Vector, normal: Vector, relative_position: Vector
+        ) -> tuple[Vector, Vector]:
+            """Project a 2D offset from a local surface frame onto the 3D surface"""
+            local_plane = Plane(
+                origin=current_point,
+                x_dir=surface_x_direction,
+                z_dir=normal,
+            )
+            world_point = local_plane.from_local_coords(relative_position)
+            return _intersect_surface_normal(
+                world_point, world_point - target_object_center
+            )
+
+        # Initial setup
+        target_object_center = self.center(CenterOf.BOUNDING_BOX)
+
+        surface_x_direction = surface_loc.x_axis.direction
+
+        planar_edge_length = planar_edge.length
+
+        # Start adaptive refinement
+        subdivisions = 3
+        max_loops = 10
+        loop_count = 0
+        length_error = sys.float_info.max
+
+        while length_error > tolerance and loop_count < max_loops:
+            # Get starting point and normal
+            surface_origin = surface_loc.position
+            surface_normal = surface_loc.z_axis.direction
+
+            # Seed the wrapped path
+            wrapped_edge_points: list[Vector] = []
+            planar_position = planar_edge.position_at(0)
+            current_point, current_normal = _find_point_on_surface(
+                surface_origin, surface_normal, planar_position
+            )
+            wrapped_edge_points.append(current_point)
+
+            # Subdivide and propagate
+            for div in range(1, subdivisions + int(not planar_edge.is_closed)):
+                prev = planar_edge.position_at((div - 1) / subdivisions)
+                curr = planar_edge.position_at(div / subdivisions)
+                offset = curr - prev
+                current_point, current_normal = _find_point_on_surface(
+                    current_point, current_normal, offset
+                )
+                wrapped_edge_points.append(current_point)
+
+            # Build and evaluate
+            wrapped_edge = Edge.make_spline(
+                wrapped_edge_points, periodic=planar_edge.is_closed
+            )
+            length_error = abs(planar_edge_length - wrapped_edge.length)
+
+            subdivisions *= 2
+            loop_count += 1
+
+        if length_error > tolerance:
+            raise RuntimeError(
+                f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
+            )
+        if not wrapped_edge.is_valid():
+            raise RuntimeError("Wraped edge is invalid")
+
+        if not snap_to_face:
+            return wrapped_edge
+
+        # Project the curve onto the surface
+        surface_handle = BRep_Tool.Surface_s(self.wrapped)
+        first_param: float = wrapped_edge.param_at(0)
+        last_param: float = wrapped_edge.param_at(1)
+        curve_handle = BRep_Tool.Curve_s(wrapped_edge.wrapped, first_param, last_param)
+        proj_curve_handle = GeomProjLib.Project_s(curve_handle, surface_handle)
+        if proj_curve_handle is None:
+            raise RuntimeError(
+                "Projection failed, try setting `snap_to_face` to False."
+            )
+
+        # Build a new projected edge
+        projected_edge = Edge(BRepBuilderAPI_MakeEdge(proj_curve_handle).Edge())
+
+        return projected_edge
 
 
 class Face(Mixin2D, Shape[TopoDS_Face]):
@@ -1501,9 +1639,286 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             )
         return self.outer_wire()
 
+    @overload
+    def wrap(
+        self,
+        planar_shape: Edge,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> Edge: ...
+    @overload
+    def wrap(
+        self,
+        planar_shape: Wire,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> Wire: ...
+    @overload
+    def wrap(
+        self,
+        planar_shape: Face,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> Face: ...
+
+    def wrap(
+        self,
+        planar_shape: T,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> T:
+        """wrap
+
+        Wrap a planar 2D shape onto a 3D surface.
+
+        This method conforms a 2D shape defined on the XY plane (Edge,
+        Wire, or Face) to the curvature of a non-planar 3D Face (the
+        target surface), starting at a specified surface location. The
+        operation attempts to preserve the original edge lengths and
+        shape as closely as possible while minimizing the geometric
+        distortion that naturally arises when mapping flat geometry onto
+        curved surfaces.
+
+        The wrapping process follows the local orientation of the surface
+        and progressively fits each edge along the curvature. To help
+        ensure continuity, the first and last edges are extended and trimmed
+        to close small gaps introduced by distortion. The final shape is tightly
+        aligned to the surface geometry.
+
+        This method is useful for applying flat features—such as
+        decorative patterns, cutouts, or boundary outlines—onto curved or
+        freeform surfaces while retaining their original proportions.
+
+        Args:
+            planar_shape (Edge | Wire | Face): flat shape to wrap around surface
+            surface_loc (Location): location on surface to wrap
+            tolerance (float, optional): maximum allowed error. Defaults to 0.001
+            extension_factor (float, optional): amount to extend the wrapped first
+                and last edges to allow them to cross. Defaults to 0.1
+
+        Raises:
+            ValueError: Invalid planar shape
+
+        Returns:
+            Edge | Wire | Face: wrapped shape
+
+        """
+
+        if isinstance(planar_shape, Edge):
+            return self._wrap_edge(planar_shape, surface_loc, tolerance)
+        elif isinstance(planar_shape, Wire):
+            return self._wrap_wire(
+                planar_shape, surface_loc, tolerance, extension_factor
+            )
+        elif isinstance(planar_shape, Face):
+            return self._wrap_face(
+                planar_shape, surface_loc, tolerance, extension_factor
+            )
+        else:
+            raise TypeError(
+                f"planar_shape must be of type Edge, Wire, Face not "
+                f"{type(planar_shape)}"
+            )
+
     def _uv_bounds(self) -> tuple[float, float, float, float]:
         """Return the u min, u max, v min, v max values"""
         return BRepTools.UVBounds_s(self.wrapped)
+
+    def _wrap_face(
+        self: Face,
+        planar_face: Face,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> Face:
+        """_wrap_face
+
+        Helper method of wrap that handles wrapping faces on surfaces.
+
+        Args:
+            planar_face (Face): flat face to wrap around surface
+            surface_loc (Location): location on surface to wrap
+            tolerance (float, optional): maximum allowed error. Defaults to 0.001
+            extension_factor (float, optional): amount to extend wrapped first
+                and last edges to allow them to cross. Defaults to 0.1
+
+        Returns:
+            Face: wrapped face
+        """
+        wrapped_perimeter = self._wrap_wire(
+            planar_face.outer_wire(), surface_loc, tolerance, extension_factor
+        )
+        wrapped_holes = [
+            self._wrap_wire(w, surface_loc, tolerance, extension_factor)
+            for w in planar_face.inner_wires()
+        ]
+        wrapped_face = Face.make_surface(
+            wrapped_perimeter, interior_wires=wrapped_holes
+        )
+
+        # Potentially flip the wrapped face to match the surface
+        surface_normal = surface_loc.z_axis.direction
+        wrapped_normal = wrapped_face.normal_at(surface_loc.position)
+        if surface_normal.dot(wrapped_normal) < 0:  # are they opposite?
+            wrapped_face = -wrapped_face
+        return wrapped_face
+
+    def _wrap_wire(
+        self: Face,
+        planar_wire: Wire,
+        surface_loc: Location,
+        tolerance: float = 0.001,
+        extension_factor: float = 0.1,
+    ) -> Wire:
+        """_wrap_wire
+
+        Helper method of wrap that handles wrapping wires on surfaces.
+
+        Args:
+            planar_wire (Wire): wire to wrap around surface
+            surface_loc (Location): location on surface to wrap
+            tolerance (float, optional): maximum allowed error. Defaults to 0.001
+            extension_factor (float, optional): amount to extend wrapped first
+                and last edges to allow them to cross. Defaults to 0.1
+
+        Raises:
+            RuntimeError: wrapped wire is not valid
+
+        Returns:
+            Wire: wrapped wire
+        """
+        #
+        # Part 1: Preparation
+        #
+        surface_point = surface_loc.position
+        surface_x_direction = surface_loc.x_axis.direction
+        surface_geometry = BRep_Tool.Surface_s(self.wrapped)
+
+        if len(planar_wire.edges()) == 1:
+            return Wire([self._wrap_edge(planar_wire.edge(), surface_loc, tolerance)])
+
+        planar_edges = planar_wire.order_edges()
+        wrapped_edges: list[Edge] = []
+
+        # Need to keep track of the separation between adjacent edges
+        first_start_point = None
+
+        #
+        # Part 2: Wrap the planar wires on the surface by creating a spline
+        #         through points cast from the planar onto the surface.
+        #
+        # If the wire doesn't start at the origin, create an wrapped construction line
+        # to get to the beginning of the first edge
+        if planar_edges[0].position_at(0) == Vector(0, 0, 0):
+            edge_surface_point = surface_point
+            planar_edge_end_point = Vector(0, 0, 0)
+        else:
+            construction_line = Edge.make_line(
+                Vector(0, 0, 0), planar_edges[0].position_at(0)
+            )
+            wrapped_construction_line: Edge = self._wrap_edge(
+                construction_line, surface_loc, tolerance
+            )
+            edge_surface_point = wrapped_construction_line.position_at(1)
+            planar_edge_end_point = planar_edges[0].position_at(0)
+        edge_surface_location = Location(
+            Plane(
+                edge_surface_point,
+                x_dir=surface_x_direction,
+                z_dir=self.normal_at(edge_surface_point),
+            )
+        )
+
+        # Wrap each edge and add them to the wire builder
+        for planar_edge in planar_edges:
+            local_planar_edge = planar_edge.translate(-planar_edge_end_point)
+            wrapped_edge: Edge = self._wrap_edge(
+                local_planar_edge, edge_surface_location, tolerance
+            )
+            edge_surface_point = wrapped_edge.position_at(1)
+            edge_surface_location = Location(
+                Plane(
+                    edge_surface_point,
+                    x_dir=surface_x_direction,
+                    z_dir=self.normal_at(edge_surface_point),
+                )
+            )
+            planar_edge_end_point = planar_edge.position_at(1)
+            if first_start_point is None:
+                first_start_point = wrapped_edge.position_at(0)
+            wrapped_edges.append(wrapped_edge)
+
+        # For open wires we're finished
+        if not planar_wire.is_closed:
+            return Wire(wrapped_edges)
+
+        #
+        # Part 3: The first and last edges likey don't meet at this point due to
+        #         distortion caused by following the surface, so we'll need to join
+        #         them.
+        #
+
+        # Extend the first and last edge so that they cross
+        first_edge, first_curve = wrapped_edges[0]._extend_spline(
+            True, surface_geometry, extension_factor
+        )
+        last_edge, last_curve = wrapped_edges[-1]._extend_spline(
+            False, surface_geometry, extension_factor
+        )
+
+        # Trim the extended edges at their intersection point
+        extrema = GeomAPI_ExtremaCurveCurve(first_curve, last_curve)
+        if extrema.NbExtrema() < 1:
+            raise RuntimeError(
+                "Extended first/last edges do not intersect; increase extension."
+            )
+        param_first, param_last = extrema.Parameters(1)
+
+        u_start_first: float = first_edge.param_at(0)
+        u_end_first: float = first_edge.param_at(1)
+        new_start = (param_first - u_start_first) / (u_end_first - u_start_first)
+        trimmed_first = first_edge.trim(new_start, 1.0)
+
+        u_start_last: float = last_edge.param_at(0)
+        u_end_last: float = last_edge.param_at(1)
+        new_end = (param_last - u_start_last) / (u_end_last - u_start_last)
+        trimmed_last = last_edge.trim(0.0, new_end)
+
+        # Replace the first and last edges with their modified versions
+        wrapped_edges[0] = trimmed_first
+        wrapped_edges[-1] = trimmed_last
+
+        #
+        # Part 4: Build a wire from the edges and fix it to close gaps
+        #
+        closing_error = (
+            trimmed_first.position_at(0) - trimmed_last.position_at(1)
+        ).length
+        wire_builder = BRepBuilderAPI_MakeWire()
+        combined_edges = TopTools_ListOfShape()
+        for edge in wrapped_edges:
+            combined_edges.Append(edge.wrapped)
+        wire_builder.Add(combined_edges)
+        wire_builder.Build()
+        raw_wrapped_wire = wire_builder.Wire()
+        wire_fixer = ShapeFix_Wire()
+        wire_fixer.SetPrecision(2 * closing_error)  # enable fixing start/end gaps
+        wire_fixer.Load(raw_wrapped_wire)
+        wire_fixer.FixReorder()
+        wire_fixer.FixConnected()
+        wrapped_wire = Wire(wire_fixer.Wire())
+
+        #
+        # Part 5: Validate
+        #
+        if not wrapped_wire.is_valid():
+            raise RuntimeError("wrapped wire is not valid")
+
+        return wrapped_wire
 
 
 class Shell(Mixin2D, Shape[TopoDS_Shell]):
