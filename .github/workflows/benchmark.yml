@@ -24,4 +24,4 @@ jobs:
         run: |
           python -m pytest --benchmark-only --benchmark-autosave
           pytest-benchmark compare --csv="results.csv"
-          echo results.csv
+          cat results.csv
