@@ -29,10 +29,10 @@ license:
 # pylint has trouble with the OCP imports
 # pylint: disable=no-name-in-module, import-error
 
-from io import BytesIO
+from datetime import datetime
 import warnings
+from io import BytesIO
 from os import PathLike, fsdecode, fspath
-from typing import Union
 
 import OCP.TopAbs as ta
 from anytree import PreOrderIter
@@ -47,7 +47,11 @@ from OCP.RWGltf import RWGltf_CafWriter
 from OCP.STEPCAFControl import STEPCAFControl_Controller, STEPCAFControl_Writer
 from OCP.STEPControl import STEPControl_Controller, STEPControl_StepModelType
 from OCP.StlAPI import StlAPI_Writer
-from OCP.TCollection import TCollection_AsciiString, TCollection_ExtendedString, TCollection_HAsciiString
+from OCP.TCollection import (
+    TCollection_AsciiString,
+    TCollection_ExtendedString,
+    TCollection_HAsciiString,
+)
 from OCP.TColStd import TColStd_IndexedDataMapOfStringString
 from OCP.TDataStd import TDataStd_Name
 from OCP.TDF import TDF_Label
@@ -262,6 +266,8 @@ def export_step(
     unit: Unit = Unit.MM,
     write_pcurves: bool = True,
     precision_mode: PrecisionMode = PrecisionMode.AVERAGE,
+    *,  # Too many positional arguments
+    timestamp: str | datetime | None = None,
 ) -> bool:
     """export_step
 
@@ -302,6 +308,11 @@ def export_step(
     header = APIHeaderSection_MakeHeader(writer.Writer().Model())
     if to_export.label:
         header.SetName(TCollection_HAsciiString(to_export.label))
+    if timestamp is not None:
+        if isinstance(timestamp, datetime):
+            header.SetTimeStamp(TCollection_HAsciiString(timestamp.isoformat()))
+        else:
+            header.SetTimeStamp(TCollection_HAsciiString(timestamp))
     # consider using e.g. the non *Value versions instead
     # header.SetAuthorValue(1, TCollection_HAsciiString("Volker"));
     # header.SetOrganizationValue(1, TCollection_HAsciiString("myCompanyName"));
