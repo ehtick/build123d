@@ -78,6 +78,7 @@ from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling, BRepOffsetAPI_MakePipeShell
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeRevol
 from OCP.BRepTools import BRepTools, BRepTools_ReShape
 from OCP.GProp import GProp_GProps
 from OCP.Geom import Geom_BezierSurface, Geom_Surface, Geom_RectangularTrimmedSurface
@@ -106,6 +107,7 @@ from OCP.gp import gp_Pnt, gp_Vec
 
 from build123d.build_enums import CenterOf, GeomType, Keep, SortBy, Transition
 from build123d.geometry import (
+    DEG2RAD,
     TOLERANCE,
     Axis,
     Color,
@@ -1131,6 +1133,34 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         return return_value
 
     @classmethod
+    def revolve(
+        cls,
+        profile: Edge,
+        angle: float,
+        axis: Axis,
+    ) -> Face:
+        """sweep
+
+        Revolve an Edge around an axis.
+
+        Args:
+            profile (Edge): the object to sweep
+            angle (float): the angle to revolve through
+            axis (Axis): rotation Axis
+
+        Returns:
+            Face: resulting face
+        """
+        revol_builder = BRepPrimAPI_MakeRevol(
+            profile.wrapped,
+            axis.wrapped,
+            angle * DEG2RAD,
+            True,
+        )
+
+        return cls(revol_builder.Shape())
+
+    @classmethod
     def sew_faces(cls, faces: Iterable[Face]) -> list[ShapeList[Face]]:
         """sew faces
 
@@ -2024,6 +2054,32 @@ class Shell(Mixin2D, Shape[TopoDS_Shell]):
             Shell: Lofted object
         """
         return cls(_make_loft(objs, False, ruled))
+
+    @classmethod
+    def revolve(
+        cls,
+        profile: Curve | Wire,
+        angle: float,
+        axis: Axis,
+    ) -> Face:
+        """sweep
+
+        Revolve a 1D profile around an axis.
+
+        Args:
+            profile (Curve | Wire): the object to revolve
+            angle (float): the angle to revolve through
+            axis (Axis): rotation Axis
+
+        Returns:
+            Shell: resulting shell
+        """
+        profile = Wire(profile.edges())
+        revol_builder = BRepPrimAPI_MakeRevol(
+            profile.wrapped, axis.wrapped, angle * DEG2RAD, True
+        )
+
+        return cls(revol_builder.Shape())
 
     @classmethod
     def sweep(

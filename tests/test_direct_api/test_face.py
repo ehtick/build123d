@@ -42,7 +42,7 @@ from build123d.build_sketch import BuildSketch
 from build123d.exporters3d import export_stl
 from build123d.geometry import Axis, Location, Plane, Pos, Vector
 from build123d.importers import import_stl
-from build123d.objects_curve import Line, Polyline, Spline, ThreePointArc
+from build123d.objects_curve import JernArc, Line, Polyline, Spline, ThreePointArc
 from build123d.objects_part import Box, Cone, Cylinder, Sphere, Torus
 from build123d.objects_sketch import (
     Circle,
@@ -55,7 +55,7 @@ from build123d.objects_sketch import (
 from build123d.operations_generic import fillet, offset
 from build123d.operations_part import extrude
 from build123d.operations_sketch import make_face
-from build123d.topology import Edge, Face, Solid, Wire
+from build123d.topology import Edge, Face, Shell, Solid, Wire
 from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
 
 
@@ -887,6 +887,18 @@ class TestFace(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             surface.wrap(star, target)
+
+    def test_revolve(self):
+        l1 = Edge.make_line((3, 0), (3, 2))
+        revolved = Face.revolve(l1, 360, Axis.Y)
+        self.assertTrue(isinstance(revolved, Face))
+        self.assertAlmostEqual(revolved.area, 2 * math.pi * 3 * 2, 5)
+
+        l2 = JernArc(l1 @ 1, l1 % 1, 1, 90)
+        w1 = Wire([l1, l2])
+        revolved = Shell.revolve(w1, 180, Axis.Y)
+        self.assertTrue(isinstance(revolved, Shell))
+        self.assertAlmostEqual(revolved.edges().sort_by(Axis.Y)[-1].radius, 2, 5)
 
 
 class TestAxesOfSymmetrySplitNone(unittest.TestCase):
