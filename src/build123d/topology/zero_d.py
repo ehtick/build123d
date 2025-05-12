@@ -239,7 +239,7 @@ class Vertex(Shape[TopoDS_Vertex]):
     def __sub__(self, other: Vertex | Vector | tuple) -> Vertex:  # type: ignore
         """Subtract
 
-        Substract a Vertex with a Vertex, Vector or Tuple from self
+        Subtract a Vertex with a Vertex, Vector or Tuple from self
 
         Args:
             other: Value to add

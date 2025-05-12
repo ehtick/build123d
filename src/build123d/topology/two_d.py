@@ -292,7 +292,7 @@ class Mixin2D(Shape):
         Raises:
             RuntimeError: wrapping over surface boundary, try difference surface_loc
         Returns:
-            Edge: wraped edge
+            Edge: wrapped edge
         """
 
         def _intersect_surface_normal(
@@ -375,7 +375,7 @@ class Mixin2D(Shape):
                 f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
             )
         if not wrapped_edge.is_valid():
-            raise RuntimeError("Wraped edge is invalid")
+            raise RuntimeError("Wrapped edge is invalid")
 
         if not snap_to_face:
             return wrapped_edge
@@ -1889,7 +1889,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             return Wire(wrapped_edges)
 
         #
-        # Part 3: The first and last edges likey don't meet at this point due to
+        # Part 3: The first and last edges likely don't meet at this point due to
         #         distortion caused by following the surface, so we'll need to join
         #         them.
         #
