@@ -16,8 +16,9 @@ desc:
     an import statement listing only those names. This practice can help
     prevent polluting the global namespace and improve clarity.
 
-    Example:
-        deglob.py my_build123d_script.py
+    Examples:
+        python deglob.py my_build123d_script.py
+        python deglob.py -h
 
     After parsing my_build123d_script.py, the script prints a line such as:
         from build123d import Workplane, Solid
@@ -26,6 +27,7 @@ desc:
 
     Module Contents:
         - parse_args(): Parse the command-line argument for the input file path.
+        - count_glob_imports(): Count the number of occurences of a glob import.
         - find_used_symbols(): Parse Python source code to find referenced names.
         - main(): Orchestrates reading the file, analyzing symbols, and printing
         the replacement import line.
@@ -53,6 +55,7 @@ import argparse
 import ast
 import sys
 from pathlib import Path
+import re
 
 import build123d
 
@@ -63,7 +66,7 @@ def parse_args():
 
     Returns:
         argparse.Namespace: An object containing the parsed command-line arguments:
-        - build123d_file (Path): Path to the input build123dO file.
+        - build123d_file (Path): Path to the input build123d file.
     """
     parser = argparse.ArgumentParser(
         description="Find all the build123d symbols in module."
@@ -71,10 +74,39 @@ def parse_args():
 
     # Required positional argument
     parser.add_argument("build123d_file", type=Path, help="Path to the build123d file")
+    parser.add_argument(
+        "--write",
+        help="Overwrite glob import in input file, defaults to read-only and printed to stdout",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
     return args
+
+
+def count_glob_imports(source_code: str) -> int:
+    """count_glob_imports
+
+    Count the number of occurences of a glob import e.g. (from build123d import *)
+
+    Args:
+        source_code (str): contents of build123d program
+
+    Returns:
+        int: build123d glob import occurence count
+    """
+    tree = ast.parse(source_code)
+
+    # count instances of glob usage
+    glob_count = list(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "build123d"
+        and any(alias.name == "*" for alias in node.names)
+        for node in ast.walk(tree)
+    ).count(True)
+
+    return glob_count
 
 
 def find_used_symbols(source_code: str) -> set[str]:
@@ -89,17 +121,6 @@ def find_used_symbols(source_code: str) -> set[str]:
         set[str]: extracted symbols
     """
     tree = ast.parse(source_code)
-
-    # Is the glob import from build123d used?
-    from_glob_import = any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "build123d"
-        and any(alias.name == "*" for alias in node.names)
-        for node in ast.walk(tree)
-    )
-    if not from_glob_import:
-        print("Glob import from build123d not found")
-        sys.exit(0)
 
     symbols = set()
 
@@ -152,7 +173,15 @@ def main():
     with open(args.build123d_file, "r", encoding="utf-8") as f:
         code = f.read()
 
-    # Check for the glob import and extract the symbols
+    # Get the glob import count
+    glob_count = count_glob_imports(code)
+
+    # Exit if no glob import was found
+    if not glob_count:
+        print("Glob import from build123d not found")
+        sys.exit(0)
+
+    # Extract the symbols
     used_symbols = find_used_symbols(code)
 
     # Find the imported build123d symbols
@@ -160,7 +189,25 @@ def main():
 
     # Create the import statement to replace the glob import
     import_line = f"from build123d import {', '.join(actual_imports)}"
-    print(import_line)
+
+    if args.write:
+        # Replace only the first instance, warn if more are found
+        updated_code = re.sub(r"from build123d import\s*\*", import_line, code, count=1)
+
+        # Write code back to target file
+        with open(args.build123d_file, "w", encoding="utf-8") as f:
+            f.write(updated_code)
+
+        if glob_count:
+            print(f"Replaced build123d glob import with '{import_line}'")
+
+        if glob_count > 1:
+            print(
+                "Warning: more than one instance of glob import was detected "
+                f"(count: {glob_count}), only the first instance was replaced"
+            )
+    else:
+        print(import_line)
 
 
 if __name__ == "__main__":
