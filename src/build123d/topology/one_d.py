@@ -1563,7 +1563,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         Returns:
             Edge: linear Edge between two Edges
         """
-        flip = first.to_axis().is_opposite(second.to_axis())
+        flip = Axis(first).is_opposite(Axis(second))
         pnts = [
             Edge.make_line(
                 first.position_at(i), second.position_at(1 - i if flip else i)
@@ -2184,6 +2184,12 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
 
     def to_axis(self) -> Axis:
         """Translate a linear Edge to an Axis"""
+        warnings.warn(
+            "to_axis is deprecated and will be removed in a future version. "
+            "Use 'Axis(Edge)' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if self.geom_type != GeomType.LINE:
             raise ValueError(
                 f"to_axis is only valid for linear Edges not {self.geom_type}"

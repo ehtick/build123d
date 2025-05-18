@@ -33,7 +33,7 @@ import unittest
 import numpy as np
 from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt
 from build123d.geometry import Axis, Location, Plane, Vector
-from build123d.topology import Edge
+from build123d.topology import Edge, Vertex
 
 
 class AlwaysEqual:
@@ -66,9 +66,17 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(test_axis.direction, (0, 0, 1), 5)
 
         with self.assertRaises(ValueError):
+            Axis("one")
+        with self.assertRaises(ValueError):
             Axis("one", "up")
         with self.assertRaises(ValueError):
             Axis(one="up")
+        with self.assertRaises(ValueError):
+            bad_edge = Edge()
+            bad_edge.wrapped = Vertex(0, 1, 2).wrapped
+            Axis(edge=bad_edge)
+        with self.assertRaises(ValueError):
+            Axis(gp_ax1=Edge.make_line((0, 0), (1, 0)))
 
     def test_axis_from_occt(self):
         occt_axis = gp_Ax1(gp_Pnt(1, 1, 1), gp_Dir(0, 1, 0))
@@ -99,6 +107,11 @@ class TestAxis(unittest.TestCase):
         y_axis = Axis.Z.located(Location((0, 0, 1), (-90, 0, 0)))
         self.assertAlmostEqual(y_axis.position, (0, 0, 1), 5)
         self.assertAlmostEqual(y_axis.direction, (0, 1, 0), 5)
+
+    def test_from_location(self):
+        axis = Axis(Location((1, 2, 3), (-90, 0, 0)))
+        self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
+        self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
 
     def test_axis_to_plane(self):
         x_plane = Axis.X.to_plane()

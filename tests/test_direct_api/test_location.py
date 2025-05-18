@@ -270,10 +270,11 @@ class TestLocation(unittest.TestCase):
         self.assertAlmostEqual(loc1.position, loc3.position.to_tuple(), 6)
         self.assertAlmostEqual(loc1.orientation, loc3.orientation.to_tuple(), 6)
 
-    def test_to_axis(self):
-        axis = Location((1, 2, 3), (-90, 0, 0)).to_axis()
-        self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
-        self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
+    # deprecated
+    # def test_to_axis(self):
+    #     axis = Location((1, 2, 3), (-90, 0, 0)).to_axis()
+    #     self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
+    #     self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
 
     def test_equal(self):
         loc = Location((1, 2, 3), (4, 5, 6))

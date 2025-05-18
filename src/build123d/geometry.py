@@ -593,6 +593,7 @@ class Axis(metaclass=AxisMeta):
         origin (VectorLike): start point
         direction (VectorLike): direction
         edge (Edge): origin & direction defined by start of edge
+        location (Location): location to convert to axis
 
     Attributes:
         position (Vector): the global position of the axis origin
@@ -603,75 +604,84 @@ class Axis(metaclass=AxisMeta):
     _dim = 1
 
     @overload
-    def __init__(self, gp_ax1: gp_Ax1):  # pragma: no cover
+    def __init__(self, gp_ax1: gp_Ax1):
         """Axis: point and direction"""
 
     @overload
-    def __init__(self, origin: VectorLike, direction: VectorLike):  # pragma: no cover
+    def __init__(self, location: Location):
+        """Axis from location"""
+
+    @overload
+    def __init__(self, origin: VectorLike, direction: VectorLike):
         """Axis: point and direction"""
 
     @overload
-    def __init__(self, edge: Edge):  # pragma: no cover
+    def __init__(self, edge: Edge):
         """Axis: start of Edge"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self, *args, **kwargs
+    ):  # pylint: disable=too-many-branches, too-many-locals
 
         gp_ax1 = kwargs.pop("gp_ax1", None)
         origin = kwargs.pop("origin", None)
         direction = kwargs.pop("direction", None)
         edge = kwargs.pop("edge", None)
+        location = kwargs.pop("location", None)
 
         # Handle unexpected kwargs
         if kwargs:
             raise ValueError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
 
+        # Handle positional arguments
         if len(args) == 1:
-            if isinstance(args[0], gp_Ax1):
-                gp_ax1 = args[0]
-            elif (
-                hasattr(args[0], "wrapped")
-                and args[0].wrapped is not None
-                and isinstance(args[0].wrapped, TopoDS_Edge)
-            ):
-                edge = args[0]
+            arg = args[0]
+            if isinstance(arg, gp_Ax1):
+                gp_ax1 = arg
+            elif isinstance(arg, Location):
+                location = arg
+            elif hasattr(arg, "wrapped") and isinstance(arg.wrapped, TopoDS_Edge):
+                edge = arg
+            elif isinstance(arg, (Vector, tuple)):
+                origin = arg
             else:
-                origin = args[0]
+                raise ValueError(f"Unrecognized single argument: {arg}")
         elif len(args) == 2:
             origin, direction = args
 
+        # Handle edge-based construction
         if edge is not None:
-            if (
-                hasattr(edge, "wrapped")
-                and edge.wrapped is not None
-                and isinstance(edge.wrapped, TopoDS_Edge)
-            ):
-                # Extract the start point and tangent
-                topods_edge: TopoDS_Edge = edge.wrapped  # type: ignore[annotation-unchecked]
-                curve = BRep_Tool.Curve_s(topods_edge, float(), float())
-                param_min, _ = BRep_Tool.Range_s(topods_edge)
-                origin_pnt = gp_Pnt()
-                tangent_vec = gp_Vec()
-                curve.D1(param_min, origin_pnt, tangent_vec)
-                origin = Vector(origin_pnt)
-                direction = Vector(gp_Dir(tangent_vec))
-            else:
-                raise ValueError(f"Invalid argument {edge}")
+            if not (hasattr(edge, "wrapped") and isinstance(edge.wrapped, TopoDS_Edge)):
+                raise ValueError(f"Invalid edge argument: {edge}")
 
-        if gp_ax1 is not None:
-            if not isinstance(gp_ax1, gp_Ax1):
-                raise ValueError(f"Invalid Axis parameter {gp_ax1}")
-            self.wrapped: gp_Ax1 = gp_ax1  # type: ignore[annotation-unchecked]
-        else:
+            topods_edge: TopoDS_Edge = edge.wrapped  # type: ignore[annotation-unchecked]
+            curve = BRep_Tool.Curve_s(topods_edge, float(), float())
+            param_min, _ = BRep_Tool.Range_s(topods_edge)
+            origin_pnt = gp_Pnt()
+            tangent_vec = gp_Vec()
+            curve.D1(param_min, origin_pnt, tangent_vec)
+            origin = Vector(origin_pnt)
+            direction = Vector(gp_Dir(tangent_vec))
+
+        # Convert location to axis
+        if location is not None:
+            gp_ax1 = Axis.Z.located(location).wrapped
+
+        # Construct self.wrapped from gp_ax1 or origin/direction
+        if gp_ax1 is None:
             try:
                 origin_vector = Vector(origin)
                 direction_vector = Vector(direction)
-            except TypeError as exc:
+                gp_ax1 = gp_Ax1(
+                    origin_vector.to_pnt(),
+                    gp_Dir(*tuple(direction_vector.normalized())),
+                )
+            except Exception as exc:
                 raise ValueError("Invalid Axis parameters") from exc
+        elif not isinstance(gp_ax1, gp_Ax1):
+            raise ValueError(f"Invalid Axis parameter: {gp_ax1}")
 
-            self.wrapped = gp_Ax1(
-                origin_vector.to_pnt(),
-                gp_Dir(*tuple(direction_vector.normalized())),
-            )
+        self.wrapped: gp_Ax1 = gp_ax1  # type: ignore[annotation-unchecked]
 
     @property
     def position(self):
@@ -1425,7 +1435,9 @@ class Location:
         """Location with translation t and rotation around direction by angle
         with respect to the original location."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self, *args, **kwargs
+    ):  # pylint: disable=too-many-branches, too-many-locals, too-many-statements
         position = kwargs.pop("position", None)
         orientation = kwargs.pop("orientation", None)
         ordering = kwargs.pop("ordering", None)
@@ -1751,6 +1763,12 @@ class Location:
 
     def to_axis(self) -> Axis:
         """Convert the location into an Axis"""
+        warnings.warn(
+            "to_axis is deprecated and will be removed in a future version. "
+            "Use 'Axis(Location)' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return Axis.Z.located(self)
 
     def to_tuple(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:

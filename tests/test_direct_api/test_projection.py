@@ -94,10 +94,6 @@ class TestProjection(unittest.TestCase):
         self.assertAlmostEqual(projection[0].position_at(0), (0, 1, 0), 5)
         self.assertAlmostEqual(projection[0].arc_center, (0, 0, 0), 5)
 
-    def test_to_axis(self):
-        with self.assertRaises(ValueError):
-            Edge.make_circle(1, end_angle=30).to_axis()
-
 
 if __name__ == "__main__":
     unittest.main()
