@@ -419,6 +419,9 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertTupleAlmostEquals(tri.vertex_A, (3, 4, 0), 5)
         self.assertTupleAlmostEquals(tri.vertex_B, (0, 0, 0), 5)
         self.assertTupleAlmostEquals(tri.vertex_C, (3, 0, 0), 5)
+        self.assertEqual(tri.vertex_A.topo_parent, tri)
+        self.assertEqual(tri.vertex_B.topo_parent, tri)
+        self.assertEqual(tri.vertex_C.topo_parent, tri)
 
         tri = Triangle(c=5, C=90, a=3)
         self.assertAlmostEqual(tri.area, (3 * 4) / 2, 5)
