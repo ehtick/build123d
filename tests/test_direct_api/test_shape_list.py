@@ -64,7 +64,9 @@ class TestShapeList(unittest.TestCase):
         actual_lines = actual.splitlines()
         self.assertEqual(len(actual_lines), len(expected_lines))
         for actual_line, expected_line in zip(actual_lines, expected_lines):
-            start, end = re.split(r"at 0x[0-9a-f]+", expected_line, maxsplit=2, flags=re.I)
+            start, end = re.split(
+                r"at 0x[0-9a-f]+", expected_line, maxsplit=2, flags=re.I
+            )
             self.assertTrue(actual_line.startswith(start))
             self.assertTrue(actual_line.endswith(end))
 
@@ -401,6 +403,60 @@ class TestShapeList(unittest.TestCase):
         self.assertEqual(
             tuple(ShapeList(Vertex(i, 0, 0) for i in range(3)).center()), (1, 0, 0)
         )
+
+
+class TestShapeListAddition(unittest.TestCase):
+    def setUp(self):
+        # Create distinct faces to test with
+        self.face1 = Box(1, 1, 1).faces().sort_by(Axis.Z)[0]  # bottom face
+        self.face2 = Box(1, 1, 1).faces().sort_by(Axis.Z)[-1]  # top face
+        self.face3 = Box(1, 1, 1).faces().sort_by(Axis.X)[0]  # side face
+
+    def test_add_single_shape(self):
+        sl = ShapeList([self.face1])
+        result = sl + self.face2
+        self.assertIsInstance(result, ShapeList)
+        self.assertEqual(len(result), 2)
+        self.assertIn(self.face1, result)
+        self.assertIn(self.face2, result)
+
+    def test_add_shape_list(self):
+        sl1 = ShapeList([self.face1])
+        sl2 = ShapeList([self.face2, self.face3])
+        result = sl1 + sl2
+        self.assertIsInstance(result, ShapeList)
+        self.assertEqual(len(result), 3)
+        self.assertListEqual(result, [self.face1, self.face2, self.face3])
+
+    def test_iadd_single_shape(self):
+        sl = ShapeList([self.face1])
+        sl_id_before = id(sl)
+        sl += self.face2
+        self.assertEqual(id(sl), sl_id_before)  # in-place mutation
+        self.assertEqual(len(sl), 2)
+        self.assertListEqual(sl, [self.face1, self.face2])
+
+    def test_iadd_shape_list(self):
+        sl = ShapeList([self.face1])
+        sl += ShapeList([self.face2, self.face3])
+        self.assertEqual(len(sl), 3)
+        self.assertListEqual(sl, [self.face1, self.face2, self.face3])
+
+    def test_add_vector(self):
+        vector = Vector(1, 2, 3)
+        sl = ShapeList([vector])
+        sl += Vector(4, 5, 6)
+        self.assertEqual(len(sl), 2)
+        self.assertIsInstance(sl[0], Vector)
+        self.assertIsInstance(sl[1], Vector)
+
+    def test_add_invalid_type(self):
+        sl = ShapeList([self.face1])
+        with self.assertRaises(TypeError):
+            _ = sl + 123  # type: ignore
+
+        with self.assertRaises(TypeError):
+            sl += "not a shape"  # type: ignore
 
 
 if __name__ == "__main__":

@@ -2326,10 +2326,27 @@ class ShapeList(list[T]):
 
     # ---- Instance Methods ----
 
-    def __add__(self, other: ShapeList) -> ShapeList[T]:  # type: ignore
-        """Combine two ShapeLists together operator +"""
-        # return ShapeList(itertools.chain(self, other)) # breaks MacOS-13
-        return ShapeList(list(self) + list(other))
+    def __add__(self, other: Shape | Iterable[Shape]) -> ShapeList[T]:  # type: ignore
+        """Return a new ShapeList that includes other"""
+        if isinstance(other, (Vector, Shape)):
+            return ShapeList(tcast(list[T], list(self) + [other]))
+        if isinstance(other, Iterable) and all(
+            isinstance(o, (Shape, Vector)) for o in other
+        ):
+            return ShapeList(list(self) + list(other))
+        raise TypeError(f"Cannot add object of type {type(other)} to ShapeList")
+
+    def __iadd__(self, other: Shape | Iterable[Shape]) -> Self:  # type: ignore
+        """In-place addition to this ShapeList"""
+        if isinstance(other, (Vector, Shape)):
+            self.append(tcast(T, other))
+        elif isinstance(other, Iterable) and all(
+            isinstance(o, (Shape, Vector)) for o in other
+        ):
+            self.extend(other)
+        else:
+            raise TypeError(f"Cannot add object of type {type(other)} to ShapeList")
+        return self
 
     def __and__(self, other: ShapeList) -> ShapeList[T]:
         """Intersect two ShapeLists operator &"""
