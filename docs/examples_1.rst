@@ -24,6 +24,11 @@ Most of the examples show the builder and algebra modes.
         :link: examples-benchy
         :link-type: ref
 
+    .. grid-item-card:: Bicycle Tire |Builder|
+        :img-top:  assets/examples/bicycle_tire.png
+        :link: examples-bicycle_tire
+        :link-type: ref
+
     .. grid-item-card:: Canadian Flag Blowing in The Wind |Builder| |Algebra|
             :img-top: assets/examples/example_canadian_flag_01.png
             :link: examples-canadian_flag
@@ -153,6 +158,24 @@ modify it by replacing chimney with a BREP version.
         :end-before: [End]
 
 .. ----------------------------------------------------------------------------------------------
+
+.. _examples-bicycle_tire:
+
+Bicycle Tire
+--------------------------------
+.. image:: assets/examples/bicycle_tire.png
+    :align: center
+
+This example demonstrates how to model a realistic bicycle tire with a
+patterned tread using build123d. The key concept showcased here is the
+use of wrap_faces to project 2D planar geometry onto a curved 3D
+surface.
+
+.. dropdown:: |Builder| Reference Implementation (Builder Mode)
+
+    .. literalinclude:: ../examples/bicycle_tire.py
+        :start-after: [Code]
+        :end-before: [End]
 
 .. _examples-build123d_logo:
 
