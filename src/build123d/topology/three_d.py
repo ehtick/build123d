@@ -1229,6 +1229,21 @@ class Solid(Mixin3D, Shape[TopoDS_Solid]):
 
         Sweep the given cross section into a prismatic solid along the provided path
 
+        The is_frenet parameter controls how the profile orientation changes as it
+        follows along the sweep path. If is_frenet is False, the orientation of the
+        profile is kept consistent from point to point. The resulting shape has the
+        minimum possible twisting. Unintuitively, when a profile is swept along a
+        helix, this results in the orientation of the profile slowly creeping
+        (rotating) as it follows the helix. Setting is_frenet to True prevents this.
+
+        If is_frenet is True the orientation of the profile is based on the local
+        curvature and tangency vectors of the path. This keeps the orientation of the
+        profile consistent when sweeping along a helix (because the curvature vector of
+        a straight helix always points to its axis). However, when path is not a helix,
+        the resulting shape can have strange looking twists sometimes. For more
+        information, see Frenet Serret formulas
+        http://en.wikipedia.org/wiki/Frenet%E2%80%93Serret_formulas.
+
         Args:
             section (Union[Face, Wire]): cross section to sweep
             path (Union[Wire, Edge]): sweep path
@@ -1293,6 +1308,21 @@ class Solid(Mixin3D, Shape[TopoDS_Solid]):
         """Multi section sweep
 
         Sweep through a sequence of profiles following a path.
+
+        The is_frenet parameter controls how the profile orientation changes as it
+        follows along the sweep path. If is_frenet is False, the orientation of the
+        profile is kept consistent from point to point. The resulting shape has the
+        minimum possible twisting. Unintuitively, when a profile is swept along a
+        helix, this results in the orientation of the profile slowly creeping
+        (rotating) as it follows the helix. Setting is_frenet to True prevents this.
+
+        If is_frenet is True the orientation of the profile is based on the local
+        curvature and tangency vectors of the path. This keeps the orientation of the
+        profile consistent when sweeping along a helix (because the curvature vector of
+        a straight helix always points to its axis). However, when path is not a helix,
+        the resulting shape can have strange looking twists sometimes. For more
+        information, see Frenet Serret formulas
+        http://en.wikipedia.org/wiki/Frenet%E2%80%93Serret_formulas.
 
         Args:
             profiles (Iterable[Union[Wire, Face]]): list of profiles
