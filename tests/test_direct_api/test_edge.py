@@ -27,6 +27,7 @@ license:
 """
 
 import math
+import numpy as np
 import unittest
 
 from unittest.mock import patch, PropertyMock
@@ -271,6 +272,27 @@ class TestEdge(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             edge.param_at_point((-1, 1))
+
+    def test_param_at_point_bspline(self):
+        # Define a complex spline with inflections and non-monotonic behavior
+        curve = Edge.make_spline(
+            [
+                (-2, 0, 0),
+                (-10, 1, 0),
+                (0, 0, 0),
+                (1, -2, 0),
+                (2, 0, 0),
+                (1, 1, 0),
+            ]
+        )
+
+        # Sample N points along the curve using position_at and check that
+        # param_at_point returns approximately the same param (inverted)
+        N = 20
+        for u in np.linspace(0.0, 1.0, N):
+            p = curve.position_at(u)
+            u_back = curve.param_at_point(p)
+            self.assertAlmostEqual(u, u_back, delta=1e-6, msg=f"u={u}, u_back={u_back}")
 
     def test_conical_helix(self):
         helix = Edge.make_helix(1, 4, 1, normal=(-1, 0, 0), angle=10, lefthand=True)

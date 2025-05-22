@@ -60,7 +60,7 @@ from math import radians, inf, pi, cos, copysign, ceil, floor
 from typing import Literal, overload, TYPE_CHECKING
 from typing_extensions import Self
 from numpy import ndarray
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 from scipy.spatial import ConvexHull
 
 import OCP.TopAbs as ta
@@ -176,6 +176,7 @@ from build123d.build_enums import (
 from build123d.geometry import (
     DEG2RAD,
     TOLERANCE,
+    TOL_DIGITS,
     Axis,
     Color,
     Location,
@@ -2078,14 +2079,25 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         return None
 
     def param_at_point(self, point: VectorLike) -> float:
-        """Normalized parameter at point along Edge"""
+        """param_at_point
+
+        Args:
+            point (VectorLike): point on Edge
+
+        Raises:
+            ValueError: point not on edge
+            RuntimeError: failed to find parameter
+
+        Returns:
+            float: parameter value at point on edge
+        """
 
         # Note that this search algorithm would ideally be replaced with
         # an OCP based solution, something like that which is shown below.
         # However, there are known issues with the OCP methods for some
         # curves which may return negative values or incorrect values at
-        # end points. Also note that this search takes about 1.5ms while
-        # the OCP methods take about 0.4ms.
+        # end points. Also note that this search takes about 1.3ms on a
+        # complex curve while the OCP methods take about 0.4ms.
         #
         # curve = BRep_Tool.Curve_s(self.wrapped, float(), float())
         # param_min, param_max = BRep_Tool.Range_s(self.wrapped)
@@ -2095,26 +2107,47 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
 
         point = Vector(point)
 
-        if not isclose_b(self.distance_to(point), 0, abs_tol=TOLERANCE):
-            raise ValueError(f"point ({point}) is not on edge")
+        separation = self.distance_to(point)
+        if not isclose_b(separation, 0, abs_tol=TOLERANCE):
+            raise ValueError(f"point ({point}) is {separation} from edge")
 
-        # Function to be minimized
-        def func(param: ndarray) -> float:
-            return (self.position_at(param[0]) - point).length
+        # This algorithm finds the normalized [0, 1] parameter of a point on an edge
+        # by minimizing the 3D distance between the edge and the given point.
+        #
+        # Because some edges (e.g., BSplines) can have multiple local minima in the
+        # distance function, we subdivide the [0, 1] domain into 2^n intervals
+        # (logarithmic refinement) and perform a bounded minimization in each subinterval.
+        #
+        # The first solution found with an error smaller than the geometric resolution
+        # is returned. If no such minimum is found after all subdivisions, a runtime error
+        # is raised.
 
-        # Find the u value that results in a point within tolerance of the target
-        initial_guess = max(
-            0.0, min(1.0, (point - self.position_at(0)).length / self.length)
-        )
-        result = minimize(
-            func,
-            x0=initial_guess,
-            method="Nelder-Mead",
-            bounds=[(0.0, 1.0)],
-            tol=TOLERANCE,
-        )
-        u_value = float(result.x[0])
-        return u_value
+        max_divisions = 10  # Logarithmic refinement depth
+
+        for division in range(max_divisions):
+            intervals = 2**division
+            step = 1.0 / intervals
+
+            for i in range(intervals):
+                lo, hi = i * step, (i + 1) * step
+
+                result = minimize_scalar(
+                    lambda u: (self.position_at(u) - point).length,
+                    bounds=(lo, hi),
+                    method="bounded",
+                    options={"xatol": TOLERANCE / 2},
+                )
+
+                # Early exit if we're below resolution limit
+                if (
+                    result.fun
+                    < (
+                        self @ (result.x + TOLERANCE) - self @ (result.x - TOLERANCE)
+                    ).length
+                ):
+                    return round(float(result.x), TOL_DIGITS)
+
+        raise RuntimeError("Unable to find parameter, Edge is too complex")
 
     def project_to_shape(
         self,
@@ -3076,88 +3109,53 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return self
 
     def trim(self: Wire, start: float, end: float) -> Wire:
-        """trim
-
-        Create a new wire by keeping only the section between start and end.
+        """Trim a wire between [start, end] normalized over total length.
 
         Args:
-            start (float): 0.0 <= start < 1.0
-            end (float): 0.0 < end <= 1.0
-
-        Raises:
-            ValueError: start >= end
+            start (float): normalized start position (0.0 to <1.0)
+            end (float): normalized end position (>0.0 to 1.0)
 
         Returns:
-            Wire: trimmed wire
+            Wire: trimmed Wire
         """
-
-        # pylint: disable=too-many-branches
         if start >= end:
             raise ValueError("start must be less than end")
 
-        edges = self.edges()
+        # Extract the edges in order
+        ordered_edges = self.edges().sort_by(self)
 
         # If this is really just an edge, skip the complexity of a Wire
-        if len(edges) == 1:
-            return Wire([edges[0].trim(start, end)])
+        if len(ordered_edges) == 1:
+            return Wire([ordered_edges[0].trim(start, end)])
 
-        # For each Edge determine the beginning and end wire parameters
-        # Note that u, v values are parameters along the Wire
-        edges_uv_values: list[tuple[float, float, Edge]] = []
-        found_end_of_wire = False  # for finding ends of closed wires
-
-        for edge in edges:
-            u = self.param_at_point(edge.position_at(0))
-            v = self.param_at_point(edge.position_at(1))
-            if self.is_closed:  # Avoid two beginnings or ends
-                u = (
-                    1 - u
-                    if found_end_of_wire and (isclose_b(u, 0) or isclose_b(u, 1))
-                    else u
-                )
-                v = (
-                    1 - v
-                    if found_end_of_wire and (isclose_b(v, 0) or isclose_b(v, 1))
-                    else v
-                )
-                found_end_of_wire = (
-                    isclose_b(u, 0)
-                    or isclose_b(u, 1)
-                    or isclose_b(v, 0)
-                    or isclose_b(v, 1)
-                    or found_end_of_wire
-                )
-
-            # Edge might be reversed and require flipping parms
-            u, v = (v, u) if u > v else (u, v)
-
-            edges_uv_values.append((u, v, edge))
+        total_length = self.length
+        start_len = start * total_length
+        end_len = end * total_length
 
         trimmed_edges = []
-        for u, v, edge in edges_uv_values:
-            if v < start or u > end:  # Edge not needed
-                continue
+        cur_length = 0.0
 
-            if start <= u and v <= end:  # keep whole Edge
-                trimmed_edges.append(edge)
+        for edge in ordered_edges:
+            edge_len = edge.length
+            edge_start = cur_length
+            edge_end = cur_length + edge_len
+            cur_length = edge_end
 
-            elif start >= u and end <= v:  # Wire trimmed to single Edge
-                u_edge = edge.param_at_point(self.position_at(start))
-                v_edge = edge.param_at_point(self.position_at(end))
-                u_edge, v_edge = (
-                    (v_edge, u_edge) if u_edge > v_edge else (u_edge, v_edge)
-                )
-                trimmed_edges.append(edge.trim(u_edge, v_edge))
+            if edge_end <= start_len or edge_start >= end_len:
+                continue  # skip
 
-            elif start <= u:  # keep start of Edge
-                u_edge = edge.param_at_point(self.position_at(end))
-                if u_edge != 0:
-                    trimmed_edges.append(edge.trim(0, u_edge))
+            if edge_start >= start_len and edge_end <= end_len:
+                trimmed_edges.append(edge)  # keep whole Edge
+            else:
+                # Normalize trim points relative to this edge
+                trim_start_len = max(start_len, edge_start)
+                trim_end_len = min(end_len, edge_end)
 
-            else:  #  v <= end  keep end of Edge
-                v_edge = edge.param_at_point(self.position_at(start))
-                if v_edge != 1:
-                    trimmed_edges.append(edge.trim(v_edge, 1))
+                u0 = (trim_start_len - edge_start) / edge_len
+                u1 = (trim_end_len - edge_start) / edge_len
+
+                if abs(u1 - u0) > TOLERANCE:
+                    trimmed_edges.append(edge.trim(u0, u1))
 
         return Wire(trimmed_edges)
 
