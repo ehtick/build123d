@@ -34,6 +34,11 @@ Most of the examples show the builder and algebra modes.
             :link: examples-canadian_flag
             :link-type: ref
 
+    .. grid-item-card:: Cast Bearing Unit |Builder|
+            :img-top: assets/examples/cast_bearing_unit.png
+            :link: examples-cast_bearing_unit
+            :link-type: ref
+
     .. grid-item-card:: Circuit Board With Holes |Builder| |Algebra|
             :img-top: assets/examples/thumbnail_circuit_board_01.png
             :link: examples-circuit_board
@@ -203,6 +208,23 @@ The builder mode example also generates the SVG file `logo.svg`.
         :start-after: [Code]
         :end-before: [End]
 
+
+.. _examples-cast_bearing_unit:
+
+Cast Bearing Unit
+-----------------
+.. image:: assets/examples/cast_bearing_unit.png
+    :align: center
+
+This example demonstrates the creation of a castable flanged bearing housing
+using the `draft` operation to add appropriate draft angles for mold release.
+
+
+.. dropdown:: |Builder| Reference Implementation (Builder Mode)
+
+    .. literalinclude:: ../examples/cast_bearing_unit.py
+        :start-after: [Code]
+        :end-before: [End]
 
 .. _examples-canadian_flag:
 
