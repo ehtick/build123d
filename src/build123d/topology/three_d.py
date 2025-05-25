@@ -68,7 +68,11 @@ from OCP.BRepClass3d import BRepClass3d_SolidClassifier
 from OCP.BRepFeat import BRepFeat_MakeDPrism
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeChamfer, BRepFilletAPI_MakeFillet
 from OCP.BRepOffset import BRepOffset_MakeOffset, BRepOffset_Skin
-from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell, BRepOffsetAPI_MakeThickSolid
+from OCP.BRepOffsetAPI import (
+    BRepOffsetAPI_DraftAngle,
+    BRepOffsetAPI_MakePipeShell,
+    BRepOffsetAPI_MakeThickSolid,
+)
 from OCP.BRepPrimAPI import (
     BRepPrimAPI_MakeBox,
     BRepPrimAPI_MakeCone,
@@ -88,7 +92,7 @@ from OCP.TopExp import TopExp
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Solid, TopoDS_Wire
 from OCP.gp import gp_Ax2, gp_Pnt
-from build123d.build_enums import CenterOf, Kind, Transition, Until
+from build123d.build_enums import CenterOf, GeomType, Kind, Transition, Until
 from build123d.geometry import (
     DEG2RAD,
     Axis,
@@ -431,7 +435,7 @@ class Mixin3D(Shape):
 
         """
         solid_classifier = BRepClass3d_SolidClassifier(self.wrapped)
-        solid_classifier.Perform(gp_Pnt(*Vector(point).to_tuple()), tolerance)
+        solid_classifier.Perform(gp_Pnt(*Vector(point)), tolerance)
 
         return solid_classifier.State() == ta.TopAbs_IN or solid_classifier.IsOnAFace()
 
@@ -1421,3 +1425,62 @@ class Solid(Mixin3D, Shape[TopoDS_Solid]):
             raise RuntimeError("Error applying thicken to given surface") from err
 
         return result
+
+    def draft(self, faces: Iterable[Face], neutral_plane: Plane, angle: float) -> Solid:
+        """Apply a draft angle to the given faces of the solid.
+
+        Args:
+            faces: Faces to which the draft should be applied.
+            neutral_plane: Plane defining the neutral direction and position.
+            angle: Draft angle in degrees.
+
+        Returns:
+            Solid with the specified draft angles applied.
+
+        Raises:
+            RuntimeError: If draft application fails on any face or during build.
+        """
+        valid_geom_types = {GeomType.PLANE, GeomType.CYLINDER, GeomType.CONE}
+        for face in faces:
+            if face.geom_type not in valid_geom_types:
+                raise ValueError(
+                    f"Face {face} has unsupported geometry type {face.geom_type.name}. "
+                    "Only PLANAR, CYLINDRICAL, and CONICAL faces are supported."
+                )
+
+        draft_angle_builder = BRepOffsetAPI_DraftAngle(self.wrapped)
+
+        for face in faces:
+            draft_angle_builder.Add(
+                face.wrapped,
+                neutral_plane.z_dir.to_dir(),
+                radians(angle),
+                neutral_plane.wrapped,
+                Flag=True,
+            )
+            if not draft_angle_builder.AddDone():
+                raise DraftAngleError(
+                    "Draft could not be added to a face.",
+                    face=face,
+                    problematic_shape=draft_angle_builder.ProblematicShape(),
+                )
+
+        try:
+            draft_angle_builder.Build()
+            result = Solid(draft_angle_builder.Shape())
+        except StdFail_NotDone as err:
+            raise DraftAngleError(
+                "Draft build failed on the given solid.",
+                face=None,
+                problematic_shape=draft_angle_builder.ProblematicShape(),
+            ) from err
+        return result
+
+
+class DraftAngleError(RuntimeError):
+    """Solid.draft custom exception"""
+
+    def __init__(self, message, face=None, problematic_shape=None):
+        super().__init__(message)
+        self.face = face
+        self.problematic_shape = problematic_shape
