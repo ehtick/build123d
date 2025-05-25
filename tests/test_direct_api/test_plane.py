@@ -273,11 +273,13 @@ class TestPlane(unittest.TestCase):
             np.testing.assert_allclose(target_point, local_box_vertices[i], 1e-7)
 
     def test_localize_vertex(self):
-        vertex = Vertex(random.random(), random.random(), random.random())
-        np.testing.assert_allclose(
-            tuple(Plane.YZ.to_local_coords(vertex)),
-            tuple(Plane.YZ.to_local_coords(Vector(vertex))),
-            5,
+        v_x, v_y, v_z = (random.random(), random.random(), random.random())
+        vertex = Vertex(v_x, v_y, v_z)
+        self.assertAlmostEqual(
+            Plane.YZ.to_local_coords(Vector(vertex)), (v_y, v_z, v_x), 5
+        )
+        self.assertAlmostEqual(
+            Vector(Plane.YZ.to_local_coords(vertex)), (v_y, v_z, v_x), 5
         )
 
     def test_repr(self):
