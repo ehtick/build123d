@@ -123,6 +123,8 @@ class TestPlane(unittest.TestCase):
             Plane()
         with self.assertRaises(TypeError):
             Plane(o, z_dir="up")
+        with self.assertRaises(TypeError):
+            Plane(o, forward="up")
 
         # rotated location around z
         loc = Location((0, 0, 0), (0, 0, 45))
@@ -210,6 +212,54 @@ class TestPlane(unittest.TestCase):
             self.assertAlmostEqual(p.x_dir, expected[i][0], 6)
             self.assertAlmostEqual(p.y_dir, expected[i][1], 6)
             self.assertAlmostEqual(p.z_dir, expected[i][2], 6)
+
+    def test_plane_from_axis(self):
+        origin = Vector(1, 2, 3)
+        direction = Vector(0, 0, 1)
+        axis = Axis(origin, direction)
+        plane = Plane(axis)
+
+        self.assertEqual(plane.origin, origin)
+        self.assertTrue(plane.z_dir, direction.normalized())
+        self.assertAlmostEqual(plane.x_dir.length, 1.0, places=12)
+        self.assertAlmostEqual(plane.y_dir.length, 1.0, places=12)
+        self.assertAlmostEqual(plane.z_dir.length, 1.0, places=12)
+
+    def test_plane_from_axis_with_x_dir(self):
+        origin = Vector(0, 0, 0)
+        z_dir = Vector(0, 0, 1)
+        x_dir = Vector(1, 0, 0)
+        axis = Axis(origin, z_dir)
+        plane = Plane(axis, x_dir)
+
+        self.assertEqual(plane.origin, origin)
+        self.assertEqual(plane.z_dir, z_dir.normalized())
+        self.assertEqual(plane.x_dir, x_dir.normalized())
+        self.assertEqual(plane.y_dir, z_dir.cross(x_dir).normalized())
+
+    def test_plane_from_axis_with_kwargs(self):
+        axis = Axis((0, 0, 0), (0, 1, 0))
+        x_dir = Vector(1, 0, 0)
+        plane = Plane(axis=axis, x_dir=x_dir)
+
+        self.assertEqual(plane.z_dir, Vector(0, 1, 0))
+        self.assertEqual(plane.x_dir, x_dir.normalized())
+
+    def test_plane_from_axis_without_x_dir(self):
+        axis = Axis((0, 0, 0), (1, 0, 0))
+        plane = Plane(axis)
+
+        self.assertEqual(plane.z_dir, Vector(1, 0, 0))
+        self.assertAlmostEqual(plane.x_dir.length, 1.0, places=12)
+        self.assertAlmostEqual(plane.y_dir.length, 1.0, places=12)
+        self.assertGreater(plane.z_dir.cross(plane.x_dir).dot(plane.y_dir), 0.99)
+
+    def test_plane_from_axis_invalid_x_dir(self):
+        axis = Axis((0, 0, 0), (0, 0, 1))
+        with self.assertRaises(ValueError):
+            Plane(axis, x_dir=(0, 0, 0))
+        with self.assertRaises(TypeError):
+            Plane(axis, "front")
 
     def test_plane_neg(self):
         p = Plane(

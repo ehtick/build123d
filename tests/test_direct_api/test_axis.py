@@ -113,11 +113,11 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
         self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
 
-    def test_axis_to_plane(self):
-        x_plane = Axis.X.to_plane()
-        self.assertTrue(isinstance(x_plane, Plane))
-        self.assertAlmostEqual(x_plane.origin, (0, 0, 0), 5)
-        self.assertAlmostEqual(x_plane.z_dir, (1, 0, 0), 5)
+    # def test_axis_to_plane(self):
+    #     x_plane = Axis.X.to_plane()
+    #     self.assertTrue(isinstance(x_plane, Plane))
+    #     self.assertAlmostEqual(x_plane.origin, (0, 0, 0), 5)
+    #     self.assertAlmostEqual(x_plane.z_dir, (1, 0, 0), 5)
 
     def test_axis_is_coaxial(self):
         self.assertTrue(Axis.X.is_coaxial(Axis((0, 0, 0), (1, 0, 0))))

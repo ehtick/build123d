@@ -2599,29 +2599,27 @@ class ShapeList(list[T]):
         if inclusive == (True, True):
             objects = filter(
                 lambda o: minimum
-                <= axis.to_plane().to_local_coords(o).center().Z
+                <= Plane(axis).to_local_coords(o).center().Z
                 <= maximum,
                 self,
             )
         elif inclusive == (True, False):
             objects = filter(
                 lambda o: minimum
-                <= axis.to_plane().to_local_coords(o).center().Z
+                <= Plane(axis).to_local_coords(o).center().Z
                 < maximum,
                 self,
             )
         elif inclusive == (False, True):
             objects = filter(
                 lambda o: minimum
-                < axis.to_plane().to_local_coords(o).center().Z
+                < Plane(axis).to_local_coords(o).center().Z
                 <= maximum,
                 self,
             )
         elif inclusive == (False, False):
             objects = filter(
-                lambda o: minimum
-                < axis.to_plane().to_local_coords(o).center().Z
-                < maximum,
+                lambda o: minimum < Plane(axis).to_local_coords(o).center().Z < maximum,
                 self,
             )
 

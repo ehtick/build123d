@@ -758,6 +758,12 @@ class Axis(metaclass=AxisMeta):
 
     def to_plane(self) -> Plane:
         """Return self as Plane"""
+        warnings.warn(
+            "to_tuple is deprecated and will be removed in a future version. "
+            "Use 'Plane(Axis)' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return Plane(origin=self.position, z_dir=self.direction)
 
     def is_coaxial(
@@ -2523,17 +2529,8 @@ class Plane(metaclass=PlaneMeta):
         return Vector(normal)
 
     @overload
-    def __init__(self, gp_pln: gp_Pln):  # pragma: no cover
+    def __init__(self, gp_pln: gp_Pln):
         """Return a plane from a OCCT gp_pln"""
-
-    @overload
-    def __init__(self, face: Face, x_dir: VectorLike | None = None):  # pragma: no cover
-        """Return a plane extending the face.
-        Note: for non planar face this will return the underlying work plane"""
-
-    @overload
-    def __init__(self, location: Location):  # pragma: no cover
-        """Return a plane aligned with a given location"""
 
     @overload
     def __init__(
@@ -2541,67 +2538,80 @@ class Plane(metaclass=PlaneMeta):
         origin: VectorLike,
         x_dir: VectorLike | None = None,
         z_dir: VectorLike = (0, 0, 1),
-    ):  # pragma: no cover
+    ):
         """Return a new plane at origin with x_dir and z_dir"""
+
+    @overload
+    def __init__(self, face: Face, x_dir: VectorLike | None = None):
+        """Return a plane extending the face.
+        Note: for non planar face this will return the underlying work plane"""
+
+    @overload
+    def __init__(self, location: Location):
+        """Return a plane aligned with a given location"""
+
+    @overload
+    def __init__(self, axis: Axis, x_dir: VectorLike | None = None):
+        """Return a plane with the z_dir aligned with the axis and optional x_dir direction"""
 
     def __init__(self, *args, **kwargs):
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-        """Create a plane from either an OCCT gp_pln or coordinates"""
+        """Create a plane from either an OCCT gp_pln, Face, Location, or coordinates"""
 
-        def optarg(kwargs, name, args, index, default):
-            if name in kwargs:
-                return kwargs[name]
-            if len(args) > index:
-                return args[index]
-            return default
-
-        arg_plane = None
-        arg_face = None
-        arg_location = None
-        arg_origin = None
-        arg_x_dir = None
-        arg_z_dir = (0, 0, 1)
-
-        arg0 = args[0] if args else None
         type_error_message = "Expected gp_Pln, Face, Location, or VectorLike"
 
-        if "gp_pln" in kwargs:
-            arg_plane = kwargs["gp_pln"]
-        elif isinstance(arg0, gp_Pln):
-            arg_plane = arg0
-        elif "face" in kwargs:
-            arg_face = kwargs["face"]
-            arg_x_dir = kwargs.get("x_dir", None)
-        # Check for Face by using the OCCT class to avoid circular imports of the Face class
-        elif hasattr(arg0, "wrapped") and isinstance(arg0.wrapped, TopoDS_Face):
-            arg_face = arg0
-            arg_x_dir = optarg(kwargs, "x_dir", args, 1, arg_x_dir)
-        elif "location" in kwargs:
-            arg_location = kwargs["location"]
-        elif isinstance(arg0, Location):
-            arg_location = arg0
-        elif "origin" in kwargs:
-            arg_origin = kwargs["origin"]
-            arg_x_dir = kwargs.get("x_dir", arg_x_dir)
-            arg_z_dir = kwargs.get("z_dir", arg_z_dir)
-        else:
-            try:
-                arg_origin = Vector(arg0)
-            except TypeError as exc:
-                raise TypeError(type_error_message) from exc
-            arg_x_dir = optarg(kwargs, "x_dir", args, 1, arg_x_dir)
-            arg_z_dir = optarg(kwargs, "z_dir", args, 2, arg_z_dir)
+        arg_plane = kwargs.pop("gp_pln", None)
+        arg_face = kwargs.pop("face", None)
+        arg_location = kwargs.pop("location", None)
+        arg_axis = kwargs.pop("axis", None)
+        arg_origin = kwargs.pop("origin", None)
+        arg_x_dir = kwargs.pop("x_dir", None)
+        arg_z_dir = kwargs.pop("z_dir", (0, 0, 1))
+
+        if kwargs:
+            raise TypeError(f"Unexpected keyword arguments: {', '.join(kwargs)}")
+
+        if args:
+            arg0 = args[0]
+            if arg_plane is None and isinstance(arg0, gp_Pln):
+                arg_plane = arg0
+            elif (
+                arg_face is None
+                and hasattr(arg0, "wrapped")
+                and isinstance(arg0.wrapped, TopoDS_Face)
+            ):
+                arg_face = arg0
+                if arg_x_dir is None and len(args) > 1:
+                    arg_x_dir = args[1]
+            elif arg_location is None and isinstance(arg0, Location):
+                arg_location = arg0
+            elif arg_axis is None and isinstance(arg0, Axis):
+                arg_axis = arg0
+                if len(args) > 1:
+                    try:
+                        arg_x_dir = Vector(args[1])
+                    except Exception as exc:
+                        raise TypeError(type_error_message) from exc
+            elif arg_origin is None:
+                try:
+                    arg_origin = Vector(arg0)
+                    if arg_x_dir is None and len(args) > 1:
+                        arg_x_dir = Vector(args[1]).normalized()
+                    if len(args) > 2:
+                        arg_z_dir = Vector(args[2]).normalized()
+                except Exception as exc:
+                    raise TypeError(type_error_message) from exc
 
         if arg_plane:
             self.wrapped = arg_plane
         elif arg_face:
-            # Determine if face is planar
             surface = BRep_Tool.Surface_s(arg_face.wrapped)
             if not arg_face.is_planar:
                 raise ValueError("Planes can only be created from planar faces")
             properties = GProp_GProps()
             BRepGProp.SurfaceProperties_s(arg_face.wrapped, properties)
             self._origin = Vector(properties.CentreOfMass())
+
             if isinstance(surface, Geom_BoundedSurface):
                 point = gp_Pnt()
                 face_x_dir = gp_Vec()
@@ -2609,6 +2619,7 @@ class Plane(metaclass=PlaneMeta):
                 surface.D1(0.5, 0.5, point, face_x_dir, tangent_v)
             else:
                 face_x_dir = surface.Position().XDirection()
+
             self.x_dir = Vector(arg_x_dir) if arg_x_dir else Vector(face_x_dir)
             self.x_dir = Vector(round(i, 14) for i in self.x_dir)
             self.z_dir = Plane.get_topods_face_normal(arg_face.wrapped)
@@ -2623,10 +2634,16 @@ class Plane(metaclass=PlaneMeta):
             self.x_dir = Vector(round(i, 14) for i in self.x_dir)
             self.z_dir = Plane.get_topods_face_normal(topo_face)
             self.z_dir = Vector(round(i, 14) for i in self.z_dir)
-        elif arg_origin:
+        elif arg_axis:
+            self._origin = arg_axis.position
+            self.x_dir = Vector(arg_x_dir) if arg_x_dir is not None else None
+            self.z_dir = arg_axis.direction
+        elif arg_origin is not None:
             self._origin = Vector(arg_origin)
             self.x_dir = Vector(arg_x_dir) if arg_x_dir else None
             self.z_dir = Vector(arg_z_dir)
+        else:
+            raise TypeError(type_error_message)
 
         if hasattr(self, "wrapped"):
             self._origin = Vector(self.wrapped.Location())
@@ -2638,17 +2655,19 @@ class Plane(metaclass=PlaneMeta):
                 raise ValueError("z_dir must be non null")
             self.z_dir = self.z_dir.normalized()
 
-            if not self.x_dir:
+            if self.x_dir is None:
                 ax3 = gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir())
                 self.x_dir = Vector(ax3.XDirection()).normalized()
             else:
                 if Vector(self.x_dir).length == 0.0:
                     raise ValueError("x_dir must be non null")
                 self.x_dir = Vector(self.x_dir).normalized()
+
             self.y_dir = self.z_dir.cross(self.x_dir).normalized()
             self.wrapped = gp_Pln(
                 gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
             )
+
         self.local_coord_system = None  #: gp_Ax3 | None
         self.reverse_transform = None  #: Matrix | None
         self.forward_transform = None  #: Matrix | None

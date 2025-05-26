@@ -235,7 +235,7 @@ class Mixin2D(Shape):
         while intersect_maker.More():
             inter_pt = intersect_maker.Pnt()
             # Calculate distance along axis
-            distance = other.to_plane().to_local_coords(Vector(inter_pt)).Z
+            distance = Plane(other).to_local_coords(Vector(inter_pt)).Z
             intersections.append(
                 (
                     intersect_maker.Face(),  # TopoDS_Face
@@ -729,7 +729,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             axis = self.axis_of_rotation
             if axis is None or self.radii is None:
                 raise ValueError("Can't find curvature of empty object")
-            loc = Location(axis.to_plane())
+            loc = Location(Plane(axis))
             axis_circle = Edge.make_circle(self.radii[0]).locate(loc)
             _, pnt_on_axis_circle, _ = axis_circle.distance_to_with_closest_points(
                 self.center()

@@ -437,7 +437,7 @@ class Mixin1D(Shape):
             if all(a0.is_coaxial(a1) for a0, a1 in combinations(as_axis, 2)):
                 origin = as_axis[0].position
                 x_dir = as_axis[0].direction
-                z_dir = as_axis[0].to_plane().x_dir
+                z_dir = Plane(as_axis[0]).x_dir
                 c_plane = Plane(origin, z_dir=z_dir)
                 result = c_plane.shift_origin((0, 0))
 
