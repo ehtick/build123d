@@ -27,7 +27,7 @@ license:
 """
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 
 from build123d.build_enums import CenterOf, Kind
 from build123d.geometry import Axis, Plane
@@ -67,7 +67,7 @@ class TestMixin3D(unittest.TestCase):
         face = box.faces().sort_by(Axis.Z)[0]
         self.assertRaises(ValueError, box.chamfer, 0.1, None, edge, face=face)
 
-    @patch.object(Shape, "is_valid", return_value=False)
+    @patch.object(Shape, "is_valid", new_callable=PropertyMock, return_value=False)
     def test_chamfer_invalid_shape_raises_error(self, mock_is_valid):
         box = Solid.make_box(1, 1, 1)
 
@@ -111,7 +111,7 @@ class TestMixin3D(unittest.TestCase):
         d = Solid.make_box(1, 1, 1, Plane((-0.5, -0.5, 0))).dprism(
             None, [f], additive=False
         )
-        self.assertTrue(d.is_valid())
+        self.assertTrue(d.is_valid)
         self.assertAlmostEqual(d.volume, 1 - 0.5**2, 5)
 
         # face with depth
@@ -119,7 +119,7 @@ class TestMixin3D(unittest.TestCase):
         d = Solid.make_box(1, 1, 1, Plane((-0.5, -0.5, 0))).dprism(
             None, [f], depth=0.5, thru_all=False, additive=False
         )
-        self.assertTrue(d.is_valid())
+        self.assertTrue(d.is_valid)
         self.assertAlmostEqual(d.volume, 1 - 0.5**3, 5)
 
         # face until
@@ -128,7 +128,7 @@ class TestMixin3D(unittest.TestCase):
         d = Solid.make_box(1, 1, 1, Plane((-0.5, -0.5, 0))).dprism(
             None, [f], up_to_face=limit, thru_all=False, additive=False
         )
-        self.assertTrue(d.is_valid())
+        self.assertTrue(d.is_valid)
         self.assertAlmostEqual(d.volume, 1 - 0.5**3, 5)
 
         # wire
@@ -136,7 +136,7 @@ class TestMixin3D(unittest.TestCase):
         d = Solid.make_box(1, 1, 1, Plane((-0.5, -0.5, 0))).dprism(
             None, [w], additive=False
         )
-        self.assertTrue(d.is_valid())
+        self.assertTrue(d.is_valid)
         self.assertAlmostEqual(d.volume, 1 - 0.5**2, 5)
 
     def test_center(self):

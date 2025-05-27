@@ -65,7 +65,7 @@ class TestFace(unittest.TestCase):
         bottom_edge = Edge.make_circle(radius=1, end_angle=90)
         top_edge = Edge.make_circle(radius=1, plane=Plane((0, 0, 1)), end_angle=90)
         curved = Face.make_surface_from_curves(bottom_edge, top_edge)
-        self.assertTrue(curved.is_valid())
+        self.assertTrue(curved.is_valid)
         self.assertAlmostEqual(curved.area, math.pi / 2, 5)
         self.assertAlmostEqual(
             curved.normal_at(), (math.sqrt(2) / 2, math.sqrt(2) / 2, 0), 5
@@ -74,7 +74,7 @@ class TestFace(unittest.TestCase):
         bottom_wire = Wire.make_circle(1)
         top_wire = Wire.make_circle(1, Plane((0, 0, 1)))
         curved = Face.make_surface_from_curves(bottom_wire, top_wire)
-        self.assertTrue(curved.is_valid())
+        self.assertTrue(curved.is_valid)
         self.assertAlmostEqual(curved.area, 2 * math.pi, 5)
 
     def test_center(self):
@@ -303,7 +303,7 @@ class TestFace(unittest.TestCase):
             for j in range(4 - i % 2)
         ]
         cylinder_walls_with_holes = cylinder_wall.make_holes(projected_wires)
-        self.assertTrue(cylinder_walls_with_holes.is_valid())
+        self.assertTrue(cylinder_walls_with_holes.is_valid)
         self.assertLess(cylinder_walls_with_holes.area, cylinder_wall.area)
 
     def test_is_inside(self):
@@ -377,7 +377,7 @@ class TestFace(unittest.TestCase):
             surface_points=[Vector(0, 0, -5)],
             interior_wires=[hole],
         )
-        self.assertTrue(surface.is_valid())
+        self.assertTrue(surface.is_valid)
         self.assertEqual(surface.geom_type, GeomType.BSPLINE)
         bbox = surface.bounding_box()
         self.assertAlmostEqual(bbox.min, (-50.5, -24.5, -5.113393280136395), 5)
@@ -877,7 +877,7 @@ class TestFace(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             surface.wrap(star.outer_wire(), target)
 
-    @patch.object(Wire, "is_valid", return_value=False)
+    @patch.object(Wire, "is_valid", new_callable=PropertyMock, return_value=False)
     def test_wrap_invalid_wire(self, mock_is_valid):
         surface = Cone(5, 2, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
         target = surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))

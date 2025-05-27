@@ -259,7 +259,7 @@ class Mixin3D(Shape):
 
         try:
             new_shape = self.__class__(chamfer_builder.Shape())
-            if not new_shape.is_valid():
+            if not new_shape.is_valid:
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
             raise ValueError(
@@ -343,7 +343,7 @@ class Mixin3D(Shape):
 
         try:
             new_shape = self.__class__(fillet_builder.Shape())
-            if not new_shape.is_valid():
+            if not new_shape.is_valid:
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
             raise ValueError(
@@ -485,7 +485,7 @@ class Mixin3D(Shape):
             # Do these numbers work? - if not try with the smaller window
             try:
                 new_shape = self.__class__(fillet_builder.Shape())
-                if not new_shape.is_valid():
+                if not new_shape.is_valid:
                     raise fillet_exception
             except fillet_exception:
                 return __max_fillet(window_min, window_mid, current_iteration + 1)
@@ -499,7 +499,7 @@ class Mixin3D(Shape):
                 )
             return return_value
 
-        if not self.is_valid():
+        if not self.is_valid:
             raise ValueError("Invalid Shape")
 
         native_edges = [e.wrapped for e in edge_list]

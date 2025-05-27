@@ -29,7 +29,7 @@ license:
 # Always equal to any other object, to test that __eq__ cooperation is working
 import unittest
 from random import uniform
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 
 import numpy as np
 from build123d.build_enums import CenterOf, Keep
@@ -100,7 +100,7 @@ class TestShape(unittest.TestCase):
             Shape.combined_center(objs, center_of=CenterOf.GEOMETRY)
 
     def test_shape_type(self):
-        self.assertEqual(Vertex().shape_type(), "Vertex")
+        self.assertEqual(Vertex().shape_type, "Vertex")
 
     def test_scale(self):
         self.assertAlmostEqual(Solid.make_box(1, 1, 1).scale(2).volume, 2**3, 5)
@@ -109,10 +109,10 @@ class TestShape(unittest.TestCase):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))
         combined = box1.fuse(box2, glue=True)
-        self.assertTrue(combined.is_valid())
+        self.assertTrue(combined.is_valid)
         self.assertAlmostEqual(combined.volume, 2, 5)
         fuzzy = box1.fuse(box2, tol=1e-6)
-        self.assertTrue(fuzzy.is_valid())
+        self.assertTrue(fuzzy.is_valid)
         self.assertAlmostEqual(fuzzy.volume, 2, 5)
 
     def test_faces_intersected_by_axis(self):
@@ -245,7 +245,7 @@ class TestShape(unittest.TestCase):
             # invalid_object = box.fillet(0.75, box.edges())
             # invalid_object.max_fillet(invalid_object.edges())
 
-    @patch.object(Shape, "is_valid", return_value=False)
+    @patch.object(Shape, "is_valid", new_callable=PropertyMock, return_value=False)
     def test_max_fillet_invalid_shape_raises_error(self, mock_is_valid):
         box = Solid.make_box(1, 1, 1)
 
@@ -526,7 +526,7 @@ class TestShape(unittest.TestCase):
         self.assertEqual(hash(empty), 0)
         self.assertFalse(empty.is_same(Solid()))
         self.assertFalse(empty.is_equal(Solid()))
-        self.assertTrue(empty.is_valid())
+        self.assertTrue(empty.is_valid)
         empty_bbox = empty.bounding_box()
         self.assertEqual(tuple(empty_bbox.size), (0, 0, 0))
         self.assertIs(empty, empty.mirror(Plane.XY))

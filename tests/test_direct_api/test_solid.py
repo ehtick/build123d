@@ -59,7 +59,7 @@ class TestSolid(unittest.TestCase):
         box = Solid(box_shell)
         self.assertAlmostEqual(box.area, 6, 5)
         self.assertAlmostEqual(box.volume, 1, 5)
-        self.assertTrue(box.is_valid())
+        self.assertTrue(box.is_valid)
 
     def test_extrude(self):
         v = Edge.extrude(Vertex(1, 1, 1), (0, 0, 1))

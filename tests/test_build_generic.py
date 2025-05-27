@@ -522,7 +522,7 @@ class OffsetTests(unittest.TestCase):
     def test_face_offset_with_holes(self):
         sk = Rectangle(100, 100) - GridLocations(80, 80, 2, 2) * Circle(5)
         sk2 = offset(sk, -5)
-        self.assertTrue(sk2.face().is_valid())
+        self.assertTrue(sk2.face().is_valid)
         self.assertLess(sk2.area, sk.area)
         self.assertEqual(len(sk2), 1)
 
@@ -881,7 +881,7 @@ class TestSweep(unittest.TestCase):
                     Rectangle(2 * lip, 2 * lip, align=(Align.CENTER, Align.CENTER))
             sweep(sections=sk2.sketch, path=topedgs, mode=Mode.SUBTRACT)
 
-        self.assertTrue(p.part.is_valid())
+        self.assertTrue(p.part.is_valid)
 
     def test_path_error(self):
         e1 = Edge.make_line((0, 0), (1, 0))

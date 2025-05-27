@@ -423,6 +423,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return True
 
     @property
+    def is_null(self) -> bool:
+        """Returns true if this shape is null. In other words, it references no
+        underlying shape with the potential to be given a location and an
+        orientation.
+        """
+        return self.wrapped is None or self.wrapped.IsNull()
+
+    @property
     def is_planar_face(self) -> bool:
         """Is the shape a planar face even though its geom_type may not be PLANE"""
         if self.wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
@@ -430,6 +438,18 @@ class Shape(NodeMixin, Generic[TOPODS]):
         surface = BRep_Tool.Surface_s(self.wrapped)
         is_face_planar = GeomLib_IsPlanarSurface(surface, TOLERANCE)
         return is_face_planar.IsPlanar()
+
+    @property
+    def is_valid(self) -> bool:
+        """Returns True if no defect is detected on the shape S or any of its
+        subshapes. See the OCCT docs on BRepCheck_Analyzer::IsValid for a full
+        description of what is checked.
+        """
+        if self.wrapped is None:
+            return True
+        chk = BRepCheck_Analyzer(self.wrapped)
+        chk.SetParallel(True)
+        return chk.IsValid()
 
     @property
     def location(self) -> Location | None:
@@ -542,6 +562,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (Vector(principal_props.SecondAxisOfInertia()), principal_moments[1]),
             (Vector(principal_props.ThirdAxisOfInertia()), principal_moments[2]),
         ]
+
+    @property
+    def shape_type(self) -> Shapes:
+        """Return the shape type string for this class"""
+        return tcast(Shapes, Shape.shape_LUT[shapetype(self.wrapped)])
 
     @property
     def static_moments(self) -> tuple[float, float, float]:
@@ -1188,7 +1213,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """fix - try to fix shape if not valid"""
         if self.wrapped is None:
             return self
-        if not self.is_valid():
+        if not self.is_valid:
             shape_copy: Shape = copy.deepcopy(self, None)
             shape_copy.wrapped = tcast(TOPODS, fix(self.wrapped))
 
@@ -1332,7 +1357,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return None
         if (
             not isinstance(shape_intersections, ShapeList)
-            and shape_intersections.is_null()
+            and shape_intersections.is_null
         ):
             return None
         return shape_intersections
@@ -1352,18 +1377,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return False
         return self.wrapped.IsEqual(other.wrapped)
 
-    def is_null(self) -> bool:
-        """Returns true if this shape is null. In other words, it references no
-        underlying shape with the potential to be given a location and an
-        orientation.
-
-        Args:
-
-        Returns:
-
-        """
-        return self.wrapped is None or self.wrapped.IsNull()
-
     def is_same(self, other: Shape) -> bool:
         """Returns True if other and this shape are same, i.e. if they share the
         same TShape with the same Locations. Orientations may differ. Also see
@@ -1378,22 +1391,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if self.wrapped is None or other.wrapped is None:
             return False
         return self.wrapped.IsSame(other.wrapped)
-
-    def is_valid(self) -> bool:
-        """Returns True if no defect is detected on the shape S or any of its
-        subshapes. See the OCCT docs on BRepCheck_Analyzer::IsValid for a full
-        description of what is checked.
-
-        Args:
-
-        Returns:
-
-        """
-        if self.wrapped is None:
-            return True
-        chk = BRepCheck_Analyzer(self.wrapped)
-        chk.SetParallel(True)
-        return chk.IsValid()
 
     def locate(self, loc: Location) -> Self:
         """Apply a location in absolute sense to self
@@ -1676,10 +1673,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         transformation.SetScale(gp_Pnt(), factor)
 
         return self._apply_transform(transformation)
-
-    def shape_type(self) -> Shapes:
-        """Return the shape type string for this class"""
-        return tcast(Shapes, Shape.shape_LUT[shapetype(self.wrapped)])
 
     def shell(self) -> Shell | None:
         """Return the Shell"""

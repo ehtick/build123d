@@ -374,7 +374,7 @@ class Mixin2D(Shape):
             raise RuntimeError(
                 f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
             )
-        if not wrapped_edge.is_valid():
+        if not wrapped_edge.is_valid:
             raise RuntimeError("Wrapped edge is invalid")
 
         if not snap_to_face:
@@ -1016,7 +1016,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 ) from err
 
         surface_face = surface_face.fix()
-        if not surface_face.is_valid():
+        if not surface_face.is_valid:
             raise RuntimeError("non planar face is invalid")
 
         return surface_face
@@ -1443,7 +1443,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             ) from err
 
         surface_face = surface_face.fix()
-        # if not surface_face.is_valid():
+        # if not surface_face.is_valid:
         #     raise RuntimeError("non planar face is invalid")
 
         return surface_face
@@ -2021,7 +2021,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         #
         # Part 5: Validate
         #
-        if not wrapped_wire.is_valid():
+        if not wrapped_wire.is_valid:
             raise RuntimeError("wrapped wire is not valid")
 
         return wrapped_wire

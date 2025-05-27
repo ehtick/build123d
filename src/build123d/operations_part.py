@@ -304,11 +304,11 @@ def loft(
     new_solid = Solid.make_loft(loft_wires, ruled)
 
     # Try to recover an invalid loft
-    if not new_solid.is_valid():
+    if not new_solid.is_valid:
         new_solid = Solid(Shell(new_solid.faces() + section_list))
         if clean:
             new_solid = new_solid.clean()
-        if not new_solid.is_valid():
+        if not new_solid.is_valid:
             raise RuntimeError("Failed to create valid loft")
 
     if context is not None:

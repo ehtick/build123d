@@ -51,10 +51,10 @@ class TestCompound(unittest.TestCase):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))
         combined = Compound([box1]).fuse(box2, glue=True)
-        self.assertTrue(combined.is_valid())
+        self.assertTrue(combined.is_valid)
         self.assertAlmostEqual(combined.volume, 2, 5)
         fuzzy = Compound([box1]).fuse(box2, tol=1e-6)
-        self.assertTrue(fuzzy.is_valid())
+        self.assertTrue(fuzzy.is_valid)
         self.assertAlmostEqual(fuzzy.volume, 2, 5)
 
     def test_remove(self):
