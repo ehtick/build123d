@@ -435,27 +435,25 @@ class TestRotation(unittest.TestCase):
     def test_init(self):
         thirty_by_three = Rotation(30, 30, 30)
         box_vertices = Solid.make_box(1, 1, 1).moved(thirty_by_three).vertices()
+        self.assertTupleAlmostEquals(tuple(box_vertices[0]), (0.5, -0.4330127, 0.75), 5)
+        self.assertTupleAlmostEquals(tuple(box_vertices[1]), (0.0, 0.0, 0.0), 7)
         self.assertTupleAlmostEquals(
-            box_vertices[0].to_tuple(), (0.5, -0.4330127, 0.75), 5
-        )
-        self.assertTupleAlmostEquals(box_vertices[1].to_tuple(), (0.0, 0.0, 0.0), 7)
-        self.assertTupleAlmostEquals(
-            box_vertices[2].to_tuple(), (0.0669872, 0.191987, 1.399519), 5
+            tuple(box_vertices[2]), (0.0669872, 0.191987, 1.399519), 5
         )
         self.assertTupleAlmostEquals(
-            box_vertices[3].to_tuple(), (-0.4330127, 0.625, 0.6495190), 5
+            tuple(box_vertices[3]), (-0.4330127, 0.625, 0.6495190), 5
         )
         self.assertTupleAlmostEquals(
-            box_vertices[4].to_tuple(), (1.25, 0.2165063, 0.625), 5
+            tuple(box_vertices[4]), (1.25, 0.2165063, 0.625), 5
         )
         self.assertTupleAlmostEquals(
-            box_vertices[5].to_tuple(), (0.75, 0.649519, -0.125), 5
+            tuple(box_vertices[5]), (0.75, 0.649519, -0.125), 5
         )
         self.assertTupleAlmostEquals(
-            box_vertices[6].to_tuple(), (0.816987, 0.841506, 1.274519), 5
+            tuple(box_vertices[6]), (0.816987, 0.841506, 1.274519), 5
         )
         self.assertTupleAlmostEquals(
-            box_vertices[7].to_tuple(), (0.3169872, 1.2745190, 0.52451905), 5
+            tuple(box_vertices[7]), (0.3169872, 1.2745190, 0.52451905), 5
         )
 
 

@@ -392,12 +392,10 @@ def make_brake_formed(
         raise TypeError("station_widths must be either a single number or an iterable")
 
     for vertex in line_vertices:
-        others = offset_vertices.sort_by_distance(Vector(vertex.X, vertex.Y, vertex.Z))
+        others = offset_vertices.sort_by_distance(Vector(vertex))
         for other in others[1:]:
-            if abs(Vector(*(vertex - other).to_tuple()).length - thickness) < 1e-2:
-                station_edges.append(
-                    Edge.make_line(vertex.to_tuple(), other.to_tuple())
-                )
+            if abs(Vector((vertex - other)).length - thickness) < 1e-2:
+                station_edges.append(Edge.make_line(vertex, other))
                 break
     station_edges = station_edges.sort_by(line)
 

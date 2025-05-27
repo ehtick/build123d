@@ -54,6 +54,8 @@ license:
 from __future__ import annotations
 
 import itertools
+import warnings
+
 from typing import overload, TYPE_CHECKING
 
 from collections.abc import Iterable
@@ -132,7 +134,8 @@ class Vertex(Shape[TopoDS_Vertex]):
         )
 
         super().__init__(ocp_vx)
-        self.X, self.Y, self.Z = self.to_tuple()
+        pnt = BRep_Tool.Pnt_s(self.wrapped)
+        self.X, self.Y, self.Z = pnt.X(), pnt.Y(), pnt.Z()
 
     # ---- Properties ----
 
@@ -272,6 +275,12 @@ class Vertex(Shape[TopoDS_Vertex]):
 
     def to_tuple(self) -> tuple[float, float, float]:
         """Return vertex as three tuple of floats"""
+        warnings.warn(
+            "to_tuple is deprecated and will be removed in a future version. "
+            "Use 'tuple(Vertex)' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         geom_point = BRep_Tool.Pnt_s(self.wrapped)
         return (geom_point.X(), geom_point.Y(), geom_point.Z())
 

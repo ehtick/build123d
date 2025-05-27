@@ -1111,7 +1111,7 @@ class Locations(LocationList):
             elif isinstance(point, Vector):
                 local_locations.append(Location(point))
             elif isinstance(point, Vertex):
-                local_locations.append(Location(Vector(point.to_tuple())))
+                local_locations.append(Location(Vector(point)))
             elif isinstance(point, tuple):
                 local_locations.append(Location(Vector(point)))
             elif isinstance(point, Plane):

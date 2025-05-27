@@ -376,14 +376,8 @@ def chamfer(
             object_list = ShapeList(
                 filter(
                     lambda v: not (
-                        isclose_b(
-                            (Vector(*v.to_tuple()) - target.position_at(0)).length,
-                            0.0,
-                        )
-                        or isclose_b(
-                            (Vector(*v.to_tuple()) - target.position_at(1)).length,
-                            0.0,
-                        )
+                        isclose_b((Vector(v) - target.position_at(0)).length, 0.0)
+                        or isclose_b((Vector(v) - target.position_at(1)).length, 0.0)
                     ),
                     object_list,
                 )
@@ -479,14 +473,8 @@ def fillet(
             object_list = ShapeList(
                 filter(
                     lambda v: not (
-                        isclose_b(
-                            (Vector(*v.to_tuple()) - target.position_at(0)).length,
-                            0.0,
-                        )
-                        or isclose_b(
-                            (Vector(*v.to_tuple()) - target.position_at(1)).length,
-                            0.0,
-                        )
+                        isclose_b((Vector(v) - target.position_at(0)).length, 0.0)
+                        or isclose_b((Vector(v) - target.position_at(1)).length, 0.0)
                     ),
                     object_list,
                 )

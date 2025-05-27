@@ -32,7 +32,6 @@ import math
 import re
 import unittest
 
-import numpy as np
 from IPython.lib import pretty
 from build123d.build_common import GridLocations, PolarLocations
 from build123d.build_enums import GeomType, SortBy
@@ -304,7 +303,7 @@ class TestShapeList(unittest.TestCase):
 
     def test_vertex(self):
         sl = ShapeList([Edge.make_circle(1)])
-        np.testing.assert_allclose(sl.vertex().to_tuple(), (1, 0, 0), 1e-5)
+        self.assertAlmostEqual(tuple(sl.vertex()), (1, 0, 0), 5)
         sl = ShapeList([Face.make_rect(1, 1), Face.make_rect(1, 1, Plane((4, 4)))])
         with self.assertWarns(UserWarning):
             sl.vertex()

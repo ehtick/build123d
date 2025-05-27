@@ -277,10 +277,7 @@ class Draft:
         if isinstance(path, (Edge, Wire)):
             processed_path = path
         elif isinstance(path, Iterable):
-            pnts = [
-                Vector(p.to_tuple()) if isinstance(p, Vertex) else Vector(p)
-                for p in path
-            ]
+            pnts = [Vector(p) for p in path]
             if len(pnts) == 2:
                 processed_path = Edge.make_line(*pnts)
             else:
