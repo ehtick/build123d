@@ -725,6 +725,15 @@ class BuildLineTests(unittest.TestCase):
                             self.assertGreater(side_sign * coincident_dir, 0)
                             self.assertGreater(center_dir, 0)
 
+        # Verify arc is tangent for a reversed start arc
+        c1 = CenterArc((0, 80), 40, 0, -180)
+        c2 = CenterArc((80, 0), 40, 90, 180)
+        arc = ArcArcTangentArc(c1, c2, 25, side=Side.RIGHT)
+        _, _, point = c1.distance_to_with_closest_points(arc)
+        self.assertAlmostEqual(
+            c1.tangent_at(point).cross(arc.tangent_at(point)).length, 0, 5
+        )
+
         ## Error Handling
         start_arc = CenterArc(start_point, start_r, 0, 360)
         end_arc = CenterArc(end_point, end_r, 0, 360)
