@@ -338,17 +338,26 @@ class Mixin2D(Shape):
         loop_count = 0
         length_error = sys.float_info.max
 
-        while length_error > tolerance and loop_count < max_loops:
-            # Get starting point and normal
-            surface_origin = surface_loc.position
-            surface_normal = surface_loc.z_axis.direction
+        # Find the location on the surface to start
+        if planar_edge.position_at(0).length > tolerance:
+            # The start point isn't at the surface_loc so wrap a line to find it
+            to_start_edge = Edge.make_line((0, 0), planar_edge @ 0)
+            wrapped_to_start_edge = self._wrap_edge(
+                to_start_edge, surface_loc, snap_to_face=True
+            )
+            start_pnt = wrapped_to_start_edge @ 1
+            _, start_normal = _intersect_surface_normal(
+                start_pnt, (start_pnt - target_object_center)
+            )
+        else:
+            # The start point is at the surface location
+            start_pnt = surface_loc.position
+            start_normal = surface_loc.z_axis.direction
 
+        while length_error > tolerance and loop_count < max_loops:
             # Seed the wrapped path
             wrapped_edge_points: list[VectorLike] = []
-            planar_position = planar_edge.position_at(0)
-            current_point, current_normal = _find_point_on_surface(
-                surface_origin, surface_normal, planar_position
-            )
+            current_point, current_normal = start_pnt, start_normal
             wrapped_edge_points.append(current_point)
 
             # Subdivide and propagate
@@ -1861,7 +1870,9 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             for w in planar_face.inner_wires()
         ]
         wrapped_face = Face.make_surface(
-            wrapped_perimeter, interior_wires=wrapped_holes
+            wrapped_perimeter,
+            surface_points=[surface_loc.position],
+            interior_wires=wrapped_holes,
         )
 
         # Potentially flip the wrapped face to match the surface
