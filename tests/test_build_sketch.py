@@ -532,7 +532,7 @@ class TestBuildSketchObjects(unittest.TestCase):
     [
         (SlotOverall, (5, 10)),
         (SlotCenterToCenter, (-1, 10)),
-        (SlotCenterPoint, ((0, 0, 0), (2, 0, 0), 10)),
+        (SlotCenterPoint, ((0, 0, 0), (0, 0, 0), 10)),
     ],
 )
 def test_invalid_slots(slot, args):
