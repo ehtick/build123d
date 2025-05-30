@@ -1476,4 +1476,10 @@ class ArcArcTangentArc(BaseEdgeObject):
             intersect.reverse()
 
         arc = RadiusArc(intersect[0], intersect[1], radius=radius)
+
+        # Check and flip arc if not tangent
+        _, _, point = start_arc.distance_to_with_closest_points(arc)
+        if start_arc.tangent_at(point).cross(arc.tangent_at(point)).length > TOLERANCE:
+            arc = RadiusArc(intersect[0], intersect[1], radius=-radius)
+
         super().__init__(arc, mode)
