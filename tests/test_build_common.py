@@ -690,7 +690,7 @@ class TestShapeList(unittest.TestCase):
     def test_shapes(self):
         with BuildPart() as test:
             Box(1, 1, 1)
-        self.assertIsNone(test._shapes(Compound))
+        self.assertEqual(test._shapes(Compound), [])
 
     def test_operators(self):
         with BuildPart() as test:

@@ -251,6 +251,8 @@ class Builder(ABC, Generic[ShapeT]):
     @property
     def new_edges(self) -> ShapeList[Edge]:
         """Edges that changed during last operation"""
+        if self._obj is None:
+            return ShapeList()
         before_list = [] if self.obj_before is None else [self.obj_before]
         return new_edges(*(before_list + self.to_combine), combined=self._obj)
 
@@ -538,7 +540,8 @@ class Builder(ABC, Generic[ShapeT]):
         """
         vertex_list: list[Vertex] = []
         if select == Select.ALL:
-            for obj_edge in self._obj.edges():
+            obj_edges = [] if self._obj is None else self._obj.edges()
+            for obj_edge in obj_edges:
                 vertex_list.extend(obj_edge.vertices())
         elif select == Select.LAST:
             vertex_list = self.lasts[Vertex]
@@ -582,7 +585,7 @@ class Builder(ABC, Generic[ShapeT]):
             ShapeList[Edge]: Edges extracted
         """
         if select == Select.ALL:
-            edge_list = self._obj.edges()
+            edge_list = ShapeList() if self._obj is None else self._obj.edges()
         elif select == Select.LAST:
             edge_list = self.lasts[Edge]
         elif select == Select.NEW:
@@ -625,7 +628,7 @@ class Builder(ABC, Generic[ShapeT]):
             ShapeList[Wire]: Wires extracted
         """
         if select == Select.ALL:
-            wire_list = self._obj.wires()
+            wire_list = ShapeList() if self._obj is None else self._obj.wires()
         elif select == Select.LAST:
             wire_list = Wire.combine(self.lasts[Edge])
         elif select == Select.NEW:
@@ -668,7 +671,7 @@ class Builder(ABC, Generic[ShapeT]):
             ShapeList[Face]: Faces extracted
         """
         if select == Select.ALL:
-            face_list = self._obj.faces()
+            face_list = ShapeList() if self._obj is None else self._obj.faces()
         elif select == Select.LAST:
             face_list = self.lasts[Face]
         elif select == Select.NEW:
@@ -711,7 +714,7 @@ class Builder(ABC, Generic[ShapeT]):
             ShapeList[Solid]: Solids extracted
         """
         if select == Select.ALL:
-            solid_list = self._obj.solids()
+            solid_list = ShapeList() if self._obj is None else self._obj.solids()
         elif select == Select.LAST:
             solid_list = self.lasts[Solid]
         elif select == Select.NEW:
@@ -748,17 +751,18 @@ class Builder(ABC, Generic[ShapeT]):
     ) -> ShapeList:
         """Extract Shapes"""
         obj_type = self._shape if obj_type is None else obj_type
+        if self._obj is None:
+            return ShapeList()
+
         if obj_type == Vertex:
-            result = self._obj.vertices()
-        elif obj_type == Edge:
-            result = self._obj.edges()
-        elif obj_type == Face:
-            result = self._obj.faces()
-        elif obj_type == Solid:
-            result = self._obj.solids()
-        else:
-            result = None
-        return result
+            return self._obj.vertices()
+        if obj_type == Edge:
+            return self._obj.edges()
+        if obj_type == Face:
+            return self._obj.faces()
+        if obj_type == Solid:
+            return self._obj.solids()
+        return ShapeList()
 
     def validate_inputs(
         self, validating_class, objects: Shape | Iterable[Shape] | None = None
@@ -1381,8 +1385,8 @@ def __gen_context_component_getter(
     @functools.wraps(func)
     def getter(select: Select = Select.ALL) -> T2:
         # Retrieve the current Builder context based on the method name
-        context = Builder._get_context(func.__name__)
-        if not context:
+        context: Builder | None = Builder._get_context(func.__name__)
+        if context is None:
             raise RuntimeError(
                 f"{func.__name__}() requires a Builder context to be in scope"
             )

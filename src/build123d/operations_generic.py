@@ -119,11 +119,11 @@ def add(
         (
             obj.unwrap(fully=False)
             if isinstance(obj, Compound)
-            else obj._obj if isinstance(obj, Builder) else obj
+            else obj._obj if isinstance(obj, Builder) and obj._obj is not None else obj
         )
         for obj in object_list
+        if not (isinstance(obj, Builder) and obj._obj is None)
     ]
-
     validate_inputs(context, "add", object_iter)
 
     if isinstance(context, BuildPart):
@@ -364,11 +364,14 @@ def chamfer(
         return new_sketch
 
     if target._dim == 1:
-        target = (
-            Wire(target.wrapped)
-            if isinstance(target, BaseLineObject)
-            else target.wires()[0]
-        )
+        if isinstance(target, BaseLineObject):
+            if target.wrapped is None:
+                target = Wire([])  # empty wire
+            else:
+                target = Wire(target.wrapped)
+        else:
+            target = target.wires()[0]
+
         if not all([isinstance(obj, Vertex) for obj in object_list]):
             raise ValueError("1D fillet operation takes only Vertices")
         # Remove any end vertices as these can't be filleted
@@ -461,11 +464,14 @@ def fillet(
         return new_sketch
 
     if target._dim == 1:
-        target = (
-            Wire(target.wrapped)
-            if isinstance(target, BaseLineObject)
-            else target.wires()[0]
-        )
+        if isinstance(target, BaseLineObject):
+            if target.wrapped is None:
+                target = Wire([])  # empty wire
+            else:
+                target = Wire(target.wrapped)
+        else:
+            target = target.wires()[0]
+
         if not all([isinstance(obj, Vertex) for obj in object_list]):
             raise ValueError("1D fillet operation takes only Vertices")
         # Remove any end vertices as these can't be filleted
