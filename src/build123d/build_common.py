@@ -50,7 +50,7 @@ import functools
 from abc import ABC, abstractmethod
 from itertools import product
 from math import sqrt, cos, pi
-from typing import Any, cast, overload, Protocol, Type, TypeVar
+from typing import Any, cast, overload, Protocol, Type, TypeVar, Generic
 
 from collections.abc import Callable, Iterable
 from typing_extensions import Self
@@ -178,8 +178,11 @@ operations_apply_to = {
 B = TypeVar("B", bound="Builder")
 """Builder type hint"""
 
+ShapeT = TypeVar("ShapeT", bound=Shape)
+"""Builder's are generic shape creators"""
 
-class Builder(ABC):
+
+class Builder(ABC, Generic[ShapeT]):
     """Builder
 
     Base class for the build123d Builders.
@@ -231,7 +234,7 @@ class Builder(ABC):
 
     @property
     @abstractmethod
-    def _obj(self) -> Shape:
+    def _obj(self) -> Shape | None:
         """Object to pass to parent"""
         raise NotImplementedError  # pragma: no cover
 
