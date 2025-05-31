@@ -49,6 +49,11 @@ Most of the examples show the builder and algebra modes.
             :link: clock_face
             :link-type: ref
 
+    .. grid-item-card:: Fast Grid Holes |Algebra|
+            :img-top: assets/examples/fast_grid_holes.png
+            :link: fast_grid_holes
+            :link-type: ref
+
     .. grid-item-card:: Handle |Builder| |Algebra|
             :img-top: assets/examples/handle.png
             :link: handle
@@ -324,6 +329,32 @@ hour labels, and slots at specified positions. The resulting 3D model represents
 a detailed and visually appealing clock design.
 
 :class:`~build_common.PolarLocations` are used to position features on the clock face.
+
+.. _fast_grid_holes:
+
+Fast Grid Holes
+---------------
+.. image:: assets/examples/fast_grid_holes.png
+    :align: center
+
+.. dropdown:: |Algebra| Reference Implementation (Algebra Mode)
+
+    .. literalinclude:: ../examples/fast_grid_holes.py
+        :start-after: [Code]
+        :end-before: [End]
+
+This example demonstrates an efficient approach to creating a large number of holes
+(625 in this case) in a planar part using build123d.
+
+Instead of modeling and subtracting 3D solids for each hole—which is computationally
+expensive—this method constructs a 2D Face from an outer perimeter wire and a list of
+hole wires. The entire face is then extruded in a single operation to form the final
+3D object. This approach significantly reduces modeling time and complexity.
+
+The hexagonal hole pattern is generated using HexLocations, and each location is
+populated with a hexagonal wire. These wires are passed directly to the Face constructor
+as holes. On a typical Linux laptop, this script completes in approximately 1.02 seconds,
+compared to substantially longer runtimes for boolean subtraction of individual holes in 3D.
 
 
 .. _handle:
