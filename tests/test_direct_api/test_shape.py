@@ -29,9 +29,10 @@ license:
 # Always equal to any other object, to test that __eq__ cooperation is working
 import unittest
 from random import uniform
-from unittest.mock import patch, PropertyMock
+from unittest.mock import PropertyMock, patch
 
 import numpy as np
+from anytree import PreOrderIter
 from build123d.build_enums import CenterOf, Keep
 from build123d.geometry import (
     Axis,
@@ -43,7 +44,7 @@ from build123d.geometry import (
     Rotation,
     Vector,
 )
-from build123d.objects_part import Box, Cylinder
+from build123d.objects_part import Box, Cone, Cylinder, Sphere
 from build123d.objects_sketch import Circle
 from build123d.operations_part import extrude
 from build123d.topology import (
@@ -614,6 +615,58 @@ class TestShape(unittest.TestCase):
         self.assertIsNone(Vertex(1, 1, 1).solid())
         self.assertIsNone(Vertex(1, 1, 1).compound())
 
+
+class TestGlobalLocation(unittest.TestCase):
+    def test_global_location_hierarchy(self):
+        # Create a hierarchy: root → child → grandchild
+        root = Box(1, 1, 1)
+        root.location = Location((10, 0, 0))
+
+        child = Box(1, 1, 1)
+        child.location = Location((0, 20, 0))
+        child.parent = root
+
+        grandchild = Box(1, 1, 1)
+        grandchild.location = Location((0, 0, 30))
+        grandchild.parent = child
+
+        # Compute expected global location manually
+        expected_location = root.location * child.location * grandchild.location
+
+        self.assertAlmostEqual(
+            grandchild.global_location.position, expected_location.position
+        )
+        self.assertAlmostEqual(
+            grandchild.global_location.orientation, expected_location.orientation
+        )
+
+    def test_global_location_in_assembly(self):
+        cone = Cone(2, 1, 3)
+        cone.label = "Cone"
+        box = Box(1, 2, 3)
+        box.label = "Box"
+        sphere = Sphere(1)
+        sphere.label = "Sphere"
+
+        assembly1 = Compound(label="Assembly1", children=[cone])
+        assembly1.move(Location((3, 3, 3), (90, 0, 0)))
+        assembly2 = Compound(label="Assembly2", children=[assembly1, box])
+        assembly2.move(Location((2, 4, 6), (0, 0, 90)))
+        assembly3 = Compound(label="Assembly3", children=[assembly2, sphere])
+        assembly3.move(Location((3, 6, 9)))
+        deep_shape: Shape = next(
+            iter(PreOrderIter(assembly3, filter_=lambda n: n.label in ("Cone")))
+        )
+        print(deep_shape.path)
+        self.assertAlmostEqual(
+            deep_shape.global_location.position, (2, 13, 18), places=6
+        )
+        self.assertAlmostEqual(
+            deep_shape.global_location.orientation, (0, 90, 90), places=6
+        )
+
+
+from ocp_vscode import show
 
 if __name__ == "__main__":
     unittest.main()
