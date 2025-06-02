@@ -116,6 +116,13 @@ class TestShells(unittest.TestCase):
         outer_vol = 3 * 12 * 7
         self.assertAlmostEqual(thick.volume, outer_vol - inner_vol)
 
+    def test_location_at(self):
+        shell = Solid.make_cylinder(1, 2).shell()
+        top_center = shell.location_at((0, 0, 2))
+        self.assertAlmostEqual(top_center.position, (0, 0, 2), 5)
+        self.assertAlmostEqual(top_center.z_axis.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(top_center.x_axis.direction, (1, 0, 0), 5)
+
 
 if __name__ == "__main__":
     unittest.main()

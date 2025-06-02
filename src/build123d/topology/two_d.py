@@ -2309,6 +2309,28 @@ class Shell(Mixin2D, Shape[TopoDS_Shell]):
         BRepGProp.LinearProperties_s(self.wrapped, properties)
         return Vector(properties.CentreOfMass())
 
+    def location_at(
+        self,
+        surface_point: VectorLike,
+        *,
+        x_dir: VectorLike | None = None,
+    ) -> Location:
+        """location_at
+
+        Get the location (origin and orientation) on the surface of the shell.
+
+        Args:
+            surface_point (VectorLike): A 3D point near the surface.
+            x_dir (VectorLike, optional): Direction for the local X axis. If not given,
+                the tangent in the U direction is used.
+
+        Returns:
+            Location: A full 3D placement at the specified point on the shell surface.
+        """
+        # Find the closest Face and get the location from it
+        face = self.faces().sort_by(lambda f: f.distance_to(surface_point))[0]
+        return face.location_at(surface_point, x_dir=x_dir)
+
 
 def sort_wires_by_build_order(wire_list: list[Wire]) -> list[list[Wire]]:
     """Tries to determine how wires should be combined into faces.
