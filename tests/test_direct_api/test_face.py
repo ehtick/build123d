@@ -458,6 +458,37 @@ class TestFace(unittest.TestCase):
         face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
         self.assertAlmostEqual(face.normal_at(0, 1), (1, 0, 0), 5)
 
+    def test_location_at(self):
+        face = Face.make_rect(1, 1)
+
+        # Default center (u=0, v=0)
+        loc = face.location_at(0, 0)
+        self.assertAlmostEqual(loc.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc.z_axis.direction, (0, 0, 1), 5)
+
+        # Using surface_point instead of u,v
+        point = face.position_at(0, 0)
+        loc2 = face.location_at(point)
+        self.assertAlmostEqual(loc2.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc2.z_axis.direction, (0, 0, 1), 5)
+
+        # Bad args
+        with self.assertRaises(ValueError):
+            face.location_at(0)
+        with self.assertRaises(ValueError):
+            face.location_at(center=(0, 0))
+
+        # Curved surface: verify z-direction is outward normal
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc3 = face.location_at(0, 1)
+        self.assertAlmostEqual(loc3.z_axis.direction, (1, 0, 0), 5)
+
+        # Curved surface: verify center
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc4 = face.location_at()
+        self.assertAlmostEqual(loc4.position, (-1, 0, 0), 5)
+        self.assertAlmostEqual(loc4.z_axis.direction, (-1, 0, 0), 5)
+
     def test_without_holes(self):
         # Planar test
         frame = (Rectangle(1, 1) - Rectangle(0.5, 0.5)).face()

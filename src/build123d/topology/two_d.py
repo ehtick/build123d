@@ -325,6 +325,9 @@ class Mixin2D(Shape):
                 world_point, world_point - target_object_center
             )
 
+        if self.wrapped is None:
+            raise ValueError("Can't wrap around an empty face")
+
         # Initial setup
         target_object_center = self.center(CenterOf.BOUNDING_BOX)
 
@@ -383,7 +386,7 @@ class Mixin2D(Shape):
             raise RuntimeError(
                 f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
             )
-        if not wrapped_edge.is_valid:
+        if wrapped_edge.wrapped is None or not wrapped_edge.is_valid:
             raise RuntimeError("Wrapped edge is invalid")
 
         if not snap_to_face:
@@ -529,10 +532,12 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             return None
 
         if self.geom_type == GeomType.CYLINDER:
-            return Axis(self.geom_adaptor().Cylinder().Axis())
+            return Axis(
+                self.geom_adaptor().Cylinder().Axis()  # type:ignore[attr-defined]
+            )
 
         if self.geom_type == GeomType.TORUS:
-            return Axis(self.geom_adaptor().Torus().Axis())
+            return Axis(self.geom_adaptor().Torus().Axis())  # type:ignore[attr-defined]
 
         return None
 
@@ -790,8 +795,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         """Return the major and minor radii of a torus otherwise None"""
         if self.geom_type == GeomType.TORUS:
             return (
-                self.geom_adaptor().MajorRadius(),
-                self.geom_adaptor().MinorRadius(),
+                self.geom_adaptor().MajorRadius(),  # type:ignore[attr-defined]
+                self.geom_adaptor().MinorRadius(),  # type:ignore[attr-defined]
             )
 
         return None
@@ -803,7 +808,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             self.geom_type in [GeomType.CYLINDER, GeomType.SPHERE]
             and type(self.geom_adaptor()) != Geom_RectangularTrimmedSurface
         ):
-            return self.geom_adaptor().Radius()
+            return self.geom_adaptor().Radius()  # type:ignore[attr-defined]
         else:
             return None
 
@@ -841,6 +846,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         Returns:
             Face: extruded shape
         """
+        if obj.wrapped is None:
+            raise ValueError("Can't extrude empty object")
         return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
@@ -987,11 +994,13 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             raise ValueError("exterior must be a Wire or list of Edges")
 
         for edge in outside_edges:
+            if edge.wrapped is None:
+                raise ValueError("exterior contains empty edges")
             surface.Add(edge.wrapped, GeomAbs_C0)
 
         try:
             surface.Build()
-            surface_face = Face(surface.Shape())
+            surface_face = Face(surface.Shape())  # type:ignore[call-overload]
         except (
             Standard_Failure,
             StdFail_NotDone,
@@ -1006,7 +1015,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 surface.Add(gp_Pnt(*point))
             try:
                 surface.Build()
-                surface_face = Face(surface.Shape())
+                surface_face = Face(surface.Shape())  # type:ignore[call-overload]
             except StdFail_NotDone as err:
                 raise RuntimeError(
                     "Error building non-planar face with provided surface_points"
@@ -1016,6 +1025,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         if interior_wires:
             makeface_object = BRepBuilderAPI_MakeFace(surface_face.wrapped)
             for wire in interior_wires:
+                if wire.wrapped is None:
+                    raise ValueError("interior_wires contain an empty wire")
                 makeface_object.Add(wire.wrapped)
             try:
                 surface_face = Face(makeface_object.Face())
@@ -1167,7 +1178,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             True,
         )
 
-        return cls(revol_builder.Shape())
+        return cls(revol_builder.Shape())  # type:ignore[call-overload]
 
     @classmethod
     def sew_faces(cls, faces: Iterable[Face]) -> list[ShapeList[Face]]:
@@ -1198,7 +1209,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             elif isinstance(top_level_shape, TopoDS_Solid):
                 sewn_faces.append(
                     ShapeList(
-                        Face(f) for f in _topods_entities(top_level_shape, "Face")
+                        Face(f)  # type:ignore[call-overload]
+                        for f in _topods_entities(top_level_shape, "Face")
                     )
                 )
             else:
@@ -1245,7 +1257,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         builder.Add(profile.wrapped, False, False)
         builder.SetTransitionMode(Shape._transModeDict[transition])
         builder.Build()
-        result = Face(builder.Shape())
+        result = Face(builder.Shape())  # type:ignore[call-overload]
         if SkipClean.clean:
             result = result.clean()
 
@@ -1403,16 +1415,105 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         # projector = GeomAPI_ProjectPointOnSurf(Vector(point).to_pnt(), surface)
         # return projector.LowerDistance() <= TOLERANCE
 
+    @overload
     def location_at(
-        self, u: float, v: float, x_dir: VectorLike | None = None
-    ) -> Location:
-        """Location at the u/v position of face"""
-        origin = self.position_at(u, v)
-        if x_dir is None:
-            pln = Plane(origin, z_dir=self.normal_at(u, v))
+        self,
+        surface_point: VectorLike | None = None,
+        *,
+        x_dir: VectorLike | None = None,
+    ) -> Location: ...
+
+    @overload
+    def location_at(
+        self, u: float, v: float, *, x_dir: VectorLike | None = None
+    ) -> Location: ...
+
+    def location_at(self, *args, **kwargs) -> Location:
+        """location_at
+
+        Get the location (origin and orientation) on the surface of the face.
+
+        This method supports two overloads:
+
+        1. `location_at(u: float, v: float, *, x_dir: VectorLike | None = None) -> Location`
+        - Specifies the point in normalized UV parameter space of the face.
+        - `u` and `v` are floats between 0.0 and 1.0.
+        - Optionally override the local X direction using `x_dir`.
+
+        2. `location_at(surface_point: VectorLike, *, x_dir: VectorLike | None = None) -> Location`
+        - Projects the given 3D point onto the face surface.
+        - The point must be reasonably close to the face.
+        - Optionally override the local X direction using `x_dir`.
+
+        If no arguments are provided, the location at the center of the face
+        (u=0.5, v=0.5) is returned.
+
+        Args:
+            u (float): Normalized horizontal surface parameter (optional).
+            v (float): Normalized vertical surface parameter (optional).
+            surface_point (VectorLike): A 3D point near the surface (optional).
+            x_dir (VectorLike, optional): Direction for the local X axis. If not given,
+                the tangent in the U direction is used.
+
+        Returns:
+            Location: A full 3D placement at the specified point on the face surface.
+
+        Raises:
+            ValueError: If only one of `u` or `v` is provided or invalid keyword args are passed.
+        """
+        surface_point, u, v = None, -1.0, -1.0
+
+        if args:
+            if isinstance(args[0], (Vector, Sequence)):
+                surface_point = args[0]
+            elif isinstance(args[0], (int, float)):
+                u = args[0]
+            if len(args) == 2 and isinstance(args[1], (int, float)):
+                v = args[1]
+
+        unknown_args = set(kwargs.keys()).difference(
+            {"surface_point", "u", "v", "x_dir"}
+        )
+        if unknown_args:
+            raise ValueError(f"Unexpected argument(s) {', '.join(unknown_args)}")
+
+        surface_point = kwargs.get("surface_point", surface_point)
+        u = kwargs.get("u", u)
+        v = kwargs.get("v", v)
+        user_x_dir = kwargs.get("x_dir", None)
+
+        if surface_point is None and u < 0 and v < 0:
+            u, v = 0.5, 0.5
+        elif surface_point is None and (u < 0 or v < 0):
+            raise ValueError("Both u & v values must be specified")
+
+        geom_surface: Geom_Surface = self.geom_adaptor()
+        u_min, u_max, v_min, v_max = self._uv_bounds()
+
+        if surface_point is None:
+            u_val = u_min + u * (u_max - u_min)
+            v_val = v_min + v * (v_max - v_min)
         else:
-            pln = Plane(origin, x_dir=Vector(x_dir), z_dir=self.normal_at(u, v))
-        return Location(pln)
+            projector = GeomAPI_ProjectPointOnSurf(
+                Vector(surface_point).to_pnt(), geom_surface
+            )
+            u_val, v_val = projector.LowerDistanceParameters()
+
+        # Evaluate point and partials
+        pnt = gp_Pnt()
+        du = gp_Vec()
+        dv = gp_Vec()
+        geom_surface.D1(u_val, v_val, pnt, du, dv)
+
+        origin = Vector(pnt)
+        z_dir = Vector(du).cross(Vector(dv)).normalized()
+        x_dir = (
+            Vector(user_x_dir).normalized()
+            if user_x_dir is not None
+            else Vector(du).normalized()
+        )
+
+        return Location(Plane(origin=origin, x_dir=x_dir, z_dir=z_dir))
 
     def make_holes(self, interior_wires: list[Wire]) -> Face:
         """Make Holes in Face
@@ -1609,7 +1710,9 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 (extruded_topods_self,), (target_object.wrapped,), BRepAlgoAPI_Common()
             )
             if not topods_shape.IsNull():
-                intersected_shapes.append(Face(topods_shape))
+                intersected_shapes.append(
+                    Face(topods_shape)  # type:ignore[call-overload]
+                )
         else:
             for target_shell in target_object.shells():
                 topods_shape = _topods_bool_op(
