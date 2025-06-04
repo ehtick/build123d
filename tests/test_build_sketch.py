@@ -328,24 +328,39 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
 
     def test_slot_center_to_center(self):
+        height = 2
         with BuildSketch() as test:
-            s = SlotCenterToCenter(4, 2)
+            s = SlotCenterToCenter(4, height)
         self.assertEqual(s.center_separation, 4)
-        self.assertEqual(s.slot_height, 2)
+        self.assertEqual(s.slot_height, height)
         self.assertEqual(s.rotation, 0)
         self.assertEqual(s.mode, Mode.ADD)
-        self.assertAlmostEqual(test.sketch.area, pi + 4 * 2, 5)
+        self.assertAlmostEqual(test.sketch.area, pi + 4 * height, 5)
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
 
+        # Circle degenerate
+        s1 = SlotCenterToCenter(0, height)
+        self.assertTrue(len(s1.edges()) == 1)
+        self.assertEqual(s1.edge().geom_type, GeomType.CIRCLE)
+        self.assertAlmostEqual(s1.edge().radius, height / 2)
+
+
     def test_slot_overall(self):
+        height = 2
         with BuildSketch() as test:
-            s = SlotOverall(6, 2)
+            s = SlotOverall(6, height)
         self.assertEqual(s.width, 6)
-        self.assertEqual(s.slot_height, 2)
+        self.assertEqual(s.slot_height, height)
         self.assertEqual(s.rotation, 0)
         self.assertEqual(s.mode, Mode.ADD)
-        self.assertAlmostEqual(test.sketch.area, pi + 4 * 2, 5)
+        self.assertAlmostEqual(test.sketch.area, pi + 4 * height, 5)
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
+
+        # Circle degenerat
+        s1 = SlotOverall(2, height)
+        self.assertTrue(len(s1.edges()) == 1)
+        self.assertEqual(s1.edge().geom_type, GeomType.CIRCLE)
+        self.assertAlmostEqual(s1.edge().radius, height / 2)
 
     def test_text(self):
         with BuildSketch() as test:
@@ -530,9 +545,9 @@ class TestBuildSketchObjects(unittest.TestCase):
 @pytest.mark.parametrize(
     "slot,args",
     [
-        (SlotOverall, (5, 10)),
+        (SlotOverall, (9, 10)),
         (SlotCenterToCenter, (-1, 10)),
-        (SlotCenterPoint, ((0, 0, 0), (2, 0, 0), 10)),
+        (SlotCenterPoint, ((0, 0, 0), (0, 0, 0), 10)),
     ],
 )
 def test_invalid_slots(slot, args):
