@@ -800,7 +800,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             [shape.__class__.cast(i) for i in shape.entities(entity_type)]
         )
         for item in shape_list:
-            item.topo_parent = shape
+            item.topo_parent = shape if shape.topo_parent is None else shape.topo_parent
         return shape_list
 
     @staticmethod

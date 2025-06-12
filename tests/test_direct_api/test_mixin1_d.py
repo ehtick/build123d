@@ -40,7 +40,7 @@ from build123d.build_enums import (
 from build123d.geometry import Axis, Location, Plane, Vector
 from build123d.objects_curve import Polyline
 from build123d.objects_part import Box, Cylinder
-from build123d.topology import Compound, Edge, Face, Wire
+from build123d.topology import Compound, Edge, Face, Solid, Wire
 
 
 class TestMixin1D(unittest.TestCase):
@@ -359,6 +359,13 @@ class TestMixin1D(unittest.TestCase):
     def test_wire_volume(self):
         wire = Wire.make_rect(1, 1)
         self.assertAlmostEqual(wire.volume, 0, 5)
+
+    def test_edges(self):
+        box = Solid.make_box(1, 1, 1)
+        top_x = box.faces().sort_by(Axis.Z)[-1].edges().sort_by(Axis.X)[-1]
+        self.assertEqual(top_x.topo_parent, box)
+        self.assertTrue(isinstance(top_x, Edge))
+        self.assertAlmostEqual(top_x.center(), (1, 0.5, 1), 5)
 
 
 if __name__ == "__main__":

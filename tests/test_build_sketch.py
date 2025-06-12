@@ -344,7 +344,6 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(s1.edge().geom_type, GeomType.CIRCLE)
         self.assertAlmostEqual(s1.edge().radius, height / 2)
 
-
     def test_slot_overall(self):
         height = 2
         with BuildSketch() as test:
@@ -537,7 +536,7 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertLess(tri_round.area, tri.area)
 
         # Test flipping the face
-        flipped = -Rectangle(34, 10).face()
+        flipped = -Face.make_rect(34, 10)
         rounded = full_round((flipped.edges() << Axis.X)[0]).face()
         self.assertEqual(flipped.normal_at(), rounded.normal_at())
 
