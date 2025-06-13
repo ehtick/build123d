@@ -169,6 +169,13 @@ class TestFace(unittest.TestCase):
         flipped_square = -square
         self.assertAlmostEqual(flipped_square.normal_at(), (0, 0, -1), 5)
 
+        # Ensure the topo_parent is cleared when a face is negated
+        # (otherwise the original Rectangle would be the topo_parent)
+        flipped = -Rectangle(34, 10).face()
+        left_edge = flipped.edges().sort_by(Axis.X)[0]
+        parent_face = left_edge.topo_parent
+        self.assertAlmostEqual(flipped.normal_at(), parent_face.normal_at(), 5)
+
     def test_offset(self):
         bbox = Face.make_rect(2, 2, Plane.XY).offset(5).bounding_box()
         self.assertAlmostEqual(bbox.min, (-1, -1, 5), 5)

@@ -200,6 +200,9 @@ class Mixin2D(ABC, Shape):
         new_surface = copy.deepcopy(self)
         new_surface.wrapped = downcast(self.wrapped.Complemented())
 
+        # As the surface has been modified, the parent is no longer valid
+        new_surface.topo_parent = None
+
         return new_surface
 
     def face(self) -> Face | None:
