@@ -206,7 +206,7 @@ class Polygon(BaseSketchObject):
         self.pts = flattened_pts
         self.align = tuplify(align, 2)
 
-        poly_pts = [Vector(p) for p in pts]
+        poly_pts = [Vector(p) for p in self.pts]
         face = Face(Wire.make_polygon(poly_pts))
         super().__init__(face, rotation, self.align, mode)
 

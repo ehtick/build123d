@@ -222,6 +222,11 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertAlmostEqual(test.sketch.area, 0.5, 5)
         self.assertEqual(p.faces()[0].normal_at(), Vector(0, 0, 1))
 
+        # test iterable input
+        points_nervure = [(0.0, 0.0), (10.0, 0.0), (0.0, 5.0)]
+        riri = Polygon(points_nervure, align=Align.NONE)
+        self.assertEqual(len(riri.vertices()), 3)
+
     def test_rectangle(self):
         with BuildSketch() as test:
             r = Rectangle(20, 10)
