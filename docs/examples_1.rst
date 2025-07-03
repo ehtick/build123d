@@ -549,7 +549,7 @@ Stud Wall
 .. image:: assets/examples/stud_wall.png
     :align: center
 
-This example demonstrates creatings custom `Part` objects and putting them into
+This example demonstrates creating custom `Part` objects and putting them into
 assemblies. The custom object is a `Stud` used in the building industry while
 the assembly is a `StudWall` created from copies of `Stud` objects for efficiency.
 Both the `Stud` and `StudWall` objects use `RigidJoints` to define snap points which
@@ -603,7 +603,7 @@ Toy Truck
 ---------
 .. image:: assets/examples/toy_truck.png
     :align: center
-    
+
 .. image:: assets/examples/toy_truck_picture.jpg
     :align: center
 
@@ -613,11 +613,11 @@ Toy Truck
         :start-after: [Code]
         :end-before: [End]
 
-This example demonstrates how to design a toy truck using BuildPart and 
-BuildSketch in Builder mode. The model includes a detailed body, cab, grill, 
-and bumper, showcasing techniques like sketch reuse, symmetry, tapered 
-extrusions, selective filleting, and the use of joints for part assembly. 
-Ideal for learning complex part construction and hierarchical modeling in 
+This example demonstrates how to design a toy truck using BuildPart and
+BuildSketch in Builder mode. The model includes a detailed body, cab, grill,
+and bumper, showcasing techniques like sketch reuse, symmetry, tapered
+extrusions, selective filleting, and the use of joints for part assembly.
+Ideal for learning complex part construction and hierarchical modeling in
 build123d.
 
 .. _vase:
