@@ -20,7 +20,20 @@ desc:
         python deglob.py my_build123d_script.py
         python deglob.py -h
 
-    After parsing my_build123d_script.py, the script prints a line such as:
+    Usage:
+        deglob.py [-h] [--write] [--verbose] build123d_file
+        Find all the build123d symbols in module.
+
+        positional arguments:
+        build123d_file  Path to the build123d file
+
+        options:
+        -h, --help      show this help message and exit
+        --write         Overwrite glob import in input file, defaults to read-only and
+                        printed to stdout
+        --verbose       Increase verbosity when write is enabled, defaults to silent
+
+    After parsing my_build123d_script.py, the script optionally prints a line such as:
         from build123d import Workplane, Solid
 
     Which you can then paste back into the file to replace the glob import.
@@ -77,6 +90,11 @@ def parse_args():
     parser.add_argument(
         "--write",
         help="Overwrite glob import in input file, defaults to read-only and printed to stdout",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--verbose",
+        help="Increase verbosity when write is enabled, defaults to silent",
         action="store_true",
     )
 
@@ -147,7 +165,8 @@ def main():
         4. Collect all referenced symbol names from the file's abstract syntax tree.
         5. Intersect these names with those found in build123d.__all__ to identify
            which build123d symbols are actually used.
-        6. Print an import statement that explicitly imports only the used symbols.
+        6A. Optionally print an import statement that explicitly imports only the used symbols.
+        6B. Or optionally write the glob import replacement back to file
 
     Behavior:
         - If no 'from build123d import *' import is found, the script prints
@@ -191,17 +210,22 @@ def main():
     import_line = f"from build123d import {', '.join(actual_imports)}"
 
     if args.write:
-        # Replace only the first instance, warn if more are found
+        # Replace only the first instance
         updated_code = re.sub(r"from build123d import\s*\*", import_line, code, count=1)
 
-        # Write code back to target file
-        with open(args.build123d_file, "w", encoding="utf-8") as f:
-            f.write(updated_code)
+        # Try to write code back to target file
+        try:
+            with open(args.build123d_file, "w", encoding="utf-8") as f:
+                f.write(updated_code)
+        except (PermissionError, OSError) as e:
+            print(f"Error: Unable to write to file '{args.build123d_file}'. {e}")
+            sys.exit(1)
 
-        if glob_count:
+        if glob_count and args.verbose:
             print(f"Replaced build123d glob import with '{import_line}'")
 
         if glob_count > 1:
+            # NOTE: always prints warning if more than one glob import is found
             print(
                 "Warning: more than one instance of glob import was detected "
                 f"(count: {glob_count}), only the first instance was replaced"
