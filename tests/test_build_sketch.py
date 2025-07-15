@@ -92,9 +92,7 @@ class TestBuildSketch(unittest.TestCase):
             with BuildLine():
                 l1 = Line((0, 0), (10, 0))
                 Line(l1 @ 1, (10, 10))
-            self.assertTupleAlmostEquals(
-                (test.consolidate_edges() @ 1).to_tuple(), (10, 10, 0), 5
-            )
+            self.assertTupleAlmostEquals(test.consolidate_edges() @ 1, (10, 10, 0), 5)
 
     def test_mode_intersect(self):
         with BuildSketch() as test:
@@ -224,6 +222,11 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertAlmostEqual(test.sketch.area, 0.5, 5)
         self.assertEqual(p.faces()[0].normal_at(), Vector(0, 0, 1))
 
+        # test iterable input
+        points_nervure = [(0.0, 0.0), (10.0, 0.0), (0.0, 5.0)]
+        riri = Polygon(points_nervure, align=Align.NONE)
+        self.assertEqual(len(riri.vertices()), 3)
+
     def test_rectangle(self):
         with BuildSketch() as test:
             r = Rectangle(20, 10)
@@ -263,9 +266,7 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(r.align, (Align.CENTER, Align.CENTER))
         self.assertEqual(r.mode, Mode.ADD)
         self.assertAlmostEqual(test.sketch.area, (3 * sqrt(3) / 2) * 2**2, 5)
-        self.assertTupleAlmostEquals(
-            test.sketch.faces()[0].normal_at().to_tuple(), (0, 0, 1), 5
-        )
+        self.assertTupleAlmostEquals(test.sketch.faces()[0].normal_at(), (0, 0, 1), 5)
         self.assertAlmostEqual(r.apothem, 2 * sqrt(3) / 2)
 
     def test_regular_polygon_minor_radius(self):
@@ -277,9 +278,7 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(r.align, (Align.CENTER, Align.CENTER))
         self.assertEqual(r.mode, Mode.ADD)
         self.assertAlmostEqual(test.sketch.area, (3 * sqrt(3) / 4) * (0.5 * 2) ** 2, 5)
-        self.assertTupleAlmostEquals(
-            test.sketch.faces()[0].normal_at().to_tuple(), (0, 0, 1), 5
-        )
+        self.assertTupleAlmostEquals(test.sketch.faces()[0].normal_at(), (0, 0, 1), 5)
 
     def test_regular_polygon_align(self):
         with BuildSketch() as align:
@@ -303,7 +302,7 @@ class TestBuildSketchObjects(unittest.TestCase):
                 poly_pts = [Vector(v) for v in regular_poly.vertices()]
                 polar_pts = [p.position for p in PolarLocations(1, side_count)]
             for poly_pt, polar_pt in zip(poly_pts, polar_pts):
-                self.assertTupleAlmostEquals(poly_pt.to_tuple(), polar_pt.to_tuple(), 5)
+                self.assertTupleAlmostEquals(poly_pt, polar_pt, 5)
 
     def test_regular_polygon_min_sides(self):
         with self.assertRaises(ValueError):
@@ -325,8 +324,8 @@ class TestBuildSketchObjects(unittest.TestCase):
     def test_slot_center_point(self):
         with BuildSketch() as test:
             s = SlotCenterPoint((0, 0), (2, 0), 2)
-        self.assertTupleAlmostEquals(s.slot_center.to_tuple(), (0, 0, 0), 5)
-        self.assertTupleAlmostEquals(s.point.to_tuple(), (2, 0, 0), 5)
+        self.assertTupleAlmostEquals(s.slot_center, (0, 0, 0), 5)
+        self.assertTupleAlmostEquals(s.point, (2, 0, 0), 5)
         self.assertEqual(s.slot_height, 2)
         self.assertEqual(s.rotation, 0)
         self.assertEqual(s.mode, Mode.ADD)
@@ -334,24 +333,38 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
 
     def test_slot_center_to_center(self):
+        height = 2
         with BuildSketch() as test:
-            s = SlotCenterToCenter(4, 2)
+            s = SlotCenterToCenter(4, height)
         self.assertEqual(s.center_separation, 4)
-        self.assertEqual(s.slot_height, 2)
+        self.assertEqual(s.slot_height, height)
         self.assertEqual(s.rotation, 0)
         self.assertEqual(s.mode, Mode.ADD)
-        self.assertAlmostEqual(test.sketch.area, pi + 4 * 2, 5)
+        self.assertAlmostEqual(test.sketch.area, pi + 4 * height, 5)
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
 
+        # Circle degenerate
+        s1 = SlotCenterToCenter(0, height)
+        self.assertTrue(len(s1.edges()) == 1)
+        self.assertEqual(s1.edge().geom_type, GeomType.CIRCLE)
+        self.assertAlmostEqual(s1.edge().radius, height / 2)
+
     def test_slot_overall(self):
+        height = 2
         with BuildSketch() as test:
-            s = SlotOverall(6, 2)
+            s = SlotOverall(6, height)
         self.assertEqual(s.width, 6)
-        self.assertEqual(s.slot_height, 2)
+        self.assertEqual(s.slot_height, height)
         self.assertEqual(s.rotation, 0)
         self.assertEqual(s.mode, Mode.ADD)
-        self.assertAlmostEqual(test.sketch.area, pi + 4 * 2, 5)
+        self.assertAlmostEqual(test.sketch.area, pi + 4 * height, 5)
         self.assertEqual(s.faces()[0].normal_at(), Vector(0, 0, 1))
+
+        # Circle degenerat
+        s1 = SlotOverall(2, height)
+        self.assertTrue(len(s1.edges()) == 1)
+        self.assertEqual(s1.edge().geom_type, GeomType.CIRCLE)
+        self.assertAlmostEqual(s1.edge().radius, height / 2)
 
     def test_text(self):
         with BuildSketch() as test:
@@ -419,6 +432,9 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertTupleAlmostEquals(tri.vertex_A, (3, 4, 0), 5)
         self.assertTupleAlmostEquals(tri.vertex_B, (0, 0, 0), 5)
         self.assertTupleAlmostEquals(tri.vertex_C, (3, 0, 0), 5)
+        self.assertEqual(tri.vertex_A.topo_parent, tri)
+        self.assertEqual(tri.vertex_B.topo_parent, tri)
+        self.assertEqual(tri.vertex_C.topo_parent, tri)
 
         tri = Triangle(c=5, C=90, a=3)
         self.assertAlmostEqual(tri.area, (3 * 4) / 2, 5)
@@ -525,7 +541,7 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertLess(tri_round.area, tri.area)
 
         # Test flipping the face
-        flipped = -Rectangle(34, 10).face()
+        flipped = -Face.make_rect(34, 10)
         rounded = full_round((flipped.edges() << Axis.X)[0]).face()
         self.assertEqual(flipped.normal_at(), rounded.normal_at())
 
@@ -533,9 +549,9 @@ class TestBuildSketchObjects(unittest.TestCase):
 @pytest.mark.parametrize(
     "slot,args",
     [
-        (SlotOverall, (5, 10)),
+        (SlotOverall, (9, 10)),
         (SlotCenterToCenter, (-1, 10)),
-        (SlotCenterPoint, ((0, 0, 0), (2, 0, 0), 10)),
+        (SlotCenterPoint, ((0, 0, 0), (0, 0, 0), 10)),
     ],
 )
 def test_invalid_slots(slot, args):

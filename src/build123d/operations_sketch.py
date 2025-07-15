@@ -32,13 +32,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from scipy.spatial import Voronoi
 from typing import cast
-from build123d.build_enums import Mode, SortBy
+from build123d.build_enums import Mode, SortBy, Transition
 from build123d.topology import (
     Compound,
     Curve,
     Edge,
     Face,
     ShapeList,
+    Shell,
     Wire,
     Sketch,
     topo_explore_connected_edges,
@@ -298,10 +299,15 @@ def trace(
     else:
         raise ValueError("No objects to trace")
 
+    # Group the edges into wires to allow for nice transitions
+    trace_wires = Wire.combine(trace_edges)
+
     new_faces: list[Face] = []
-    for edge in trace_edges:
-        trace_pen = edge.perpendicular_line(line_width, 0)
-        new_faces.extend(Face.sweep(trace_pen, edge).faces())
+    for to_trace in trace_wires:
+        trace_pen = to_trace.perpendicular_line(line_width, 0)
+        new_faces.extend(
+            Shell.sweep(trace_pen, to_trace, transition=Transition.RIGHT).faces()
+        )
     if context is not None:
         context._add_to_context(*new_faces, mode=mode)
         context.pending_edges = ShapeList()

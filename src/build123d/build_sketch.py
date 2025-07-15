@@ -36,7 +36,7 @@ from build123d.geometry import Location, Plane
 from build123d.topology import Compound, Edge, Face, ShapeList, Sketch, Wire
 
 
-class BuildSketch(Builder):
+class BuildSketch(Builder[Sketch]):
     """BuildSketch
 
     The BuildSketch class is a subclass of Builder for building planar 2D
@@ -83,7 +83,15 @@ class BuildSketch(Builder):
         """Set the builder's object"""
         self._sketch_local = value
 
-    _obj = sketch_local  # Alias _obj to sketch_local
+    @property
+    def _obj(self) -> Sketch | None:
+        """Alias _obj to sketch"""
+        return self._sketch_local
+
+    @_obj.setter
+    def _obj(self, value: Sketch) -> None:
+        """Set the current sketch"""
+        self._sketch_local = value
 
     @property
     def sketch(self):

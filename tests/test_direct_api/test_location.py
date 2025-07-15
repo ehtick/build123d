@@ -26,7 +26,6 @@ license:
 
 """
 
-# Always equal to any other object, to test that __eq__ cooperation is working
 import copy
 import json
 import math
@@ -34,7 +33,6 @@ import os
 import unittest
 from random import uniform
 
-import numpy as np
 from OCP.gp import (
     gp_Ax1,
     gp_Dir,
@@ -51,6 +49,8 @@ from build123d.topology import Edge, Solid, Vertex
 
 
 class AlwaysEqual:
+    """Always equal to any other object, to test that __eq__ cooperation is working"""
+
     def __eq__(self, other):
         return True
 
@@ -59,7 +59,7 @@ class TestLocation(unittest.TestCase):
     def test_location(self):
         loc0 = Location()
         T = loc0.wrapped.Transformation().TranslationPart()
-        np.testing.assert_allclose((T.X(), T.Y(), T.Z()), (0, 0, 0), 1e-6)
+        self.assertAlmostEqual((T.X(), T.Y(), T.Z()), (0, 0, 0), 5)
         angle = math.degrees(
             loc0.wrapped.Transformation().GetRotation().GetRotationAngle()
         )
@@ -69,19 +69,19 @@ class TestLocation(unittest.TestCase):
         loc0 = Location((0, 0, 1))
 
         T = loc0.wrapped.Transformation().TranslationPart()
-        np.testing.assert_allclose((T.X(), T.Y(), T.Z()), (0, 0, 1), 1e-6)
+        self.assertAlmostEqual((T.X(), T.Y(), T.Z()), (0, 0, 1), 5)
 
         # List
         loc0 = Location([0, 0, 1])
 
         T = loc0.wrapped.Transformation().TranslationPart()
-        np.testing.assert_allclose((T.X(), T.Y(), T.Z()), (0, 0, 1), 1e-6)
+        self.assertAlmostEqual((T.X(), T.Y(), T.Z()), (0, 0, 1), 5)
 
         # Vector
         loc1 = Location(Vector(0, 0, 1))
 
         T = loc1.wrapped.Transformation().TranslationPart()
-        np.testing.assert_allclose((T.X(), T.Y(), T.Z()), (0, 0, 1), 1e-6)
+        self.assertAlmostEqual((T.X(), T.Y(), T.Z()), (0, 0, 1), 5)
 
         # rotation + translation
         loc2 = Location(Vector(0, 0, 1), Vector(0, 0, 1), 45)
@@ -103,13 +103,8 @@ class TestLocation(unittest.TestCase):
 
         # Test creation from the OCP.gp.gp_Trsf object
         loc4 = Location(gp_Trsf())
-        np.testing.assert_allclose(loc4.to_tuple()[0], (0, 0, 0), 1e-7)
-        np.testing.assert_allclose(loc4.to_tuple()[1], (0, 0, 0), 1e-7)
-
-        # Test creation from Plane and Vector
-        loc4 = Location(Plane.XY, (0, 0, 1))
-        np.testing.assert_allclose(loc4.to_tuple()[0], (0, 0, 1), 1e-7)
-        np.testing.assert_allclose(loc4.to_tuple()[1], (0, 0, 0), 1e-7)
+        self.assertAlmostEqual(tuple(loc4)[0], (0, 0, 0), 5)
+        self.assertAlmostEqual(tuple(loc4)[1], (0, 0, 0), 5)
 
         # Test composition
         loc4 = Location((0, 0, 0), Vector(0, 0, 1), 15)
@@ -119,7 +114,7 @@ class TestLocation(unittest.TestCase):
         loc7 = loc4**2
 
         T = loc5.wrapped.Transformation().TranslationPart()
-        np.testing.assert_allclose((T.X(), T.Y(), T.Z()), (0, 0, 1), 1e-6)
+        self.assertAlmostEqual((T.X(), T.Y(), T.Z()), (0, 0, 1), 5)
 
         angle5 = math.degrees(
             loc5.wrapped.Transformation().GetRotation().GetRotationAngle()
@@ -165,21 +160,46 @@ class TestLocation(unittest.TestCase):
         t.SetRotationPart(q)
         loc2 = Location(t)
 
-        np.testing.assert_allclose(loc1.to_tuple()[0], loc2.to_tuple()[0], 1e-6)
-        np.testing.assert_allclose(loc1.to_tuple()[1], loc2.to_tuple()[1], 1e-6)
+        self.assertAlmostEqual(tuple(loc1)[0], tuple(loc2)[0], 5)
+        self.assertAlmostEqual(tuple(loc1)[1], tuple(loc2)[1], 5)
 
         loc1 = Location((1, 2), 34)
-        np.testing.assert_allclose(loc1.to_tuple()[0], (1, 2, 0), 1e-6)
-        np.testing.assert_allclose(loc1.to_tuple()[1], (0, 0, 34), 1e-6)
+        self.assertAlmostEqual(tuple(loc1)[0], (1, 2, 0), 5)
+        self.assertAlmostEqual(tuple(loc1)[1], (0, 0, 34), 5)
 
         rot_angles = (-115.00, 35.00, -135.00)
         loc2 = Location((1, 2, 3), rot_angles)
-        np.testing.assert_allclose(loc2.to_tuple()[0], (1, 2, 3), 1e-6)
-        np.testing.assert_allclose(loc2.to_tuple()[1], rot_angles, 1e-6)
+        self.assertAlmostEqual(tuple(loc2)[0], (1, 2, 3), 5)
+        self.assertAlmostEqual(tuple(loc2)[1], rot_angles, 5)
 
         loc3 = Location(loc2)
-        np.testing.assert_allclose(loc3.to_tuple()[0], (1, 2, 3), 1e-6)
-        np.testing.assert_allclose(loc3.to_tuple()[1], rot_angles, 1e-6)
+        self.assertAlmostEqual(tuple(loc3)[0], (1, 2, 3), 5)
+        self.assertAlmostEqual(tuple(loc3)[1], rot_angles, 5)
+
+    def test_location_kwarg_parameters(self):
+        loc = Location(position=(10, 20, 30))
+        self.assertAlmostEqual(loc.position, (10, 20, 30), 5)
+
+        loc = Location(position=(10, 20, 30), orientation=(10, 20, 30))
+        self.assertAlmostEqual(loc.position, (10, 20, 30), 5)
+        self.assertAlmostEqual(loc.orientation, (10, 20, 30), 5)
+
+        loc = Location(
+            position=(10, 20, 30), orientation=(90, 0, 90), ordering=Extrinsic.XYZ
+        )
+        self.assertAlmostEqual(loc.position, (10, 20, 30), 5)
+        self.assertAlmostEqual(loc.orientation, (0, 90, 90), 5)
+
+        loc = Location((10, 20, 30), orientation=(10, 20, 30))
+        self.assertAlmostEqual(loc.position, (10, 20, 30), 5)
+        self.assertAlmostEqual(loc.orientation, (10, 20, 30), 5)
+
+        loc = Location(plane=Plane.isometric)
+        self.assertAlmostEqual(loc.position, (0, 0, 0), 5)
+        self.assertAlmostEqual(loc.orientation, (45.00, 35.26, 30.00), 2)
+
+        loc = Location(location=Location())
+        self.assertAlmostEqual(loc.position, (0, 0, 0), 5)
 
     def test_location_parameters(self):
         loc = Location((10, 20, 30))
@@ -240,15 +260,16 @@ class TestLocation(unittest.TestCase):
         loc1 = Location((1, 2, 3), (90, 45, 22.5))
         loc2 = copy.copy(loc1)
         loc3 = copy.deepcopy(loc1)
-        self.assertAlmostEqual(loc1.position, loc2.position.to_tuple(), 6)
-        self.assertAlmostEqual(loc1.orientation, loc2.orientation.to_tuple(), 6)
-        self.assertAlmostEqual(loc1.position, loc3.position.to_tuple(), 6)
-        self.assertAlmostEqual(loc1.orientation, loc3.orientation.to_tuple(), 6)
+        self.assertAlmostEqual(loc1.position, loc2.position, 6)
+        self.assertAlmostEqual(loc1.orientation, loc2.orientation, 6)
+        self.assertAlmostEqual(loc1.position, loc3.position, 6)
+        self.assertAlmostEqual(loc1.orientation, loc3.orientation, 6)
 
-    def test_to_axis(self):
-        axis = Location((1, 2, 3), (-90, 0, 0)).to_axis()
-        self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
-        self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
+    # deprecated
+    # def test_to_axis(self):
+    #     axis = Location((1, 2, 3), (-90, 0, 0)).to_axis()
+    #     self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
+    #     self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
 
     def test_equal(self):
         loc = Location((1, 2, 3), (4, 5, 6))

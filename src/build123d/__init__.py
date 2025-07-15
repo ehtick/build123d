@@ -163,6 +163,7 @@ __all__ = [
     "LinearJoint",
     "CylindricalJoint",
     "BallJoint",
+    "DraftAngleError",
     # Exporter classes
     "Export2D",
     "ExportDXF",
@@ -197,6 +198,7 @@ __all__ = [
     "add",
     "bounding_box",
     "chamfer",
+    "draft",
     "extrude",
     "fillet",
     "full_round",

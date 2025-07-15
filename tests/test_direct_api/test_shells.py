@@ -41,12 +41,12 @@ class TestShells(unittest.TestCase):
     def test_shell_init(self):
         box_faces = Solid.make_box(1, 1, 1).faces()
         box_shell = Shell(box_faces)
-        self.assertTrue(box_shell.is_valid())
+        self.assertTrue(box_shell.is_valid)
 
     def test_shell_init_single_face(self):
         face = Solid.make_cone(1, 0, 2).faces().filter_by(GeomType.CONE).first
         shell = Shell(face)
-        self.assertTrue(shell.is_valid())
+        self.assertTrue(shell.is_valid)
 
     def test_center(self):
         box_faces = Solid.make_box(1, 1, 1).faces()
@@ -71,9 +71,9 @@ class TestShells(unittest.TestCase):
         x_section = Rot(90) * Spline((0, -5), (-3, -2), (-2, 0), (-3, 2), (0, 5))
         surface = sweep(x_section, Circle(5).wire())
         single_face = Shell(surface.face())
-        self.assertTrue(single_face.is_valid())
+        self.assertTrue(single_face.is_valid)
         single_face = Shell(surface.faces())
-        self.assertTrue(single_face.is_valid())
+        self.assertTrue(single_face.is_valid)
 
     def test_sweep(self):
         path_c1 = JernArc((0, 0), (-1, 0), 1, 180)
@@ -115,6 +115,13 @@ class TestShells(unittest.TestCase):
         inner_vol = 3 * 10 * 5
         outer_vol = 3 * 12 * 7
         self.assertAlmostEqual(thick.volume, outer_vol - inner_vol)
+
+    def test_location_at(self):
+        shell = Solid.make_cylinder(1, 2).shell()
+        top_center = shell.location_at((0, 0, 2))
+        self.assertAlmostEqual(top_center.position, (0, 0, 2), 5)
+        self.assertAlmostEqual(top_center.z_axis.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(top_center.x_axis.direction, (1, 0, 0), 5)
 
 
 if __name__ == "__main__":

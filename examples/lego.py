@@ -75,7 +75,7 @@ with BuildPart() as lego:
             exporter = ExportSVG(scale=6)
             exporter.add_shape(plan.sketch)
             exporter.write("assets/lego_step6.svg")
-        # Substract a rectangle leaving ribs on the block walls
+        # Subtract a rectangle leaving ribs on the block walls
         Rectangle(
             block_length - 2 * (wall_thickness + ridge_depth),
             block_width - 2 * (wall_thickness + ridge_depth),

@@ -15,6 +15,8 @@ Cheat Sheet
 
         .. grid-item-card:: 1D - BuildLine
 
+            | :class:`~objects_curve.ArcArcTangentArc`
+            | :class:`~objects_curve.ArcArcTangentLine`
             | :class:`~objects_curve.Bezier`
             | :class:`~objects_curve.CenterArc`
             | :class:`~objects_curve.DoubleTangentArc`
@@ -24,6 +26,8 @@ Cheat Sheet
             | :class:`~objects_curve.IntersectingLine`
             | :class:`~objects_curve.JernArc`
             | :class:`~objects_curve.Line`
+            | :class:`~objects_curve.PointArcTangentArc`
+            | :class:`~objects_curve.PointArcTangentLine`
             | :class:`~objects_curve.PolarLine`
             | :class:`~objects_curve.Polyline`
             | :class:`~objects_curve.RadiusArc`
@@ -99,6 +103,7 @@ Cheat Sheet
 
             | :func:`~operations_generic.add`
             | :func:`~operations_generic.chamfer`
+            | :func:`~operations_part.draft`
             | :func:`~operations_part.extrude`
             | :func:`~operations_generic.fillet`
             | :func:`~operations_part.loft`
@@ -228,7 +233,7 @@ Cheat Sheet
     +----------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+
     | :class:`~build_enums.Extrinsic`        | XYZ, XZY, YZX, YXZ, ZXY, ZYX, XYX, XZX, YZY, YXY, ZXZ, ZYZ                                                                              |
     +----------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+
-    | :class:`~build_enums.FontStyle`        | REGULAR, BOLD, BOLDITALIC, ITALIC                                                                                                                   |
+    | :class:`~build_enums.FontStyle`        | REGULAR, BOLD, BOLDITALIC, ITALIC                                                                                                       |
     +----------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+
     | :class:`~build_enums.FrameMethod`      | CORRECTED, FRENET                                                                                                                       |
     +----------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------+

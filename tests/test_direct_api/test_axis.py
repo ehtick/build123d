@@ -33,7 +33,7 @@ import unittest
 import numpy as np
 from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt
 from build123d.geometry import Axis, Location, Plane, Vector
-from build123d.topology import Edge
+from build123d.topology import Edge, Vertex
 
 
 class AlwaysEqual:
@@ -66,9 +66,17 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(test_axis.direction, (0, 0, 1), 5)
 
         with self.assertRaises(ValueError):
+            Axis("one")
+        with self.assertRaises(ValueError):
             Axis("one", "up")
         with self.assertRaises(ValueError):
             Axis(one="up")
+        with self.assertRaises(ValueError):
+            bad_edge = Edge()
+            bad_edge.wrapped = Vertex(0, 1, 2).wrapped
+            Axis(edge=bad_edge)
+        with self.assertRaises(ValueError):
+            Axis(gp_ax1=Edge.make_line((0, 0), (1, 0)))
 
     def test_axis_from_occt(self):
         occt_axis = gp_Ax1(gp_Pnt(1, 1, 1), gp_Dir(0, 1, 0))
@@ -100,11 +108,16 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(y_axis.position, (0, 0, 1), 5)
         self.assertAlmostEqual(y_axis.direction, (0, 1, 0), 5)
 
-    def test_axis_to_plane(self):
-        x_plane = Axis.X.to_plane()
-        self.assertTrue(isinstance(x_plane, Plane))
-        self.assertAlmostEqual(x_plane.origin, (0, 0, 0), 5)
-        self.assertAlmostEqual(x_plane.z_dir, (1, 0, 0), 5)
+    def test_from_location(self):
+        axis = Axis(Location((1, 2, 3), (-90, 0, 0)))
+        self.assertAlmostEqual(axis.position, (1, 2, 3), 6)
+        self.assertAlmostEqual(axis.direction, (0, 1, 0), 6)
+
+    # def test_axis_to_plane(self):
+    #     x_plane = Axis.X.to_plane()
+    #     self.assertTrue(isinstance(x_plane, Plane))
+    #     self.assertAlmostEqual(x_plane.origin, (0, 0, 0), 5)
+    #     self.assertAlmostEqual(x_plane.z_dir, (1, 0, 0), 5)
 
     def test_axis_is_coaxial(self):
         self.assertTrue(Axis.X.is_coaxial(Axis((0, 0, 0), (1, 0, 0))))
@@ -179,7 +192,7 @@ class TestAxis(unittest.TestCase):
         self.assertIsNone(Axis.X.intersect(Axis((0, 1, 1), (0, 0, 1))))
 
         intersection = Axis((1, 2, 3), (0, 0, 1)) & Plane.XY
-        self.assertAlmostEqual(intersection.to_tuple(), (1, 2, 0), 5)
+        self.assertAlmostEqual(intersection, (1, 2, 0), 5)
 
         arc = Edge.make_circle(20, start_angle=0, end_angle=180)
         ax0 = Axis((-20, 30, 0), (4, -3, 0))
@@ -213,10 +226,10 @@ class TestAxis(unittest.TestCase):
 
         # self.assertTrue(len(intersections.vertices(), 2))
         # np.testing.assert_allclose(
-        #     intersection.vertices()[0].to_tuple(), (-1, 0, 5), 5
+        #     intersection.vertices()[0], (-1, 0, 5), 5
         # )
         # np.testing.assert_allclose(
-        #     intersection.vertices()[1].to_tuple(), (1, 0, 5), 5
+        #     intersection.vertices()[1], (1, 0, 5), 5
         # )
 
     def test_axis_equal(self):

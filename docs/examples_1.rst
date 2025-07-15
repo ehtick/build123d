@@ -24,9 +24,19 @@ Most of the examples show the builder and algebra modes.
         :link: examples-benchy
         :link-type: ref
 
+    .. grid-item-card:: Bicycle Tire |Builder|
+        :img-top:  assets/examples/bicycle_tire.png
+        :link: examples-bicycle_tire
+        :link-type: ref
+
     .. grid-item-card:: Canadian Flag Blowing in The Wind |Builder| |Algebra|
             :img-top: assets/examples/example_canadian_flag_01.png
             :link: examples-canadian_flag
+            :link-type: ref
+
+    .. grid-item-card:: Cast Bearing Unit |Builder|
+            :img-top: assets/examples/cast_bearing_unit.png
+            :link: examples-cast_bearing_unit
             :link-type: ref
 
     .. grid-item-card:: Circuit Board With Holes |Builder| |Algebra|
@@ -37,6 +47,11 @@ Most of the examples show the builder and algebra modes.
     .. grid-item-card:: Clock Face |Builder| |Algebra|
             :img-top: assets/examples/clock_face.png
             :link: clock_face
+            :link-type: ref
+
+    .. grid-item-card:: Fast Grid Holes |Algebra|
+            :img-top: assets/examples/fast_grid_holes.png
+            :link: fast_grid_holes
             :link-type: ref
 
     .. grid-item-card:: Handle |Builder| |Algebra|
@@ -154,6 +169,24 @@ modify it by replacing chimney with a BREP version.
 
 .. ----------------------------------------------------------------------------------------------
 
+.. _examples-bicycle_tire:
+
+Bicycle Tire
+--------------------------------
+.. image:: assets/examples/bicycle_tire.png
+    :align: center
+
+This example demonstrates how to model a realistic bicycle tire with a
+patterned tread using build123d. The key concept showcased here is the
+use of wrap_faces to project 2D planar geometry onto a curved 3D
+surface.
+
+.. dropdown:: |Builder| Reference Implementation (Builder Mode)
+
+    .. literalinclude:: ../examples/bicycle_tire.py
+        :start-after: [Code]
+        :end-before: [End]
+
 .. _examples-build123d_logo:
 
 Former build123d Logo
@@ -180,6 +213,23 @@ The builder mode example also generates the SVG file `logo.svg`.
         :start-after: [Code]
         :end-before: [End]
 
+
+.. _examples-cast_bearing_unit:
+
+Cast Bearing Unit
+-----------------
+.. image:: assets/examples/cast_bearing_unit.png
+    :align: center
+
+This example demonstrates the creation of a castable flanged bearing housing
+using the `draft` operation to add appropriate draft angles for mold release.
+
+
+.. dropdown:: |Builder| Reference Implementation (Builder Mode)
+
+    .. literalinclude:: ../examples/cast_bearing_unit.py
+        :start-after: [Code]
+        :end-before: [End]
 
 .. _examples-canadian_flag:
 
@@ -279,6 +329,32 @@ hour labels, and slots at specified positions. The resulting 3D model represents
 a detailed and visually appealing clock design.
 
 :class:`~build_common.PolarLocations` are used to position features on the clock face.
+
+.. _fast_grid_holes:
+
+Fast Grid Holes
+---------------
+.. image:: assets/examples/fast_grid_holes.png
+    :align: center
+
+.. dropdown:: |Algebra| Reference Implementation (Algebra Mode)
+
+    .. literalinclude:: ../examples/fast_grid_holes.py
+        :start-after: [Code]
+        :end-before: [End]
+
+This example demonstrates an efficient approach to creating a large number of holes
+(625 in this case) in a planar part using build123d.
+
+Instead of modeling and subtracting 3D solids for each hole—which is computationally
+expensive—this method constructs a 2D Face from an outer perimeter wire and a list of
+hole wires. The entire face is then extruded in a single operation to form the final
+3D object. This approach significantly reduces modeling time and complexity.
+
+The hexagonal hole pattern is generated using HexLocations, and each location is
+populated with a hexagonal wire. These wires are passed directly to the Face constructor
+as holes. On a typical Linux laptop, this script completes in approximately 1.02 seconds,
+compared to substantially longer runtimes for boolean subtraction of individual holes in 3D.
 
 
 .. _handle:
@@ -473,7 +549,7 @@ Stud Wall
 .. image:: assets/examples/stud_wall.png
     :align: center
 
-This example demonstrates creatings custom `Part` objects and putting them into
+This example demonstrates creating custom `Part` objects and putting them into
 assemblies. The custom object is a `Stud` used in the building industry while
 the assembly is a `StudWall` created from copies of `Stud` objects for efficiency.
 Both the `Stud` and `StudWall` objects use `RigidJoints` to define snap points which
@@ -527,7 +603,7 @@ Toy Truck
 ---------
 .. image:: assets/examples/toy_truck.png
     :align: center
-    
+
 .. image:: assets/examples/toy_truck_picture.jpg
     :align: center
 
@@ -537,11 +613,11 @@ Toy Truck
         :start-after: [Code]
         :end-before: [End]
 
-This example demonstrates how to design a toy truck using BuildPart and 
-BuildSketch in Builder mode. The model includes a detailed body, cab, grill, 
-and bumper, showcasing techniques like sketch reuse, symmetry, tapered 
-extrusions, selective filleting, and the use of joints for part assembly. 
-Ideal for learning complex part construction and hierarchical modeling in 
+This example demonstrates how to design a toy truck using BuildPart and
+BuildSketch in Builder mode. The model includes a detailed body, cab, grill,
+and bumper, showcasing techniques like sketch reuse, symmetry, tapered
+extrusions, selective filleting, and the use of joints for part assembly.
+Ideal for learning complex part construction and hierarchical modeling in
 build123d.
 
 .. _vase:

@@ -29,19 +29,27 @@ license:
 import math
 import unittest
 
+# Mocks for testing failure cases
+from unittest.mock import MagicMock, patch
+
 from build123d.build_enums import GeomType, Kind, Until
-from build123d.geometry import (
-    Axis,
-    BoundBox,
-    Location,
-    OrientedBoundBox,
-    Plane,
-    Pos,
-    Vector,
-)
+from build123d.geometry import Axis, Location, Plane, Pos, Vector
 from build123d.objects_curve import Spline
+from build123d.objects_part import Box, Torus
 from build123d.objects_sketch import Circle, Rectangle
-from build123d.topology import Compound, Edge, Face, Shell, Solid, Vertex, Wire
+from build123d.topology import (
+    Compound,
+    DraftAngleError,
+    Edge,
+    Face,
+    Shell,
+    Solid,
+    Vertex,
+    Wire,
+)
+import build123d
+from OCP.BRepOffsetAPI import BRepOffsetAPI_DraftAngle
+from OCP.StdFail import StdFail_NotDone
 
 
 class TestSolid(unittest.TestCase):
@@ -51,7 +59,7 @@ class TestSolid(unittest.TestCase):
         box = Solid(box_shell)
         self.assertAlmostEqual(box.area, 6, 5)
         self.assertAlmostEqual(box.volume, 1, 5)
-        self.assertTrue(box.is_valid())
+        self.assertTrue(box.is_valid)
 
     def test_extrude(self):
         v = Edge.extrude(Vertex(1, 1, 1), (0, 0, 1))
@@ -252,6 +260,67 @@ class TestSolid(unittest.TestCase):
         self.assertAlmostEqual(rbb.volume, (10**3) * (3**0.5) / 9, 0)
         self.assertTrue(rbb.volume > obb.volume)
         self.assertAlmostEqual(obb2.volume, 40, 4)
+
+
+class TestSolidDraft(unittest.TestCase):
+
+    def setUp(self):
+        # Create a simple box to test draft
+        self.box: Solid = Box(10, 10, 10).solid()
+        self.sides = self.box.faces().filter_by(Axis.Z, reverse=True)
+        self.bottom_face: Face = self.box.faces().sort_by(Axis.Z)[0]
+        self.neutral_plane = Plane(self.bottom_face)
+
+    def test_successful_draft(self):
+        """Test that a draft operation completes successfully on a planar face"""
+        drafted = self.box.draft(self.sides, self.neutral_plane, 5)
+        self.assertIsInstance(drafted, Solid)
+        self.assertNotEqual(drafted.volume, self.box.volume)
+
+    def test_unsupported_geometry(self):
+        """Test that a ValueError is raised on unsupported face geometry"""
+        # Create toroidal face to simulate unsupported geometry
+        torus = Torus(5, 1).solid()
+        with self.assertRaises(ValueError) as cm:
+            torus.draft([torus.faces()[0]], self.neutral_plane, 5)
+        self.assertIn("unsupported geometry type", str(cm.exception))
+
+    @patch("build123d.topology.three_d.BRepOffsetAPI_DraftAngle")
+    def test_adddone_failure_raises_draftangleerror(self, mock_draft_api):
+        """Test that failure of AddDone() raises DraftAngleError"""
+        mock_builder = MagicMock()
+        mock_builder.AddDone.return_value = False
+        mock_builder.ProblematicShape.return_value = "BadShape"
+        mock_draft_api.return_value = mock_builder
+
+        with self.assertRaises(DraftAngleError) as cm:
+            self.box.draft(self.sides, self.neutral_plane, 5)
+        self.assertEqual(cm.exception.face, self.sides[0])
+        self.assertEqual(cm.exception.problematic_shape, "BadShape")
+        self.assertIn("Draft could not be added", str(cm.exception))
+
+    @patch.object(
+        build123d.topology.three_d.BRepOffsetAPI_DraftAngle,
+        "Build",
+        side_effect=StdFail_NotDone,
+    )
+    def test_build_failure_raises_draftangleerror(self, mock_draft_api):
+        """Test that Build() failure raises DraftAngleError"""
+
+        with self.assertRaises(DraftAngleError) as cm:
+            self.box.draft(self.sides, self.neutral_plane, 5)
+        self.assertIsNone(cm.exception.face)
+        self.assertEqual(
+            cm.exception.problematic_shape, cm.exception.problematic_shape
+        )  # Not None
+        self.assertIn("Draft build failed", str(cm.exception))
+
+    def test_draftangleerror_contents(self):
+        """Test that DraftAngleError stores face and problematic shape"""
+        err = DraftAngleError("msg", face="face123", problematic_shape="shape456")
+        self.assertEqual(str(err), "msg")
+        self.assertEqual(err.face, "face123")
+        self.assertEqual(err.problematic_shape, "shape456")
 
 
 if __name__ == "__main__":

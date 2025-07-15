@@ -50,6 +50,7 @@ from build123d.objects_sketch import (
     Polygon,
     Rectangle,
     RegularPolygon,
+    Text,
     Triangle,
 )
 from build123d.operations_generic import fillet, offset
@@ -64,7 +65,7 @@ class TestFace(unittest.TestCase):
         bottom_edge = Edge.make_circle(radius=1, end_angle=90)
         top_edge = Edge.make_circle(radius=1, plane=Plane((0, 0, 1)), end_angle=90)
         curved = Face.make_surface_from_curves(bottom_edge, top_edge)
-        self.assertTrue(curved.is_valid())
+        self.assertTrue(curved.is_valid)
         self.assertAlmostEqual(curved.area, math.pi / 2, 5)
         self.assertAlmostEqual(
             curved.normal_at(), (math.sqrt(2) / 2, math.sqrt(2) / 2, 0), 5
@@ -73,7 +74,7 @@ class TestFace(unittest.TestCase):
         bottom_wire = Wire.make_circle(1)
         top_wire = Wire.make_circle(1, Plane((0, 0, 1)))
         curved = Face.make_surface_from_curves(bottom_wire, top_wire)
-        self.assertTrue(curved.is_valid())
+        self.assertTrue(curved.is_valid)
         self.assertAlmostEqual(curved.area, 2 * math.pi, 5)
 
     def test_center(self):
@@ -168,6 +169,13 @@ class TestFace(unittest.TestCase):
         flipped_square = -square
         self.assertAlmostEqual(flipped_square.normal_at(), (0, 0, -1), 5)
 
+        # Ensure the topo_parent is cleared when a face is negated
+        # (otherwise the original Rectangle would be the topo_parent)
+        flipped = -Rectangle(34, 10).face()
+        left_edge = flipped.edges().sort_by(Axis.X)[0]
+        parent_face = left_edge.topo_parent
+        self.assertAlmostEqual(flipped.normal_at(), parent_face.normal_at(), 5)
+
     def test_offset(self):
         bbox = Face.make_rect(2, 2, Plane.XY).offset(5).bounding_box()
         self.assertAlmostEqual(bbox.min, (-1, -1, 5), 5)
@@ -182,7 +190,7 @@ class TestFace(unittest.TestCase):
         happy = Face(outer, inners)
         self.assertAlmostEqual(happy.area, math.pi * (10**2 - 2), 5)
 
-        outer = Edge.make_circle(10, end_angle=180).to_wire()
+        outer = Wire(Edge.make_circle(10, end_angle=180))
         with self.assertRaises(ValueError):
             Face(outer, inners)
         with self.assertRaises(ValueError):
@@ -191,7 +199,7 @@ class TestFace(unittest.TestCase):
         outer = Wire.make_circle(10)
         inners = [
             Wire.make_circle(1).locate(Location((-2, 2, 0))),
-            Edge.make_circle(1, end_angle=180).to_wire().locate(Location((2, 2, 0))),
+            Wire(Edge.make_circle(1, end_angle=180)).locate(Location((2, 2, 0))),
         ]
         with self.assertRaises(ValueError):
             Face(outer, inners)
@@ -302,7 +310,7 @@ class TestFace(unittest.TestCase):
             for j in range(4 - i % 2)
         ]
         cylinder_walls_with_holes = cylinder_wall.make_holes(projected_wires)
-        self.assertTrue(cylinder_walls_with_holes.is_valid())
+        self.assertTrue(cylinder_walls_with_holes.is_valid)
         self.assertLess(cylinder_walls_with_holes.area, cylinder_wall.area)
 
     def test_is_inside(self):
@@ -376,7 +384,7 @@ class TestFace(unittest.TestCase):
             surface_points=[Vector(0, 0, -5)],
             interior_wires=[hole],
         )
-        self.assertTrue(surface.is_valid())
+        self.assertTrue(surface.is_valid)
         self.assertEqual(surface.geom_type, GeomType.BSPLINE)
         bbox = surface.bounding_box()
         self.assertAlmostEqual(bbox.min, (-50.5, -24.5, -5.113393280136395), 5)
@@ -422,15 +430,15 @@ class TestFace(unittest.TestCase):
         with self.assertRaises(ValueError):
             Face.sweep(edge, Polyline((0, 0), (0.1, 0), (0.2, 0.1)))
 
-    def test_to_arcs(self):
-        with BuildSketch() as bs:
-            with BuildLine() as bl:
-                Polyline((0, 0), (1, 0), (1.5, 0.5), (2, 0), (2, 1), (0, 1), (0, 0))
-                fillet(bl.vertices(), radius=0.1)
-            make_face()
-        smooth = bs.faces()[0]
-        fragmented = smooth.to_arcs()
-        self.assertLess(len(smooth.edges()), len(fragmented.edges()))
+    # def test_to_arcs(self):
+    #     with BuildSketch() as bs:
+    #         with BuildLine() as bl:
+    #             Polyline((0, 0), (1, 0), (1.5, 0.5), (2, 0), (2, 1), (0, 1), (0, 0))
+    #             fillet(bl.vertices(), radius=0.1)
+    #         make_face()
+    #     smooth = bs.faces()[0]
+    #     fragmented = smooth.to_arcs()
+    #     self.assertLess(len(smooth.edges()), len(fragmented.edges()))
 
     def test_outer_wire(self):
         face = (Face.make_rect(1, 1) - Face.make_rect(0.5, 0.5)).face()
@@ -456,6 +464,37 @@ class TestFace(unittest.TestCase):
             face.normal_at(center=(0, 0))
         face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
         self.assertAlmostEqual(face.normal_at(0, 1), (1, 0, 0), 5)
+
+    def test_location_at(self):
+        face = Face.make_rect(1, 1)
+
+        # Default center (u=0, v=0)
+        loc = face.location_at(0, 0)
+        self.assertAlmostEqual(loc.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc.z_axis.direction, (0, 0, 1), 5)
+
+        # Using surface_point instead of u,v
+        point = face.position_at(0, 0)
+        loc2 = face.location_at(point)
+        self.assertAlmostEqual(loc2.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc2.z_axis.direction, (0, 0, 1), 5)
+
+        # Bad args
+        with self.assertRaises(ValueError):
+            face.location_at(0)
+        with self.assertRaises(ValueError):
+            face.location_at(center=(0, 0))
+
+        # Curved surface: verify z-direction is outward normal
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc3 = face.location_at(0, 1)
+        self.assertAlmostEqual(loc3.z_axis.direction, (1, 0, 0), 5)
+
+        # Curved surface: verify center
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc4 = face.location_at()
+        self.assertAlmostEqual(loc4.position, (-1, 0, 0), 5)
+        self.assertAlmostEqual(loc4.z_axis.direction, (-1, 0, 0), 5)
 
     def test_without_holes(self):
         # Planar test
@@ -876,7 +915,7 @@ class TestFace(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             surface.wrap(star.outer_wire(), target)
 
-    @patch.object(Wire, "is_valid", return_value=False)
+    @patch.object(Wire, "is_valid", new_callable=PropertyMock, return_value=False)
     def test_wrap_invalid_wire(self, mock_is_valid):
         surface = Cone(5, 2, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
         target = surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))
@@ -887,6 +926,22 @@ class TestFace(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             surface.wrap(star, target)
+
+    def test_wrap_faces(self):
+        sphere = Solid.make_sphere(50, angle1=-90).face()
+        surface = sphere.face()
+        path: Edge = (
+            sphere.cut(
+                Solid.make_cylinder(80, 100, Plane.YZ).locate(Location((-50, 0, -70)))
+            )
+            .edges()
+            .sort_by(Axis.Z)[0]
+            .reversed()
+        )
+        text = Text(txt="ei", font_size=15, align=(Align.MIN, Align.CENTER))
+        wrapped_faces = surface.wrap_faces(text.faces(), path, 0.2)
+        self.assertEqual(len(wrapped_faces), 3)
+        self.assertTrue(all(not f.is_planar_face for f in wrapped_faces))
 
     def test_revolve(self):
         l1 = Edge.make_line((3, 0), (3, 2))

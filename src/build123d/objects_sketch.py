@@ -53,6 +53,7 @@ from build123d.topology import (
     Face,
     ShapeList,
     Sketch,
+    Vertex,
     Wire,
     tuplify,
     topo_explore_common_vertex,
@@ -205,7 +206,7 @@ class Polygon(BaseSketchObject):
         self.pts = flattened_pts
         self.align = tuplify(align, 2)
 
-        poly_pts = [Vector(p) for p in pts]
+        poly_pts = [Vector(p) for p in self.pts]
         face = Face(Wire.make_polygon(poly_pts))
         super().__init__(face, rotation, self.align, mode)
 
@@ -386,7 +387,7 @@ class SlotArc(BaseSketchObject):
         self.slot_height = height
 
         arc = arc if isinstance(arc, Wire) else Wire([arc])
-        face = Face(arc.offset_2d(height / 2)).rotate(Axis.Z, rotation)
+        face = Face(arc.offset_2d(height / 2))
         super().__init__(face, rotation, None, mode)
 
 
@@ -425,10 +426,10 @@ class SlotCenterPoint(BaseSketchObject):
 
         half_line = point_v - center_v
 
-        if half_line.length * 2 <= height:
+        if half_line.length <= 0:
             raise ValueError(
-                f"Slots must have width > height. "
-                "Got: {height=} width={half_line.length * 2} (computed)"
+                "Distance between center and point must be greater than 0 "
+                f"Got: distance = {half_line.length} (computed)"
             )
 
         face = Face(
@@ -463,7 +464,7 @@ class SlotCenterToCenter(BaseSketchObject):
         rotation: float = 0,
         mode: Mode = Mode.ADD,
     ):
-        if center_separation <= 0:
+        if center_separation < 0:
             raise ValueError(
                 f"Requires center_separation > 0. Got: {center_separation=}"
             )
@@ -474,14 +475,18 @@ class SlotCenterToCenter(BaseSketchObject):
         self.center_separation = center_separation
         self.slot_height = height
 
-        face = Face(
-            Wire(
-                [
-                    Edge.make_line(Vector(-center_separation / 2, 0, 0), Vector()),
-                    Edge.make_line(Vector(), Vector(+center_separation / 2, 0, 0)),
-                ]
-            ).offset_2d(height / 2)
-        )
+        if center_separation > 0:
+            face = Face(
+                Wire(
+                    [
+                        Edge.make_line(Vector(-center_separation / 2, 0, 0), Vector()),
+                        Edge.make_line(Vector(), Vector(+center_separation / 2, 0, 0)),
+                    ]
+                ).offset_2d(height / 2)
+            )
+        else:
+            face = cast(Face, Circle(height / 2, mode=mode).face())
+
         super().__init__(face, rotation, None, mode)
 
 
@@ -509,7 +514,7 @@ class SlotOverall(BaseSketchObject):
         align: Align | tuple[Align, Align] | None = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
-        if width <= height:
+        if width < height:
             raise ValueError(
                 f"Slot requires that width > height. Got: {width=}, {height=}"
             )
@@ -520,7 +525,7 @@ class SlotOverall(BaseSketchObject):
         self.width = width
         self.slot_height = height
 
-        if width != height:
+        if width > height:
             face = Face(
                 Wire(
                     [
@@ -531,6 +536,7 @@ class SlotOverall(BaseSketchObject):
             )
         else:
             face = cast(Face, Circle(width / 2, mode=mode).face())
+
         super().__init__(face, rotation, align, mode)
 
 
@@ -544,16 +550,16 @@ class Text(BaseSketchObject):
     "Arial Black". Alternatively, a specific font file can be specified with font_path.
 
     Note: Windows 10+ users must "Install for all users" for fonts to be found by name.
-    
-    Not all fonts have every FontStyle available, however ITALIC and BOLDITALIC will
-    still italicize the font if the respective font file is not available. 
 
-    text_align specifies alignment of text inside the bounding box, while align the 
+    Not all fonts have every FontStyle available, however ITALIC and BOLDITALIC will
+    still italicize the font if the respective font file is not available.
+
+    text_align specifies alignment of text inside the bounding box, while align the
     aligns the bounding box itself.
 
-    Optionally, the Text can be positioned on a non-linear edge or wire with a path and 
+    Optionally, the Text can be positioned on a non-linear edge or wire with a path and
     position_on_path.
-    
+
     Args:
         txt (str): text to render
         font_size (float): size of the font in model units
@@ -564,10 +570,10 @@ class Text(BaseSketchObject):
         text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
             LEFT, CENTER, or RIGHT. Vertical text align BOTTOM, CENTER, TOP, or
             TOPFIRSTLINE. Defaults to (TextAlign.CENTER, TextAlign.CENTER)
-        align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of 
+        align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of
             object. Defaults to None
         path (Edge | Wire, optional): path for text to follow. Defaults to None
-        position_on_path (float, optional): the relative location on path to position 
+        position_on_path (float, optional): the relative location on path to position
             the text, values must be between 0.0 and 1.0. Defaults to 0.0
         rotation (float, optional): angle to rotate object. Defaults to 0
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -782,9 +788,15 @@ class Triangle(BaseSketchObject):
         self.vertex_A = topo_explore_common_vertex(
             self.edge_b, self.edge_c
         )  #: vertex 'A'
+        assert isinstance(self.vertex_A, Vertex)
+        self.vertex_A.topo_parent = self
         self.vertex_B = topo_explore_common_vertex(
             self.edge_a, self.edge_c
         )  #: vertex 'B'
+        assert isinstance(self.vertex_B, Vertex)
+        self.vertex_B.topo_parent = self
         self.vertex_C = topo_explore_common_vertex(
             self.edge_a, self.edge_b
         )  #: vertex 'C'
+        assert isinstance(self.vertex_C, Vertex)
+        self.vertex_C.topo_parent = self
