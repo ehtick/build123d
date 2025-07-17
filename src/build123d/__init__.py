@@ -45,6 +45,7 @@ __all__ = [
     "ApproxOption",
     "AngularDirection",
     "CenterOf",
+    "ContinuityLevel",
     "Extrinsic",
     "FontStyle",
     "FrameMethod",
