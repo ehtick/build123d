@@ -487,6 +487,13 @@ class TestFace(unittest.TestCase):
 
         self.assertAlmostEqual(patch4.area, 164.618, 3)
 
+    def test_make_surface_patch_error_checking(self):
+        with self.assertRaises(RuntimeError):
+            Face.make_surface_patch(edge_constraints=[Edge.make_line((0, 0), (1, 0))])
+
+        with self.assertRaises(RuntimeError):
+            Face.make_surface_patch(edge_constraints=[])
+
     # def test_to_arcs(self):
     #     with BuildSketch() as bs:
     #         with BuildLine() as bl:
