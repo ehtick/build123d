@@ -549,7 +549,9 @@ class Text(BaseSketchObject):
     subfamilies not in FontStyle should be specified with the subfamily name, e.g.
     "Arial Black". Alternatively, a specific font file can be specified with font_path.
 
-    Note: Windows 10+ users must "Install for all users" for fonts to be found by name.
+    Use `available_fonts()` to list available font names for `font` and FontStyles.
+    Note: on Windows, fonts must be installed with "Install for all users" to be found 
+    by name.
 
     Not all fonts have every FontStyle available, however ITALIC and BOLDITALIC will
     still italicize the font if the respective font file is not available.
