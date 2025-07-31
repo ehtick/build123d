@@ -1376,9 +1376,9 @@ class ArcArcTangentArc(BaseEdgeObject):
     Create an arc tangent to two arcs and a radius.
 
     keep specifies tangent arc position with a Keep pair: (placement, type)
-        placement: start_arc is tangent INSIDE or OUTSIDE the tangent arc
-            BOTH is a special case for overlapping arcs with type INSIDE
-        type: tangent arc is INSIDE or OUTSIDE start_arc and end_arc
+
+    - placement: start_arc is tangent INSIDE or OUTSIDE the tangent arc. BOTH is a special case for overlapping arcs with type INSIDE
+    - type: tangent arc is INSIDE or OUTSIDE start_arc and end_arc
 
     Args:
         start_arc (Curve | Edge | Wire): starting arc, must be GeomType.CIRCLE
@@ -1388,6 +1388,8 @@ class ArcArcTangentArc(BaseEdgeObject):
             Defaults to Side.LEFT
         keep (Keep | tuple[Keep, Keep]): which tangent arc to keep, INSIDE or OUTSIDE.
             Defaults to (Keep.INSIDE, Keep.INSIDE)
+        short_sagitta (bool): If True selects the short sagitta (height of arc from
+            chord), else the long sagitta crossing the center. Defaults to True
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -1400,6 +1402,7 @@ class ArcArcTangentArc(BaseEdgeObject):
         radius: float,
         side: Side = Side.LEFT,
         keep: Keep | tuple[Keep, Keep] = (Keep.INSIDE, Keep.INSIDE),
+        short_sagitta: bool = True,
         mode: Mode = Mode.ADD,
     ):
         keep_placement, keep_type = tuplify(keep, 2)
@@ -1476,7 +1479,6 @@ class ArcArcTangentArc(BaseEdgeObject):
             # Full Overlap
             pick_index = -1
             if keep_placement == Keep.OUTSIDE:
-                print(1)
                 # External tangent to start
                 ref_radii = [radii[0] + r_sign * radius, radii[1] - r_sign * radius]
                 min_radius = (
@@ -1487,7 +1489,6 @@ class ArcArcTangentArc(BaseEdgeObject):
                 ) / 2
 
             elif keep_placement == Keep.INSIDE:
-                print(2)
                 # Internal tangent to start
                 ref_radii = [abs(radii[0] - radius), abs(radii[1] - radius)]
                 min_radius = (-midline.length + radii[0] + radii[1]) / 2
@@ -1563,7 +1564,9 @@ class ArcArcTangentArc(BaseEdgeObject):
         if side == Side.LEFT:
             intersect.reverse()
 
-        arc = RadiusArc(intersect[0], intersect[1], radius=radius)
+        arc = RadiusArc(
+            intersect[0], intersect[1], radius=radius, short_sagitta=short_sagitta
+        )
 
         # Check and flip arc if not tangent
         start_circle = CenterArc(start_arc.arc_center, start_arc.radius, 0, 360)
@@ -1572,6 +1575,8 @@ class ArcArcTangentArc(BaseEdgeObject):
             start_circle.tangent_at(point).cross(arc.tangent_at(point)).length
             > TOLERANCE
         ):
-            arc = RadiusArc(intersect[0], intersect[1], radius=-radius)
+            arc = RadiusArc(
+                intersect[0], intersect[1], radius=-radius, short_sagitta=short_sagitta
+            )
 
         super().__init__(arc, mode)
