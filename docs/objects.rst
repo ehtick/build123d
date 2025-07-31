@@ -239,6 +239,10 @@ Reference
 .. autoclass:: ThreePointArc
 .. autoclass:: ArcArcTangentLine
 .. autoclass:: ArcArcTangentArc
+.. image:: assets/objects/arcarctangentarc_keep_table.png
+    :alt: ArcArcTangentArc keep table
+    :align: center
+
 .. autoclass:: PointArcTangentLine
 .. autoclass:: PointArcTangentArc
 
