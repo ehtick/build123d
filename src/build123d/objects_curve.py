@@ -1377,7 +1377,7 @@ class ArcArcTangentArc(BaseEdgeObject):
 
     keep specifies tangent arc position with a Keep pair: (placement, type)
 
-    - placement: start_arc is tangent INSIDE or OUTSIDE the tangent arc. BOTH is a 
+    - placement: start_arc is tangent INSIDE or OUTSIDE the tangent arc. BOTH is a
       special case for overlapping arcs with type INSIDE
     - type: tangent arc is INSIDE or OUTSIDE start_arc and end_arc
 
@@ -1432,13 +1432,14 @@ class ArcArcTangentArc(BaseEdgeObject):
         else:
             workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
 
-        side_sign = 1 if side == Side.LEFT else -1
-        keep_sign = 1 if keep_placement == Keep.OUTSIDE else -1
         arcs = [start_arc, end_arc]
         points = [arc.arc_center for arc in arcs]
         radii = [arc.radius for arc in arcs]
+        side_sign = 1 if side == Side.LEFT else -1
+        keep_sign = 1 if keep_placement == Keep.OUTSIDE else -1
+        r_sign = 1 if radii[0] < radii[1] else -1
 
-        # make a normal vector for sorting intersections
+        # Make a normal vector for sorting intersections
         midline = points[1] - points[0]
         normal = side_sign * midline.cross(workplane.z_dir)
 
@@ -1447,19 +1448,19 @@ class ArcArcTangentArc(BaseEdgeObject):
 
         if midline.length == sum(radii) and keep_type == Keep.INSIDE:
             raise ValueError(
-                "Cannot find tangent type Keep.INSIDE for non-overlapping arcs " \
+                "Cannot find tangent type Keep.INSIDE for non-overlapping arcs "
                 "already tangent."
             )
 
         if midline.length == abs(radii[0] - radii[1]) and keep_placement == Keep.INSIDE:
             raise ValueError(
-                "Cannot find tangent placement Keep.INSIDE for completely " \
+                "Cannot find tangent placement Keep.INSIDE for completely "
                 "overlapping arcs already tangent."
             )
 
-        min_radius = 0.
+        # Set following parameters based on overlap condition and keep configuration
+        min_radius = 0.0
         max_radius = None
-        r_sign = 1 if radii[0] < radii[1] else -1
         x_sign = [1, 1]
         pick_index = 0
         if midline.length > abs(radii[0] - radii[1]) and keep_type == Keep.OUTSIDE:
@@ -1558,6 +1559,7 @@ class ArcArcTangentArc(BaseEdgeObject):
         )
         arc_center = ref_intersections.sort_by(Axis(points[0], normal))[pick_index]
 
+        # x_sign determines if tangent is near side or far side of circle
         intersect = [
             points[i]
             + x_sign[i] * radii[i] * (Vector(arc_center) - points[i]).normalized()

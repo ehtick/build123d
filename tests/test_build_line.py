@@ -652,6 +652,7 @@ class BuildLineTests(unittest.TestCase):
         - Arcs must be coplanar
         - Cannot make tangent for concentric arcs
         """
+
         # Test line properties in algebra mode
         start_r = 2
         end_r = 5
@@ -765,10 +766,83 @@ class BuildLineTests(unittest.TestCase):
                 start_arc, CenterArc((0, end_r - start_r), end_r, 0, 360), 3
             )
 
-        # Radius size
-        with self.assertRaises(ValueError):
-            r = (separation - (start_r + end_r)) / 2 - 1
-            ArcArcTangentArc(CenterArc((0, 0, 1), 5, 0, 360), end_arc, r)
+        ## Spot check all conditions
+        r1, r2 = 3, 8
+        start_center = (0, 0)
+        start_arc = CenterArc(start_center, r1, 0, 360)
+
+        end_y = {
+            "no_overlap": (r1 + r2) * 1.1,
+            "partial_overlap": (r1 + r2) / 2,
+            "full_overlap": (r2 - r1) * 0.9,
+        }
+
+        # Test matrix:
+        # (separation, keep pair, [min_limit, max_limit])
+        # actual limit will be (separation + min_limit) / 2
+        cases = [
+            (end_y["no_overlap"], (Keep.INSIDE, Keep.INSIDE), [r1 - r2, None]),
+            (end_y["no_overlap"], (Keep.OUTSIDE, Keep.INSIDE), [-r1 + r2, None]),
+            (end_y["no_overlap"], (Keep.INSIDE, Keep.OUTSIDE), [r1 + r2, None]),
+            (end_y["no_overlap"], (Keep.OUTSIDE, Keep.OUTSIDE), [-r1 - r2, None]),
+            (end_y["partial_overlap"], (Keep.INSIDE, Keep.INSIDE), [None, r1 - r2]),
+            (end_y["partial_overlap"], (Keep.OUTSIDE, Keep.INSIDE), [None, -r1 + r2]),
+            (end_y["partial_overlap"], (Keep.BOTH, Keep.INSIDE), [None, r1 + r2]),
+            (end_y["partial_overlap"], (Keep.INSIDE, Keep.OUTSIDE), [r1 + r2, None]),
+            (end_y["partial_overlap"], (Keep.OUTSIDE, Keep.OUTSIDE), [None, None]),
+            (end_y["full_overlap"], (Keep.INSIDE, Keep.INSIDE), [r1 + r2, r1 + r2]),
+            (end_y["full_overlap"], (Keep.OUTSIDE, Keep.INSIDE), [-r1 + r2, -r1 + r2]),
+        ]
+
+        # Check min and max radii, tangency
+        for case in cases:
+            end_center = (0, case[0])
+            end_arc = CenterArc(end_center, r2, 0, 360)
+
+            flip_max = -1 if case[1] == (Keep.BOTH, Keep.INSIDE) else 1
+            flip_min = -1 if case[0] == end_y["full_overlap"] else 1
+
+            min_r = 0 if case[2][0] is None else (flip_min * case[0] + case[2][0]) / 2
+            max_r = 1e6 if case[2][1] is None else (flip_max * case[0] + case[2][1]) / 2
+
+            print(case[1], min_r, max_r, case[0])
+            print(min_r + 0.01, min_r * 0.99, max_r - 0.01, max_r + 0.01)
+            print((case[0] - 1 * (r1 + r2)) / 2)
+
+            # Greater than min
+            l1 = ArcArcTangentArc(start_arc, end_arc, min_r + 0.01, keep=case[1])
+            _, p1, p2 = start_arc.distance_to_with_closest_points(l1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                start_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+            _, p1, p2 = end_arc.distance_to_with_closest_points(l1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+
+            # Less than max
+            l1 = ArcArcTangentArc(start_arc, end_arc, max_r - 0.01, keep=case[1])
+            _, p1, p2 = start_arc.distance_to_with_closest_points(l1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                start_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+            _, p1, p2 = end_arc.distance_to_with_closest_points(l1)
+            self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
+            self.assertAlmostEqual(
+                end_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5
+            )
+
+            # Less than min
+            with self.assertRaises(ValueError):
+                ArcArcTangentArc(start_arc, end_arc, min_r * 0.99, keep=case[1])
+
+            # Greater than max
+            if max_r != 1e6:
+                with self.assertRaises(ValueError):
+                    ArcArcTangentArc(start_arc, end_arc, max_r + 0.01, keep=case[1])
 
     def test_line_with_list(self):
         """Test line with a list of points"""
