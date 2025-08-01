@@ -646,12 +646,10 @@ class BuildLineTests(unittest.TestCase):
         Considerations:
         - Should produce a GeomType.CIRCLE located on and tangent to arcs
         - Tangent arcs that share a side have arc centers on the same side of the midline
-        - LEFT arcs have centers to right of midline
-        - INSIDE lines should always have equal length as long as arcs are same distance
-        - OUTSIDE lines should always have equal length as long as arcs are same distance
+        - LEFT arcs have centers to left of midline (for (INSIDE, *) case, non overlapping))
+        - Mirrored arcs should always have equal length as long as arcs are same distance
         - Tangent should be GeomType.CIRCLE
         - Arcs must be coplanar
-        - Cannot make tangent for radius under certain size
         - Cannot make tangent for concentric arcs
         """
         # Test line properties in algebra mode
@@ -665,7 +663,8 @@ class BuildLineTests(unittest.TestCase):
         end_arc = CenterArc(end_point, end_r, 0, 360)
         radius = 15
         lines = []
-        for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+        for keep_placement in [Keep.INSIDE, Keep.OUTSIDE]:
+            keep = (keep_placement, Keep.OUTSIDE)
             for side in [Side.LEFT, Side.RIGHT]:
                 l1 = ArcArcTangentArc(start_arc, end_arc, radius, side=side, keep=keep)
                 self.assertEqual(l1.geom_type, GeomType.CIRCLE)
@@ -699,18 +698,18 @@ class BuildLineTests(unittest.TestCase):
                 start_arc = CenterArc(point_arc @ (point / 16), start_r, 0, 360)
                 mid_vector = end_center - start_center
                 mid_perp = mid_vector.cross(workplane.z_dir)
-                for keep in [Keep.INSIDE, Keep.OUTSIDE]:
+                for keep_placement in [Keep.INSIDE, Keep.OUTSIDE]:
+                    keep = (keep_placement, Keep.OUTSIDE)
                     for side in [Side.LEFT, Side.RIGHT]:
                         l2 = ArcArcTangentArc(
                             start_arc, end_arc, radius, side=side, keep=keep
                         )
-
                         # Check length against algebraic length
-                        if keep == Keep.INSIDE:
-                            self.assertAlmostEqual(lines[0].length, l2.length, 5)
-                            side_sign = 1
-                        elif keep == Keep.OUTSIDE:
+                        if keep_placement == Keep.OUTSIDE:
                             self.assertAlmostEqual(lines[2].length, l2.length, 5)
+                            side_sign = 1
+                        elif keep_placement == Keep.INSIDE:
+                            self.assertAlmostEqual(lines[0].length, l2.length, 5)
                             side_sign = -1
 
                         # Check side of midline
@@ -720,7 +719,6 @@ class BuildLineTests(unittest.TestCase):
                         if side == Side.LEFT:
                             self.assertLess(side_sign * coincident_dir, 0)
                             self.assertLess(center_dir, 0)
-
                         elif side == Side.RIGHT:
                             self.assertGreater(side_sign * coincident_dir, 0)
                             self.assertGreater(center_dir, 0)
@@ -728,7 +726,8 @@ class BuildLineTests(unittest.TestCase):
         # Verify arc is tangent for a reversed start arc
         c1 = CenterArc((0, 80), 40, 0, -180)
         c2 = CenterArc((80, 0), 40, 90, 180)
-        arc = ArcArcTangentArc(c1, c2, 25, side=Side.RIGHT)
+        keep = (Keep.OUTSIDE, Keep.OUTSIDE)
+        arc = ArcArcTangentArc(c1, c2, 25, side=Side.RIGHT, keep=keep)
         _, _, point = c1.distance_to_with_closest_points(arc)
         self.assertAlmostEqual(
             c1.tangent_at(point).cross(arc.tangent_at(point)).length, 0, 5
@@ -737,6 +736,7 @@ class BuildLineTests(unittest.TestCase):
         ## Error Handling
         start_arc = CenterArc(start_point, start_r, 0, 360)
         end_arc = CenterArc(end_point, end_r, 0, 360)
+
         # GeomType
         bad_type = Line((0, 0), (0, 10))
         with self.assertRaises(ValueError):
@@ -745,9 +745,25 @@ class BuildLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ArcArcTangentArc(bad_type, end_arc, radius)
 
+        # Keep.BOTH
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(bad_type, end_arc, radius, keep=(Keep.BOTH, Keep.OUTSIDE))
+
         # Coplanar
         with self.assertRaises(ValueError):
             ArcArcTangentArc(CenterArc((0, 0, 1), 5, 0, 360), end_arc, radius)
+
+        # Coincidence (already tangent)
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(start_arc, CenterArc((0, 2 * start_r), start_r, 0, 360), 3)
+
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(start_arc, CenterArc(start_point, start_r, 0, 360), 3)
+
+        with self.assertRaises(ValueError):
+            ArcArcTangentArc(
+                start_arc, CenterArc((0, end_r - start_r), end_r, 0, 360), 3
+            )
 
         # Radius size
         with self.assertRaises(ValueError):

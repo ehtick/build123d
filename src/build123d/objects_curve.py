@@ -1412,12 +1412,12 @@ class ArcArcTangentArc(BaseEdgeObject):
         validate_inputs(context, self)
 
         if keep_placement == Keep.BOTH and keep_type != Keep.INSIDE:
-            raise ValueError("Start arc must have GeomType.CIRCLE.")
-
-        if start_arc.geom_type != GeomType.CIRCLE:
             raise ValueError(
                 "Keep.BOTH can only be used in configuration: (Keep.BOTH, Keep.INSIDE)"
             )
+
+        if start_arc.geom_type != GeomType.CIRCLE:
+            raise ValueError("Start arc must have GeomType.CIRCLE.")
 
         if end_arc.geom_type != GeomType.CIRCLE:
             raise ValueError("End arc must have GeomType.CIRCLE.")
