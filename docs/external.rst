@@ -77,7 +77,7 @@ bd_beams_and_bars
 
 2D sections and 3D beams generation (UPN, IPN, UPE, flat bars, ...)
 
-See: `bd_beams_and_bars <https://bd-beams-and-bars.3d.experimentslabs.com/>_`
+See: `bd_beams_and_bars <https://bd-beams-and-bars.3d.experimentslabs.com/>`_
 
 Superellipses & Superellipsoids
 ===============================
