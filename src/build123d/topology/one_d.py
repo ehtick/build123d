@@ -920,6 +920,7 @@ class Mixin1D(Shape):
         viewport_origin: VectorLike,
         viewport_up: VectorLike = (0, 0, 1),
         look_at: VectorLike | None = None,
+        focus: float | None = None,
     ) -> tuple[ShapeList[Edge], ShapeList[Edge]]:
         """project_to_viewport
 
@@ -931,6 +932,8 @@ class Mixin1D(Shape):
                 Defaults to (0, 0, 1).
             look_at (VectorLike, optional): point to look at.
                 Defaults to None (center of shape).
+            focus (float, optional): the focal length for perspective projection
+                Defaults to None (orthographic projection)
 
         Returns:
             tuple[ShapeList[Edge],ShapeList[Edge]]: visible & hidden Edges
@@ -963,7 +966,11 @@ class Mixin1D(Shape):
             gp_Ax1(viewport_origin.to_pnt(), projection_dir.to_dir())
         )
         camera_coordinate_system.SetYDirection(viewport_up.to_dir())
-        projector = HLRAlgo_Projector(camera_coordinate_system)
+        projector = (
+            HLRAlgo_Projector(camera_coordinate_system, focus)
+            if focus
+            else HLRAlgo_Projector(camera_coordinate_system)
+        )
 
         hidden_line_removal.Projector(projector)
         hidden_line_removal.Update()
