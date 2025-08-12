@@ -1158,6 +1158,7 @@ class Color:
                 rgb + alpha, ex: (1., 0., 0., 0.5),
                 hex, ex: 0xff0000,
                 hex + alpha, ex: (0xff0000, 0x80),
+                Color,
                 Quantity_ColorRGBA
         """
 
@@ -1220,8 +1221,10 @@ class Color:
                 red, green, blue, alpha = fill_defaults(args, default_rgb)
             else:
                 match args[0]:
+                    case Color():
+                        self.wrapped = args[0].wrapped
+                        return
                     case Quantity_ColorRGBA():
-                        # Nothing else to do here
                         self.wrapped = args[0]
                         return
                     case str():
@@ -1356,6 +1359,7 @@ ColorLike: TypeAlias = (
     ]  # rgb + alpha, ex: (1, 0, 0, 0.5)
     | int  # hex, ex: 0xff0000
     | tuple[int, int]  # hex + alpha, ex: (0xff0000, 0x80)
+    | Color
     | Quantity_ColorRGBA  # OCP color
 )
 

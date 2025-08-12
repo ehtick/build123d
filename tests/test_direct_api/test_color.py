@@ -149,6 +149,7 @@ class TestColor(unittest.TestCase):
             np.testing.assert_allclose(tuple(Color(color_like=cl)), expected, 1e-5)
 
         incomplete_color_likes = [
+            (Color(), (1, 1, 1, 1)),
             (1., (1, 1, 1, 1)),
             ((1.,), (1, 1, 1, 1)),
             ((1., 0.), (1, 0, 1, 1)),
