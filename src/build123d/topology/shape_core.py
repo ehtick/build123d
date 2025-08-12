@@ -137,6 +137,7 @@ from build123d.geometry import (
     Axis,
     BoundBox,
     Color,
+    ColorLike,
     Location,
     Matrix,
     OrientedBoundBox,
@@ -249,6 +250,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Transition.RIGHT: BRepBuilderAPI_RightCorner,
     }
 
+    _color: Color | None
+
     class _DisplayNode(NodeMixin):
         """Used to create anytree structures from TopoDS_Shapes"""
 
@@ -281,7 +284,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         self,
         obj: TopoDS_Shape | None = None,
         label: str = "",
-        color: Color | None = None,
+        color: Color | ColorLike | None = None,
         parent: Compound | None = None,
     ):
         self.wrapped: TOPODS | None = (
@@ -289,7 +292,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
         self.for_construction = False
         self.label = label
-        self._color = color
+        self.color = color
 
         # parent must be set following children as post install accesses children
         self.parent = parent
@@ -336,9 +339,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return node_color
 
     @color.setter
-    def color(self, value):
+    def color(self, value: Color | ColorLike | None) -> None:
         """Set the shape's color"""
-        self._color = value
+        self._color = Color(value) if value is not None else None
 
     @property
     def geom_type(self) -> GeomType:
