@@ -451,6 +451,7 @@ def make_brake_formed(
 
     if context is not None:
         context._add_to_context(new_solid, clean=clean, mode=mode)
+        context.pending_edges = ShapeList()
     elif clean:
         new_solid = new_solid.clean()
 
