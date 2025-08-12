@@ -44,6 +44,7 @@ from math import degrees, isclose, log10, pi, radians
 from typing import TYPE_CHECKING, Any, TypeAlias, overload
 
 import numpy as np
+import webcolors  # type: ignore
 from OCP.Bnd import Bnd_Box, Bnd_OBB
 from OCP.BRep import BRep_Tool
 from OCP.BRepBndLib import BRepBndLib
@@ -1146,22 +1147,33 @@ class Color:
     """
 
     @overload
-    def __init__(self, q_color: Quantity_ColorRGBA):
-        """Color from OCCT color object
+    def __init__(self, color_like: ColorLike):
+        """Color from ColorLike
 
         Args:
-            name (Quantity_ColorRGBA): q_color
+            color_like (ColorLike):
+                name, ex: "red",
+                name + alpha, ex: ("red", 0.5),
+                rgb, ex: (1., 0., 0.),
+                rgb + alpha, ex: (1., 0., 0., 0.5),
+                hex, ex: 0xff0000,
+                hex + alpha, ex: (0xff0000, 0x80),
+                Quantity_ColorRGBA
         """
 
     @overload
     def __init__(self, name: str, alpha: float = 1.0):
         """Color from name
 
+        `CSS3 Color Names
+            <https://en.wikipedia.org/wiki/Web_colors#Extended_colors>`
+
         `OCCT Color Names
             <https://dev.opencascade.org/doc/refman/html/_quantity___name_of_color_8hxx.html>`_
 
         Args:
             name (str): color, e.g. "blue"
+            alpha (float, optional): 0.0 <= alpha <= 1.0. Defaults to 1.0
         """
 
     @overload
@@ -1172,15 +1184,7 @@ class Color:
             red (float): 0.0 <= red <= 1.0
             green (float): 0.0 <= green <= 1.0
             blue (float): 0.0 <= blue <= 1.0
-            alpha (float, optional): 0.0 <= alpha <= 1.0. Defaults to 0.0.
-        """
-
-    @overload
-    def __init__(self, color_tuple: tuple[float]):
-        """Color from a 3 or 4 tuple of float values
-
-        Args:
-            color_tuple (tuple[float]): _description_
+            alpha (float, optional): 0.0 <= alpha <= 1.0. Defaults to 1.0
         """
 
     @overload
@@ -1193,68 +1197,77 @@ class Color:
         """
 
     def __init__(self, *args, **kwargs):
-        # pylint: disable=too-many-branches
-        red, green, blue, alpha, color_tuple, name, color_code, q_color = (
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            None,
-            None,
-            None,
-            None,
-        )
-        if len(args) == 1 and isinstance(args[0], tuple):
-            red, green, blue, alpha = args[0] + (1.0,) * (4 - len(args[0]))
-        elif len(args) == 1 or len(args) == 2:
-            if isinstance(args[0], Quantity_ColorRGBA):
-                q_color = args[0]
-            elif isinstance(args[0], int):
-                color_code = args[0]
-                alpha = args[1] if len(args) == 2 else 0xFF
-            elif isinstance(args[0], str):
-                name = args[0]
-                if len(args) == 2:
-                    alpha = args[1]
-        elif len(args) >= 3:
-            red, green, blue = args[0:3]  # pylint: disable=unbalanced-tuple-unpacking
-        if len(args) == 4:
-            alpha = args[3]
-
-        color_code = kwargs.get("color_code", color_code)
-        red = kwargs.get("red", red)
-        green = kwargs.get("green", green)
-        blue = kwargs.get("blue", blue)
-        color_tuple = kwargs.get("color_tuple", color_tuple)
-
-        if color_code is None:
-            alpha = kwargs.get("alpha", alpha)
-        else:
-            alpha = kwargs.get("alpha", alpha)
-            alpha = alpha / 255
-
-        if color_code is not None and isinstance(color_code, int):
-            red, remainder = divmod(color_code, 256**2)
-            green, blue = divmod(remainder, 256)
-            red = red / 255
-            green = green / 255
-            blue = blue / 255
-
-        if color_tuple is not None:
-            red, green, blue, alpha = color_tuple + (1.0,) * (4 - len(color_tuple))
-
-        if q_color is not None:
-            self.wrapped = q_color
-        elif name:
-            self.wrapped = Quantity_ColorRGBA()
-            exists = Quantity_ColorRGBA.ColorFromName_s(args[0], self.wrapped)
-            if not exists:
-                raise ValueError(f"Unknown color name: {name}")
-            self.wrapped.SetAlpha(alpha)
-        else:
-            self.wrapped = Quantity_ColorRGBA(red, green, blue, alpha)
-
+        self.wrapped = None
         self.iter_index = 0
+        red, green, blue, alpha, name, color_code = (1.0, 1.0, 1.0, 1.0, None, None)
+        default_rgb = (red, green, blue, alpha)
+
+        # Conform inputs to complete color_like tuples
+        # color_like does not use other kwargs or args, but benefits from conformity
+        color_like = kwargs.get("color_like", None)
+        if color_like is not None:
+            args = (color_like,)
+
+        if args:
+            args = args[0] if isinstance(args[0], tuple) else args
+
+        # Fills missing defaults from b if a is short
+        def fill_defaults(a, b):
+            return tuple(a[i] if i < len(a) else b[i] for i in range(len(b)))
+
+        if args:
+            if len(args) >= 3:
+                red, green, blue, alpha = fill_defaults(args, default_rgb)
+            else:
+                match args[0]:
+                    case Quantity_ColorRGBA():
+                        # Nothing else to do here
+                        self.wrapped = args[0]
+                        return
+                    case str():
+                        name, alpha = fill_defaults(args, (name, alpha))
+                    case int():
+                        color_code, alpha = fill_defaults(args, (color_code, alpha))
+                    case float():
+                        red, green, blue, alpha = fill_defaults(args, default_rgb)
+                    case _:
+                        raise TypeError(f"Unsupported color definition: {args}")
+
+        # Replace positional values with kwargs unless from color_like
+        if color_like is None:
+            name = kwargs.get("name", name)
+            color_code = kwargs.get("color_code", color_code)
+            red = kwargs.get("red", red)
+            green = kwargs.get("green", green)
+            blue = kwargs.get("blue", blue)
+            alpha = kwargs.get("alpha", alpha)
+
+        if name:
+            color_format = (name, alpha)
+        elif color_code:
+            color_format = (color_code, alpha)
+        else:
+            color_format = (red, green, blue, alpha)
+
+        # Convert color_format to rgb
+        match color_format:
+            case (name, a) if isinstance(name, str) and isinstance(a, (float, int)):
+                red, green, blue = Color._rgb_from_str(name)
+                alpha = a
+            case (hexa, a) if isinstance(hexa, int) and isinstance(a, (float, int)):
+                red, green, blue = Color._rgb_from_int(hexa)
+                if a != 1:
+                    # alpha == 1 is special case as default, don't divide
+                    alpha = a / 0xFF
+            case (red, green, blue, alpha) if all(
+                isinstance(c, (int, float)) for c in (red, green, blue, alpha)
+            ):
+                pass
+            case _:
+                raise TypeError(f"Unsupported color definition: {color_format}")
+
+        if not self.wrapped:
+            self.wrapped = Quantity_ColorRGBA(red, green, blue, alpha)
 
     def __iter__(self):
         """Initialize to beginning"""
@@ -1292,13 +1305,59 @@ class Color:
 
     def __str__(self) -> str:
         """Generate string"""
-        quantity_color_enum = self.wrapped.GetRGB().Name()
-        quantity_color_str = Quantity_Color.StringName_s(quantity_color_enum)
-        return f"Color: {str(tuple(self))} ~ {quantity_color_str}"
+        rgb = self.wrapped.GetRGB()
+        rgb = (rgb.Red(), rgb.Green(), rgb.Blue())
+        try:
+            name = webcolors.rgb_to_name([int(c * 255) for c in rgb])
+            qualifier = "is"
+        except ValueError:
+            # This still uses OCCT X11 colors instead of css3
+            quantity_color_enum = self.wrapped.GetRGB().Name()
+            name = Quantity_Color.StringName_s(quantity_color_enum)
+            qualifier = "near"
+        return f"Color: {str(tuple(self))} {qualifier} {name.upper()!r}"
 
     def __repr__(self) -> str:
         """Color repr"""
         return f"Color{str(tuple(self))}"
+
+    @staticmethod
+    def _rgb_from_int(triplet: int) -> tuple[float, float, float]:
+        red, remainder = divmod(triplet, 256**2)
+        green, blue = divmod(remainder, 256)
+        return red / 255, green / 255, blue / 255
+
+    @staticmethod
+    def _rgb_from_str(name: str) -> tuple:
+        if "#" not in name:
+            try:
+                # Use css3 color names by default
+                triplet = webcolors.name_to_rgb(name)
+            except ValueError as exc:
+                # Fall back to OCCT/X11 color names
+                color = Quantity_Color()
+                exists = Quantity_Color.ColorFromName_s(name, color)
+                if not exists:
+                    raise ValueError(
+                        f"{name!r} is not defined as a named color in CSS3 or OCCT/X11"
+                    ) from exc
+                return (color.Red(), color.Green(), color.Blue())
+        else:
+            triplet = webcolors.hex_to_rgb(name)
+        return tuple(i / 255 for i in tuple(triplet))
+
+
+ColorLike: TypeAlias = (
+    str  # name, ex: "red"
+    | tuple[str, float | int]  # name + alpha, ex: ("red", 0.5)
+    | tuple[float | int, float | int, float | int]  # rgb, ex: (1, 0, 0)
+    | tuple[
+        float | int, float | int, float | int, float | int
+    ]  # rgb + alpha, ex: (1, 0, 0, 0.5)
+    | int  # hex, ex: 0xff0000
+    | tuple[int, int]  # hex + alpha, ex: (0xff0000, 0x80)
+    | Quantity_ColorRGBA  # OCP color
+)
 
 
 class GeomEncoder(json.JSONEncoder):
@@ -1346,7 +1405,7 @@ class GeomEncoder(json.JSONEncoder):
             return {"Color": tuple(o)}
         if isinstance(o, Location):
             tup = tuple(o)
-            return {f"Location": (tuple(tup[0]), tuple(tup[1]))}
+            return {"Location": (tuple(tup[0]), tuple(tup[1]))}
         if isinstance(o, Plane):
             return {"Plane": (tuple(o.origin), tuple(o.x_dir), tuple(o.z_dir))}
         if isinstance(o, Vector):
