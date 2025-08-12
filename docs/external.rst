@@ -31,15 +31,16 @@ GUI editor based on PyQT. This fork has changes from jdegenstein to allow easier
 
 See: `jdegenstein's fork of cq-editor <https://github.com/jdegenstein/jmwright-CQ-Editor>`_
 
-yet-another-cad-viewer
+Yet Another CAD Viewer
 ======================
 
-A CAD viewer capable of displaying OCP models (CadQuery/Build123d) in a
-web browser. Mainly intended for deployment of finished models as a static
-website. It also works for developing models with hot reloading, though
-this feature may not be as mature as in ocp-vscode.
+A web-based CAD viewer for OCP models (CadQuery/build123d) that runs in any modern browser and supports
+static site deployment. Features include interactive inspection of faces, edges, and vertices, 
+measurement tools, per-model clipping planes, transparency control, and hot reloading via ``yacv-server``. 
+It also has a build123d playground for editing and sharing models directly in the browser 
+(`demo <https://yeicor-3d.github.io/yet-another-cad-viewer/#pg_code_url=https://raw.githubusercontent.com/gumyr/build123d/refs/heads/dev/examples/toy_truck.py>`_).
 
-See: `yet-another-cad-viewer <https://github.com/yeicor-3d/yet-another-cad-viewer>`_
+See: `Yet Another CAD Viewer <https://github.com/yeicor-3d/yet-another-cad-viewer>`_
 
 PartCAD VS Code extension
 =========================
@@ -70,6 +71,13 @@ Parts available include:
     * thread - Parametric helical threads (Iso, Acme, Plastic, etc.)
 
 See: `bd_warehouse <https://bd-warehouse.readthedocs.io/en/latest/index.html>`_
+
+bd_beams_and_bars
+=================
+
+2D sections and 3D beams generation (UPN, IPN, UPE, flat bars, ...)
+
+See: `bd_beams_and_bars <https://bd-beams-and-bars.3d.experimentslabs.com/>`_
 
 Superellipses & Superellipsoids
 ===============================
@@ -153,3 +161,13 @@ Library that helps perform `topology optimization <https://en.wikipedia.org/wiki
 your `OCP <https://github.com/CadQuery/OCP>`_-based CAD
 models (`CadQuery <https://github.com/CadQuery/cadquery>`_/`Build123d <https://github.com/gumyr/build123d>`_/...) using
 the `dl4to <https://github.com/dl4to/dl4to>`_ library.
+
+See: `dl4to4ocp <https://github.com/yeicor-3d/dl4to4ocp/>`_
+
+OCP.wasm
+========
+
+This project ports the low-level dependencies required for build123d to run in a browser. 
+For a fully featured frontend, check out ``Yet Another CAD Viewer`` (see above).
+
+See: `OCP.wasm <https://github.com/yeicor/OCP.wasm>`_

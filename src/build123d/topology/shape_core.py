@@ -50,24 +50,27 @@ import copy
 import itertools
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable, Iterator
+from functools import reduce
 from typing import (
-    cast as tcast,
+    TYPE_CHECKING,
     Any,
     Generic,
+    Literal,
     Optional,
     Protocol,
     SupportsIndex,
     TypeVar,
     Union,
-    overload,
-    TYPE_CHECKING,
 )
-
-from collections.abc import Callable, Iterable, Iterator
+from typing import cast as tcast
+from typing import overload
 
 import OCP.GeomAbs as ga
 import OCP.TopAbs as ta
-from IPython.lib.pretty import pretty, RepresentationPrinter
+from anytree import NodeMixin, RenderTree
+from IPython.lib.pretty import RepresentationPrinter, pretty
+from OCP.Bnd import Bnd_Box, Bnd_OBB
 from OCP.BOPAlgo import BOPAlgo_GlueEnum
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
@@ -98,11 +101,12 @@ from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepTools import BRepTools
-from OCP.Bnd import Bnd_Box, Bnd_OBB
-from OCP.GProp import GProp_GProps
+from OCP.gce import gce_MakeLin
 from OCP.Geom import Geom_Line
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomLib import GeomLib_IsPlanarSurface
+from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
+from OCP.GProp import GProp_GProps
 from OCP.ShapeAnalysis import ShapeAnalysis_Curve
 from OCP.ShapeCustom import ShapeCustom, ShapeCustom_RestrictionParameters
 from OCP.ShapeFix import ShapeFix_Shape
@@ -110,26 +114,25 @@ from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 from OCP.TopAbs import TopAbs_Orientation, TopAbs_ShapeEnum
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopTools import (
-    TopTools_IndexedDataMapOfShapeListOfShape,
-    TopTools_ListOfShape,
-    TopTools_SequenceOfShape,
-)
 from OCP.TopoDS import (
     TopoDS,
     TopoDS_Compound,
+    TopoDS_Edge,
     TopoDS_Face,
     TopoDS_Iterator,
     TopoDS_Shape,
     TopoDS_Shell,
     TopoDS_Solid,
     TopoDS_Vertex,
-    TopoDS_Edge,
     TopoDS_Wire,
 )
-from OCP.gce import gce_MakeLin
-from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
-from anytree import NodeMixin, RenderTree
+from OCP.TopTools import (
+    TopTools_IndexedDataMapOfShapeListOfShape,
+    TopTools_ListOfShape,
+    TopTools_SequenceOfShape,
+)
+from typing_extensions import Self
+
 from build123d.build_enums import CenterOf, GeomType, Keep, SortBy, Transition
 from build123d.geometry import (
     DEG2RAD,
@@ -146,18 +149,15 @@ from build123d.geometry import (
     VectorLike,
     logger,
 )
-from typing_extensions import Self
-
-from typing import Literal
-
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .zero_d import Vertex  # pylint: disable=R0801
-    from .one_d import Edge, Wire  # pylint: disable=R0801
-    from .two_d import Face, Shell  # pylint: disable=R0801
-    from .three_d import Solid  # pylint: disable=R0801
-    from .composite import Compound  # pylint: disable=R0801
     from build123d.build_part import BuildPart  # pylint: disable=R0801
+
+    from .composite import Compound  # pylint: disable=R0801
+    from .one_d import Edge, Wire  # pylint: disable=R0801
+    from .three_d import Solid  # pylint: disable=R0801
+    from .two_d import Face, Shell  # pylint: disable=R0801
+    from .zero_d import Vertex  # pylint: disable=R0801
 
 Shapes = Literal["Vertex", "Edge", "Wire", "Face", "Shell", "Solid", "Compound"]
 TrimmingTool = Union[Plane, "Shell", "Face"]
@@ -453,6 +453,23 @@ class Shape(NodeMixin, Generic[TOPODS]):
         chk = BRepCheck_Analyzer(self.wrapped)
         chk.SetParallel(True)
         return chk.IsValid()
+
+    @property
+    def global_location(self) -> Location:
+        """
+        The location of this Shape relative to the global coordinate system.
+
+        This property computes the composite transformation by traversing the
+        hierarchy from the root of the assembly to this node, combining the
+        location of each ancestor. It reflects the absolute position and
+        orientation of the shape in world space, even when the shape is deeply
+        nested within an assembly.
+
+        Note:
+            This is only meaningful when the Shape is part of an assembly tree
+            where parent-child relationships define relative placements.
+        """
+        return reduce(lambda loc, n: loc * n.location, self.path, Location())
 
     @property
     def location(self) -> Location | None:
@@ -786,7 +803,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             [shape.__class__.cast(i) for i in shape.entities(entity_type)]
         )
         for item in shape_list:
-            item.topo_parent = shape
+            item.topo_parent = shape if shape.topo_parent is None else shape.topo_parent
         return shape_list
 
     @staticmethod
@@ -2148,7 +2165,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def _ocp_section(
         self: Shape, other: Vertex | Edge | Wire | Face
-    ) -> tuple[list[Vertex], list[Edge]]:
+    ) -> tuple[ShapeList[Vertex], ShapeList[Edge]]:
         """_ocp_section
 
         Create a BRepAlgoAPI_Section object
@@ -2166,38 +2183,34 @@ class Shape(NodeMixin, Generic[TOPODS]):
             other (Union[Vertex, Edge, Wire, Face]): shape to section with
 
         Returns:
-            tuple[list[Vertex], list[Edge]]: section results
+            tuple[ShapeList[Vertex], ShapeList[Edge]]: section results
         """
         if self.wrapped is None or other.wrapped is None:
-            return ([], [])
+            return (ShapeList(), ShapeList())
 
-        try:
-            section = BRepAlgoAPI_Section(other.geom_adaptor(), self.wrapped)
-        except (TypeError, AttributeError):
-            try:
-                section = BRepAlgoAPI_Section(self.geom_adaptor(), other.wrapped)
-            except (TypeError, AttributeError):
-                return ([], [])
-
-        # Perform the intersection calculation
+        section = BRepAlgoAPI_Section(self.wrapped, other.wrapped)
+        section.SetRunParallel(True)
+        section.Approximation(True)
+        section.ComputePCurveOn1(True)
+        section.ComputePCurveOn2(True)
         section.Build()
 
         # Get the resulting shapes from the intersection
-        intersection_shape = section.Shape()
+        intersection_shape: TopoDS_Shape = section.Shape()
 
-        vertices = []
+        vertices: list[Vertex] = []
         # Iterate through the intersection shape to find intersection points/edges
         explorer = TopExp_Explorer(intersection_shape, TopAbs_ShapeEnum.TopAbs_VERTEX)
         while explorer.More():
             vertices.append(self.__class__.cast(downcast(explorer.Current())))
             explorer.Next()
-        edges = []
+        edges: ShapeList[Edge] = ShapeList()
         explorer = TopExp_Explorer(intersection_shape, TopAbs_ShapeEnum.TopAbs_EDGE)
         while explorer.More():
             edges.append(self.__class__.cast(downcast(explorer.Current())))
             explorer.Next()
 
-        return (vertices, edges)
+        return (ShapeList(set(vertices)), edges)
 
     def _repr_html_(self):
         """Jupyter 3D representation support"""

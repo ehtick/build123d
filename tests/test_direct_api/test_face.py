@@ -35,7 +35,7 @@ import unittest
 from unittest.mock import patch, PropertyMock
 from OCP.Geom import Geom_RectangularTrimmedSurface
 from build123d.build_common import Locations, PolarLocations
-from build123d.build_enums import Align, CenterOf, GeomType
+from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -168,6 +168,13 @@ class TestFace(unittest.TestCase):
         self.assertAlmostEqual(square.normal_at(), (0, 0, 1), 5)
         flipped_square = -square
         self.assertAlmostEqual(flipped_square.normal_at(), (0, 0, -1), 5)
+
+        # Ensure the topo_parent is cleared when a face is negated
+        # (otherwise the original Rectangle would be the topo_parent)
+        flipped = -Rectangle(34, 10).face()
+        left_edge = flipped.edges().sort_by(Axis.X)[0]
+        parent_face = left_edge.topo_parent
+        self.assertAlmostEqual(flipped.normal_at(), parent_face.normal_at(), 5)
 
     def test_offset(self):
         bbox = Face.make_rect(2, 2, Plane.XY).offset(5).bounding_box()
@@ -423,6 +430,78 @@ class TestFace(unittest.TestCase):
         with self.assertRaises(ValueError):
             Face.sweep(edge, Polyline((0, 0), (0.1, 0), (0.2, 0.1)))
 
+    def test_make_surface_patch(self):
+        m1 = Spline((0, 0), (1, 0), (10, 0, -10))
+        m2 = Spline((0, 0), (0, 1), (0, 10, -10))
+        m3 = Spline(m1 @ 1, (7, 7, -10), m2 @ 1)
+
+        patch = Face.make_surface_patch(
+            edge_constraints=[
+                m1.edge(),
+                m2.edge(),
+                m3.edge(),
+            ]
+        )
+        self.assertAlmostEqual(patch.area, 157.186, 3)
+
+        f1 = Face.extrude(m1.edge(), (0, -1, 0))
+        f2 = Face.extrude(m2.edge(), (-1, 0, 0))
+        f3 = Face.extrude(m3.edge(), (0, 0, -1))
+
+        patch2 = Face.make_surface_patch(
+            edge_face_constraints=[
+                (m1.edge(), f1, ContinuityLevel.C1),
+                (m2.edge(), f2, ContinuityLevel.C1),
+                (m3.edge(), f3, ContinuityLevel.C1),
+            ]
+        )
+
+        self.assertAlmostEqual(patch2.area, 152.670, 3)
+
+        mid_edge = Spline(m1 @ 0.5, (5, 5, -3), m2 @ 0.5)
+
+        patch3 = -Face.make_surface_patch(
+            edge_face_constraints=[
+                (m1.edge(), f1, ContinuityLevel.C1),
+                (m2.edge(), f2, ContinuityLevel.C1),
+                (m3.edge(), f3, ContinuityLevel.C1),
+            ],
+            edge_constraints=[
+                mid_edge.edge(),
+            ],
+        )
+
+        self.assertAlmostEqual(patch3.area, 152.643, 3)
+
+        point = patch.position_at(0.5, 0.5) + (0.5, 0.5)
+        patch4 = -Face.make_surface_patch(
+            edge_constraints=[
+                m1.edge(),
+                m2.edge(),
+                m3.edge(),
+            ],
+            point_constraints=[
+                point,
+            ],
+        )
+
+        self.assertAlmostEqual(patch4.area, 164.618, 3)
+
+    def test_make_surface_patch_error_checking(self):
+        with self.assertRaises(RuntimeError):
+            Face.make_surface_patch(edge_constraints=[Edge.make_line((0, 0), (1, 0))])
+
+        with self.assertRaises(RuntimeError):
+            Face.make_surface_patch(edge_constraints=[])
+
+        with self.assertRaises(RuntimeError):
+            Face.make_surface_patch(
+                edge_constraints=[
+                    Edge.make_line((0, 0), (1, 0)),
+                    Edge.make_line((0, 0), (0, 1)),
+                ]
+            )
+
     # def test_to_arcs(self):
     #     with BuildSketch() as bs:
     #         with BuildLine() as bl:
@@ -457,6 +536,37 @@ class TestFace(unittest.TestCase):
             face.normal_at(center=(0, 0))
         face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
         self.assertAlmostEqual(face.normal_at(0, 1), (1, 0, 0), 5)
+
+    def test_location_at(self):
+        face = Face.make_rect(1, 1)
+
+        # Default center (u=0, v=0)
+        loc = face.location_at(0, 0)
+        self.assertAlmostEqual(loc.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc.z_axis.direction, (0, 0, 1), 5)
+
+        # Using surface_point instead of u,v
+        point = face.position_at(0, 0)
+        loc2 = face.location_at(point)
+        self.assertAlmostEqual(loc2.position, (-0.5, -0.5, 0), 5)
+        self.assertAlmostEqual(loc2.z_axis.direction, (0, 0, 1), 5)
+
+        # Bad args
+        with self.assertRaises(ValueError):
+            face.location_at(0)
+        with self.assertRaises(ValueError):
+            face.location_at(center=(0, 0))
+
+        # Curved surface: verify z-direction is outward normal
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc3 = face.location_at(0, 1)
+        self.assertAlmostEqual(loc3.z_axis.direction, (1, 0, 0), 5)
+
+        # Curved surface: verify center
+        face = Cylinder(1, 1).faces().filter_by(GeomType.CYLINDER)[0]
+        loc4 = face.location_at()
+        self.assertAlmostEqual(loc4.position, (-1, 0, 0), 5)
+        self.assertAlmostEqual(loc4.z_axis.direction, (-1, 0, 0), 5)
 
     def test_without_holes(self):
         # Planar test

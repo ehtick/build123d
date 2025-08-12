@@ -303,7 +303,7 @@ with BuildLine() as arc_arc_tangent_arc:
     l1 = CenterArc((7, 3), 3, 0, 360)
     l2 = CenterArc((0, 8), 2, -90, 180)
     radius = 12
-    l3 = ArcArcTangentArc(l1, l2, radius, Side.LEFT, Keep.OUTSIDE)
+    l3 = ArcArcTangentArc(l1, l2, radius, Side.LEFT, (Keep.INSIDE, Keep.OUTSIDE))
 s = 100 / max(*arc_arc_tangent_arc.line.bounding_box().size)
 svg = ExportSVG(scale=s)
 svg.add_layer("dashed", line_type=LineType.ISO_DASH_SPACE)

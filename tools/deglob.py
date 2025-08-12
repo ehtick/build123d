@@ -16,16 +16,31 @@ desc:
     an import statement listing only those names. This practice can help
     prevent polluting the global namespace and improve clarity.
 
-    Example:
-        deglob.py my_build123d_script.py
+    Examples:
+        python deglob.py my_build123d_script.py
+        python deglob.py -h
 
-    After parsing my_build123d_script.py, the script prints a line such as:
+    Usage:
+        deglob.py [-h] [--write] [--verbose] build123d_file
+        Find all the build123d symbols in module.
+
+        positional arguments:
+        build123d_file  Path to the build123d file
+
+        options:
+        -h, --help      show this help message and exit
+        --write         Overwrite glob import in input file, defaults to read-only and
+                        printed to stdout
+        --verbose       Increase verbosity when write is enabled, defaults to silent
+
+    After parsing my_build123d_script.py, the script optionally prints a line such as:
         from build123d import Workplane, Solid
 
     Which you can then paste back into the file to replace the glob import.
 
     Module Contents:
         - parse_args(): Parse the command-line argument for the input file path.
+        - count_glob_imports(): Count the number of occurences of a glob import.
         - find_used_symbols(): Parse Python source code to find referenced names.
         - main(): Orchestrates reading the file, analyzing symbols, and printing
         the replacement import line.
@@ -53,6 +68,7 @@ import argparse
 import ast
 import sys
 from pathlib import Path
+import re
 
 import build123d
 
@@ -63,7 +79,7 @@ def parse_args():
 
     Returns:
         argparse.Namespace: An object containing the parsed command-line arguments:
-        - build123d_file (Path): Path to the input build123dO file.
+        - build123d_file (Path): Path to the input build123d file.
     """
     parser = argparse.ArgumentParser(
         description="Find all the build123d symbols in module."
@@ -71,10 +87,44 @@ def parse_args():
 
     # Required positional argument
     parser.add_argument("build123d_file", type=Path, help="Path to the build123d file")
+    parser.add_argument(
+        "--write",
+        help="Overwrite glob import in input file, defaults to read-only and printed to stdout",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--verbose",
+        help="Increase verbosity when write is enabled, defaults to silent",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
     return args
+
+
+def count_glob_imports(source_code: str) -> int:
+    """count_glob_imports
+
+    Count the number of occurences of a glob import e.g. (from build123d import *)
+
+    Args:
+        source_code (str): contents of build123d program
+
+    Returns:
+        int: build123d glob import occurence count
+    """
+    tree = ast.parse(source_code)
+
+    # count instances of glob usage
+    glob_count = list(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "build123d"
+        and any(alias.name == "*" for alias in node.names)
+        for node in ast.walk(tree)
+    ).count(True)
+
+    return glob_count
 
 
 def find_used_symbols(source_code: str) -> set[str]:
@@ -89,17 +139,6 @@ def find_used_symbols(source_code: str) -> set[str]:
         set[str]: extracted symbols
     """
     tree = ast.parse(source_code)
-
-    # Is the glob import from build123d used?
-    from_glob_import = any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "build123d"
-        and any(alias.name == "*" for alias in node.names)
-        for node in ast.walk(tree)
-    )
-    if not from_glob_import:
-        print("Glob import from build123d not found")
-        sys.exit(0)
 
     symbols = set()
 
@@ -126,7 +165,8 @@ def main():
         4. Collect all referenced symbol names from the file's abstract syntax tree.
         5. Intersect these names with those found in build123d.__all__ to identify
            which build123d symbols are actually used.
-        6. Print an import statement that explicitly imports only the used symbols.
+        6A. Optionally print an import statement that explicitly imports only the used symbols.
+        6B. Or optionally write the glob import replacement back to file
 
     Behavior:
         - If no 'from build123d import *' import is found, the script prints
@@ -152,7 +192,15 @@ def main():
     with open(args.build123d_file, "r", encoding="utf-8") as f:
         code = f.read()
 
-    # Check for the glob import and extract the symbols
+    # Get the glob import count
+    glob_count = count_glob_imports(code)
+
+    # Exit if no glob import was found
+    if not glob_count:
+        print("Glob import from build123d not found")
+        sys.exit(0)
+
+    # Extract the symbols
     used_symbols = find_used_symbols(code)
 
     # Find the imported build123d symbols
@@ -160,7 +208,30 @@ def main():
 
     # Create the import statement to replace the glob import
     import_line = f"from build123d import {', '.join(actual_imports)}"
-    print(import_line)
+
+    if args.write:
+        # Replace only the first instance
+        updated_code = re.sub(r"from build123d import\s*\*", import_line, code, count=1)
+
+        # Try to write code back to target file
+        try:
+            with open(args.build123d_file, "w", encoding="utf-8") as f:
+                f.write(updated_code)
+        except (PermissionError, OSError) as e:
+            print(f"Error: Unable to write to file '{args.build123d_file}'. {e}")
+            sys.exit(1)
+
+        if glob_count and args.verbose:
+            print(f"Replaced build123d glob import with '{import_line}'")
+
+        if glob_count > 1:
+            # NOTE: always prints warning if more than one glob import is found
+            print(
+                "Warning: more than one instance of glob import was detected "
+                f"(count: {glob_count}), only the first instance was replaced"
+            )
+    else:
+        print(import_line)
 
 
 if __name__ == "__main__":

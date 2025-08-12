@@ -262,54 +262,82 @@ def loft(
         clean (bool, optional): Remove extraneous internal structure. Defaults to True.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
+
+    def normalize_list_of_lists(lst):
+        lengths = {len(sub) for sub in lst}
+        if lengths <= {0}:
+            return []
+        if lengths == {1}:
+            return [sub[0] for sub in lst]
+        if len(lengths) > 1:
+            raise ValueError("The number of holes in the sections must be the same")
+        if max(lengths) > 1:
+            raise ValueError(
+                f"loft supports a maximum of 1 hole per section but one or more section "
+                f"has {max(lengths)} hole - loft the perimeter and holes separately and "
+                f"subtract the holes"
+            )
+
     context: BuildPart | None = BuildPart._get_context("loft")
 
     section_list = flatten_sequence(sections)
     validate_inputs(context, "loft", section_list)
 
-    if all([s is None for s in section_list]):
-        if context is None or (context is not None and not context.pending_faces):
+    # If no explicit sections provided, use pending_faces from context
+    if all(s is None for s in section_list):
+        if context is None or not context.pending_faces:
             raise ValueError("No sections provided")
-        loft_wires = [face.outer_wire() for face in context.pending_faces]
+        input_sections = context.pending_faces
         context.pending_faces = []
         context.pending_face_planes = []
     else:
-        if not any(isinstance(s, Vertex) for s in section_list):
-            loft_wires = [
-                face.outer_wire()
-                for section in section_list
-                for face in section.faces()
-            ]
-        elif any(isinstance(s, Vertex) for s in section_list) and any(
-            isinstance(s, (Face, Sketch)) for s in section_list
+        input_sections = section_list
+
+    # Validate Vertex placement
+    if any(isinstance(s, Vertex) for s in input_sections):
+        if not isinstance(input_sections[0], Vertex) and not isinstance(
+            input_sections[-1], Vertex
         ):
-            if any(isinstance(s, Vertex) for s in section_list[1:-1]):
-                raise ValueError(
-                    "Vertices must be the first, last, or first and last elements"
-                )
-            loft_wires = []
-            for s in section_list:
-                if isinstance(s, Vertex):
-                    loft_wires.append(s)
-                elif isinstance(s, Face):
-                    loft_wires.append(s.outer_wire())
-                elif isinstance(s, Sketch):
-                    loft_wires.extend([f.outer_wire() for f in s.faces()])
-        elif all(isinstance(s, Vertex) for s in section_list):
             raise ValueError(
-                "At least one face/sketch is required if vertices are the first, last, "
-                "or first and last elements"
+                "Vertices must be the first, last, or first and last elements"
+            )
+        if any(isinstance(s, Vertex) for s in input_sections[1:-1]):
+            raise ValueError(
+                "Vertices must be the first, last, or first and last elements"
             )
 
-    new_solid = Solid.make_loft(loft_wires, ruled)
+    # Normalize all input into loft_sections: each is either a Vertex or a Wire
+    loft_sections = []
+    hole_candidates = []
+    for s in input_sections:
+        if isinstance(s, Vertex):
+            loft_sections.append(s)
+        else:
+            for face in s.faces():
+                loft_sections.append(face.outer_wire())
+                hole_candidates.append(face.inner_wires())
 
-    # Try to recover an invalid loft
+    holes = normalize_list_of_lists(hole_candidates)
+
+    # Perform lofts
+    new_solid = Solid.make_loft(loft_sections, ruled)
+    if holes:
+        # Since the holes are interior a Solid will be generated here
+        new_solid = cast(Solid, new_solid.cut(Solid.make_loft(holes, ruled)))
+
+    # Try to recover an invalid loft - untestable code
     if not new_solid.is_valid:
-        new_solid = Solid(Shell(new_solid.faces() + section_list))
-        if clean:
-            new_solid = new_solid.clean()
-        if not new_solid.is_valid:
-            raise RuntimeError("Failed to create valid loft")
+        try:
+            recovery_faces = new_solid.faces() + [
+                s for s in loft_sections if isinstance(s, Face)
+            ]
+            new_solid = Solid(Shell(recovery_faces))
+            if clean:
+                new_solid = new_solid.clean()
+            if not new_solid.is_valid:
+                raise ValueError("Recovery failed")
+        except Exception as e:
+            raise RuntimeError("Failed to create valid loft") from e
 
     if context is not None:
         context._add_to_context(new_solid, clean=clean, mode=mode)
@@ -423,6 +451,7 @@ def make_brake_formed(
 
     if context is not None:
         context._add_to_context(new_solid, clean=clean, mode=mode)
+        context.pending_edges = ShapeList()
     elif clean:
         new_solid = new_solid.clean()
 

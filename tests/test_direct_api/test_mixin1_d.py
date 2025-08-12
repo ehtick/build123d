@@ -40,7 +40,9 @@ from build123d.build_enums import (
 from build123d.geometry import Axis, Location, Plane, Vector
 from build123d.objects_curve import Polyline
 from build123d.objects_part import Box, Cylinder
-from build123d.topology import Compound, Edge, Face, Wire
+from build123d.operations_part import extrude
+from build123d.operations_generic import fillet
+from build123d.topology import Compound, Edge, Face, Solid, Wire
 
 
 class TestMixin1D(unittest.TestCase):
@@ -359,6 +361,29 @@ class TestMixin1D(unittest.TestCase):
     def test_wire_volume(self):
         wire = Wire.make_rect(1, 1)
         self.assertAlmostEqual(wire.volume, 0, 5)
+
+    def test_edges(self):
+        box = Solid.make_box(1, 1, 1)
+        top_x = box.faces().sort_by(Axis.Z)[-1].edges().sort_by(Axis.X)[-1]
+        self.assertEqual(top_x.topo_parent, box)
+        self.assertTrue(isinstance(top_x, Edge))
+        self.assertAlmostEqual(top_x.center(), (1, 0.5, 1), 5)
+
+    def test_edges_topo_parent(self):
+        phone_case_plan = Face.make_rect(80, 150) - Face.make_rect(
+            25, 25, Plane((-20, 55))
+        )
+        phone_case = extrude(phone_case_plan, 2)
+        window_edges = phone_case.faces().sort_by(Axis.Z)[-1].inner_wires()[0].edges()
+        for e in window_edges:
+            self.assertEqual(e.topo_parent, phone_case)
+        phone_case_f = fillet(window_edges, 1)
+        self.assertLess(phone_case_f.volume, phone_case.volume)
+        perimeter = phone_case_f.faces().sort_by(Axis.Z)[-1].outer_wire().edges()
+        for e in perimeter:
+            self.assertEqual(e.topo_parent, phone_case_f)
+        phone_case_ff = fillet(perimeter, 1)
+        self.assertLess(phone_case_ff.volume, phone_case_f.volume)
 
 
 if __name__ == "__main__":

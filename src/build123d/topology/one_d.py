@@ -84,6 +84,7 @@ from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepLib import BRepLib, BRepLib_FindSurface
+from OCP.BRepLProp import BRepLProp_CLProps, BRepLProp
 from OCP.BRepOffset import BRepOffset_MakeOffset
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
@@ -103,6 +104,7 @@ from OCP.Geom import (
 )
 from OCP.Geom2d import Geom2d_Curve, Geom2d_Line, Geom2d_TrimmedCurve
 from OCP.Geom2dAPI import Geom2dAPI_InterCurveCurve
+from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_C1, GeomAbs_G2, GeomAbs_C2
 from OCP.GeomAPI import (
     GeomAPI_IntCS,
     GeomAPI_Interpolate,
@@ -165,6 +167,7 @@ from OCP.gp import (
 )
 from build123d.build_enums import (
     AngularDirection,
+    ContinuityLevel,
     CenterOf,
     FrameMethod,
     GeomType,
@@ -493,7 +496,11 @@ class Mixin1D(Shape):
 
             edge_list: ShapeList[Edge] = ShapeList()
             while explorer.More():
-                edge_list.append(Edge(explorer.Current()))
+                next_edge = Edge(explorer.Current())
+                next_edge.topo_parent = (
+                    self if self.topo_parent is None else self.topo_parent
+                )
+                edge_list.append(next_edge)
                 explorer.Next()
             return edge_list
         else:
@@ -913,6 +920,7 @@ class Mixin1D(Shape):
         viewport_origin: VectorLike,
         viewport_up: VectorLike = (0, 0, 1),
         look_at: VectorLike | None = None,
+        focus: float | None = None,
     ) -> tuple[ShapeList[Edge], ShapeList[Edge]]:
         """project_to_viewport
 
@@ -924,6 +932,8 @@ class Mixin1D(Shape):
                 Defaults to (0, 0, 1).
             look_at (VectorLike, optional): point to look at.
                 Defaults to None (center of shape).
+            focus (float, optional): the focal length for perspective projection
+                Defaults to None (orthographic projection)
 
         Returns:
             tuple[ShapeList[Edge],ShapeList[Edge]]: visible & hidden Edges
@@ -956,7 +966,11 @@ class Mixin1D(Shape):
             gp_Ax1(viewport_origin.to_pnt(), projection_dir.to_dir())
         )
         camera_coordinate_system.SetYDirection(viewport_up.to_dir())
-        projector = HLRAlgo_Projector(camera_coordinate_system)
+        projector = (
+            HLRAlgo_Projector(camera_coordinate_system, focus)
+            if focus
+            else HLRAlgo_Projector(camera_coordinate_system)
+        )
 
         hidden_line_removal.Projector(projector)
         hidden_line_removal.Update()
@@ -3209,10 +3223,28 @@ def offset_topods_face(face: TopoDS_Face, amount: float) -> TopoDS_Shape:
 
 
 def topo_explore_connected_edges(
-    edge: Edge, parent: Shape | None = None
+    edge: Edge,
+    parent: Shape | None = None,
+    continuity: ContinuityLevel = ContinuityLevel.C0,
 ) -> ShapeList[Edge]:
-    """Given an edge extracted from a Shape, return the edges connected to it"""
+    """
+    Find edges connected to the given edge with at least the requested continuity.
 
+    Args:
+        edge: The reference edge to explore from.
+        parent: Optional parent Shape. If None, uses edge.topo_parent.
+        continuity: Minimum required continuity (C0/G0, C1/G1, C2/G2).
+
+    Returns:
+        ShapeList[Edge]: Connected edges meeting the continuity requirement.
+    """
+    continuity_map = {
+        GeomAbs_C0: ContinuityLevel.C0,
+        GeomAbs_G1: ContinuityLevel.C1,
+        GeomAbs_C1: ContinuityLevel.C1,
+        GeomAbs_G2: ContinuityLevel.C2,
+        GeomAbs_C2: ContinuityLevel.C2,
+    }
     parent = parent if parent is not None else edge.topo_parent
     if parent is None:
         raise ValueError("edge has no valid parent")
@@ -3229,8 +3261,26 @@ def topo_explore_connected_edges(
         if given_topods_edge.IsSame(topods_edge):
             continue
         # If the edge shares a vertex with the given edge they are connected
-        if topo_explore_common_vertex(given_topods_edge, topods_edge) is not None:
-            connected_edges.add(topods_edge)
+        common_topods_vertex: Vertex | None = topo_explore_common_vertex(
+            given_topods_edge, topods_edge
+        )
+        if common_topods_vertex is not None:
+            # shared_vertex is the TopoDS_Vertex common to edge1 and edge2
+            u1 = BRep_Tool.Parameter_s(common_topods_vertex.wrapped, given_topods_edge)
+            u2 = BRep_Tool.Parameter_s(common_topods_vertex.wrapped, topods_edge)
+
+            # Build adaptors so OCCT can work on the curves
+            curve1 = BRepAdaptor_Curve(given_topods_edge)
+            curve2 = BRepAdaptor_Curve(topods_edge)
+
+            # Get the GeomAbs_Shape enum continuity at the vertex
+            actual_continuity = BRepLProp.Continuity_s(
+                curve1, curve2, u1, u2, TOLERANCE, TOLERANCE
+            )
+            actual_level = continuity_map.get(actual_continuity, ContinuityLevel.C2)
+
+            if actual_level >= continuity:
+                connected_edges.add(topods_edge)
 
     return ShapeList(Edge(e) for e in connected_edges)
 

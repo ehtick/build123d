@@ -29,10 +29,11 @@ license:
 # Always equal to any other object, to test that __eq__ cooperation is working
 import unittest
 from random import uniform
-from unittest.mock import patch, PropertyMock
+from unittest.mock import PropertyMock, patch
 
 import numpy as np
-from build123d.build_enums import CenterOf, Keep
+from anytree import PreOrderIter
+from build123d.build_enums import CenterOf, GeomType, Keep
 from build123d.geometry import (
     Axis,
     Color,
@@ -43,7 +44,7 @@ from build123d.geometry import (
     Rotation,
     Vector,
 )
-from build123d.objects_part import Box, Cylinder
+from build123d.objects_part import Box, Cone, Cylinder, Sphere
 from build123d.objects_sketch import Circle
 from build123d.operations_part import extrude
 from build123d.topology import (
@@ -461,44 +462,56 @@ class TestShape(unittest.TestCase):
     def test_ocp_section(self):
         # Vertex
         verts, edges = Vertex(1, 2, 0)._ocp_section(Vertex(1, 2, 0))
-        self.assertListEqual(verts, [])  # ?
-        self.assertListEqual(edges, [])
+        self.assertEqual(len(verts), 1)
+        self.assertEqual(len(edges), 0)
+        self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
 
         verts, edges = Vertex(1, 2, 0)._ocp_section(Edge.make_line((0, 0), (2, 4)))
-        self.assertListEqual(verts, [])  # ?
-        self.assertListEqual(edges, [])
+        self.assertEqual(len(verts), 1)
+        self.assertEqual(len(edges), 0)
+        self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
 
         verts, edges = Vertex(1, 2, 0)._ocp_section(Face.make_rect(5, 5))
-        np.testing.assert_allclose(tuple(verts[0]), (1, 2, 0), 1e-5)
+        self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
         verts, edges = Vertex(1, 2, 0)._ocp_section(Face.make_plane(Plane.XY))
-        np.testing.assert_allclose(tuple(verts[0]), (1, 2, 0), 1e-5)
+        self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
-        # spline = Spline((-10, 10, -10), (-10, -5, -5), (20, 0, 5))
-        # cylinder = Pos(Z=-10) * extrude(Circle(5), 20)
-        # cylinder2 = (Rot((0, 90, 0)) * cylinder).face()
-        # pln = Plane.XY
-        # box1 = Box(10, 10, 10, align=(Align.CENTER, Align.CENTER, Align.MIN))
-        # box2 = Pos(Z=-10) * box1
+        cylinder = Face.extrude(Edge.make_circle(5, Plane.XY.offset(-10)), (0, 0, 20))
+        cylinder2 = Face.extrude(Edge.make_circle(5, Plane.YZ.offset(-10)), (20, 0, 0))
+        pln = Plane.XY
 
-        # # vertices, edges = ocp_section(spline, Face.make_rect(1e6, 1e6, pln))
-        # vertices1, edges1 = spline.ocp_section(Face.make_plane(pln))
-        # print(vertices1, edges1)
+        v_edge = Edge.make_line((-5, 0, -20), (-5, 0, 20))
+        vertices1, edges1 = cylinder._ocp_section(v_edge)
+        vertices1 = ShapeList(vertices1).sort_by(Axis.Z)
+        self.assertEqual(len(vertices1), 2)
 
-        # vertices2, edges2 = cylinder.ocp_section(Face.make_plane(pln))
-        # print(vertices2, edges2)
+        self.assertAlmostEqual(Vector(vertices1[0]), (-5, 0, -10), 5)
+        self.assertAlmostEqual(Vector(vertices1[1]), (-5, 0, 10), 5)
+        self.assertEqual(len(edges1), 1)
+        self.assertAlmostEqual(edges1[0].length, 20, 5)
 
-        # vertices3, edges3 = cylinder2.ocp_section(Face.make_plane(pln))
-        # print(vertices3, edges3)
+        vertices2, edges2 = cylinder._ocp_section(Face.make_plane(pln))
+        self.assertEqual(len(vertices2), 1)
+        self.assertEqual(len(edges2), 1)
+        self.assertAlmostEqual(Vector(vertices2[0]), (5, 0, 0), 5)
+        self.assertEqual(edges2[0].geom_type, GeomType.CIRCLE)
+        self.assertAlmostEqual(edges2[0].radius, 5, 5)
 
-        # # vertices4, edges4 = cylinder2.ocp_section(cylinder)
+        vertices4, edges4 = cylinder2._ocp_section(cylinder)
+        self.assertGreaterEqual(len(vertices4), 0)
+        self.assertGreaterEqual(len(edges4), 2)
+        self.assertTrue(all(e.geom_type == GeomType.ELLIPSE for e in edges4))
 
-        # vertices5, edges5 = box1.ocp_section(Face.make_plane(pln))
-        # print(vertices5, edges5)
+        cylinder3 = Cylinder(5, 20).solid()
+        cylinder4 = Rotation(0, 90, 0) * cylinder3
 
-        # vertices6, edges6 = box1.ocp_section(box2.faces().sort_by(Axis.Z)[-1])
+        vertices5, edges5 = cylinder3._ocp_section(cylinder4)
+        self.assertGreaterEqual(len(vertices5), 0)
+        self.assertGreaterEqual(len(edges5), 2)
+        self.assertTrue(all(e.geom_type == GeomType.ELLIPSE for e in edges5))
 
     def test_copy_attributes_to(self):
         box = Box(1, 1, 1)
@@ -616,6 +629,58 @@ class TestShape(unittest.TestCase):
         self.assertIsNone(Vertex(1, 1, 1).solid())
         self.assertIsNone(Vertex(1, 1, 1).compound())
 
+
+class TestGlobalLocation(unittest.TestCase):
+    def test_global_location_hierarchy(self):
+        # Create a hierarchy: root → child → grandchild
+        root = Box(1, 1, 1)
+        root.location = Location((10, 0, 0))
+
+        child = Box(1, 1, 1)
+        child.location = Location((0, 20, 0))
+        child.parent = root
+
+        grandchild = Box(1, 1, 1)
+        grandchild.location = Location((0, 0, 30))
+        grandchild.parent = child
+
+        # Compute expected global location manually
+        expected_location = root.location * child.location * grandchild.location
+
+        self.assertAlmostEqual(
+            grandchild.global_location.position, expected_location.position
+        )
+        self.assertAlmostEqual(
+            grandchild.global_location.orientation, expected_location.orientation
+        )
+
+    def test_global_location_in_assembly(self):
+        cone = Cone(2, 1, 3)
+        cone.label = "Cone"
+        box = Box(1, 2, 3)
+        box.label = "Box"
+        sphere = Sphere(1)
+        sphere.label = "Sphere"
+
+        assembly1 = Compound(label="Assembly1", children=[cone])
+        assembly1.move(Location((3, 3, 3), (90, 0, 0)))
+        assembly2 = Compound(label="Assembly2", children=[assembly1, box])
+        assembly2.move(Location((2, 4, 6), (0, 0, 90)))
+        assembly3 = Compound(label="Assembly3", children=[assembly2, sphere])
+        assembly3.move(Location((3, 6, 9)))
+        deep_shape: Shape = next(
+            iter(PreOrderIter(assembly3, filter_=lambda n: n.label in ("Cone")))
+        )
+        # print(deep_shape.path)
+        self.assertAlmostEqual(
+            deep_shape.global_location.position, (2, 13, 18), places=6
+        )
+        self.assertAlmostEqual(
+            deep_shape.global_location.orientation, (0, 90, 90), places=6
+        )
+
+
+from ocp_vscode import show
 
 if __name__ == "__main__":
     unittest.main()

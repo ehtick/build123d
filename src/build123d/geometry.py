@@ -1798,14 +1798,14 @@ class Location:
         self.location_index = 0
         return self
 
-    def __next__(self):
+    def __next__(self) -> Vector:
         """return the next value"""
         transformation = self.wrapped.Transformation()
         trans = transformation.TranslationPart()
         rot = transformation.GetRotation()
         rv_trans: Vector = Vector(trans.X(), trans.Y(), trans.Z())
         rv_rot: Vector = Vector(
-            degrees(a) for a in rot.GetEulerAngles(gp_EulerSequence.gp_Intrinsic_XYZ)
+            *[degrees(a) for a in rot.GetEulerAngles(gp_EulerSequence.gp_Intrinsic_XYZ)]
         )  # type: ignore[assignment]
         if self.location_index == 0:
             self.location_index += 1

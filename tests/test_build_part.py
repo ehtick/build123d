@@ -28,7 +28,7 @@ license:
 
 import unittest
 from math import pi, sin
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 from build123d import *
 from build123d import LocationList, WorkplaneList
@@ -411,6 +411,12 @@ class TestLoft(unittest.TestCase):
         test = loft(sections=[r.face(), v1], ruled=True)
         self.assertAlmostEqual(test.volume, 1, 5)
 
+    def test_loft_invalid_vertex(self):
+        lower_section = Face.make_rect(10, 10) - Face.make_rect(8, 8)
+        upper_section = Pos(Z=5) * lower_section
+        with self.assertRaises(ValueError):
+            loft([lower_section, Vertex(0, 0, 2.5), upper_section])
+
     def test_loft_no_sections_assert(self):
         with BuildPart() as test:
             with self.assertRaises(ValueError):
@@ -431,6 +437,24 @@ class TestLoft(unittest.TestCase):
                 Circle(1)
             with self.assertRaises(ValueError):
                 loft(sections=[v1, v2, s.sketch])
+
+    def test_loft_with_hole(self):
+        lower_section = Face.make_rect(10, 10) - Face.make_rect(8, 8)
+        upper_section = Pos(Z=5) * lower_section
+        loft_with_hole = loft([lower_section, upper_section])
+        self.assertAlmostEqual(loft_with_hole.volume, 10 * 10 * 5 - 8 * 8 * 5, 5)
+
+    def test_loft_with_two_holes(self):
+        lower_section = Text("B", font_size=10)
+        upper_section = Pos(Z=5) * lower_section
+        with self.assertRaises(ValueError):
+            loft([lower_section, upper_section])
+
+    def test_loft_with_inconsistent_holes(self):
+        lower_section = Text("B", font_size=10)
+        upper_section = Pos(Z=5) * Face.make_rect(10, 10)
+        with self.assertRaises(ValueError):
+            loft([lower_section, upper_section])
 
 
 class TestRevolve(unittest.TestCase):

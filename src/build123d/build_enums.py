@@ -28,7 +28,7 @@ license:
 
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import Enum, auto, IntEnum, unique
 from typing import Union
 
 from typing import TypeAlias
@@ -87,6 +87,28 @@ class CenterOf(Enum):
 
     def __repr__(self):
         return f"<{self.__class__.__name__}.{self.name}>"
+
+
+@unique
+class ContinuityLevel(IntEnum):
+    """
+    Continuity level for evaluating geometric connections.
+
+    Used to determine how smoothly adjacent geometry joins together,
+    such as at shared vertices between edges or shared edges between faces.
+
+    Levels:
+
+    - C0 (G0): Positional continuity—elements meet at a point but may have sharp angles.
+    - C1 (G1): Tangent continuity—elements have the same tangent direction at the junction.
+    - C2 (G2): Curvature continuity—elements have matching curvature at the junction.
+
+    These levels correspond to common CAD definitions and are compatible with OCCT's GeomAbs_Shape.
+    """
+
+    C0 = 0
+    C1 = 1
+    C2 = 2
 
 
 class Extrinsic(Enum):
