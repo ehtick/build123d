@@ -172,7 +172,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     Args:
         obj (TopoDS_Shape, optional): OCCT object. Defaults to None.
         label (str, optional): Defaults to ''.
-        color (Color, optional): Defaults to None.
+        color (ColorLike, optional): Defaults to None.
         parent (Compound, optional): assembly parent. Defaults to None.
 
     Attributes:
@@ -284,7 +284,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         self,
         obj: TopoDS_Shape | None = None,
         label: str = "",
-        color: Color | ColorLike | None = None,
+        color: ColorLike | None = None,
         parent: Compound | None = None,
     ):
         self.wrapped: TOPODS | None = (
@@ -339,7 +339,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return node_color
 
     @color.setter
-    def color(self, value: Color | ColorLike | None) -> None:
+    def color(self, value: ColorLike | None) -> None:
         """Set the shape's color"""
         self._color = Color(value) if value is not None else None
 

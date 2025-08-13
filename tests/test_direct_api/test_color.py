@@ -130,9 +130,11 @@ class TestColor(unittest.TestCase):
         red_color_likes = [
             Quantity_ColorRGBA(1, 0, 0, 1),
             "red",
+            "red ",
             ("red",),
             ("red", 1),
             "#ff0000",
+            " #ff0000 ",
             ("#ff0000",),
             ("#ff0000", 1),
             0xff0000,

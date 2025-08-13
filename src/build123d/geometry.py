@@ -1332,6 +1332,7 @@ class Color:
 
     @staticmethod
     def _rgb_from_str(name: str) -> tuple:
+        name = name.strip()
         if "#" not in name:
             try:
                 # Use css3 color names by default
