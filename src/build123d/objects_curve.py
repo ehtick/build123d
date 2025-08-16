@@ -1272,7 +1272,7 @@ class PointArcTangentArc(BaseEdgeObject):
 
         # Confirm new tangent point is colinear with point tangent on arc
         arc_dir = arc.tangent_at(tangent_point)
-        if tangent_dir.cross(arc_dir).length > TOLERANCE:
+        if tangent_dir.cross(arc_dir).length > TOLERANCE * 10:
             raise RuntimeError("No tangent arc found, found tangent out of tolerance.")
 
         arc = TangentArc(arc_point, tangent_point, tangent=arc_tangent)

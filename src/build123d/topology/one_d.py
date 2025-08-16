@@ -484,6 +484,52 @@ class Mixin1D(Shape):
 
         return result
 
+    def derivative_at(
+        self,
+        position: float | VectorLike,
+        order: int = 2,
+        position_mode: PositionMode = PositionMode.PARAMETER,
+    ) -> Vector:
+        """Derivative At
+
+        Generate a derivative along the underlying curve.
+
+        Args:
+            position (float | VectorLike): distance, parameter value or point
+            order (int): derivative order. Defaults to 2
+            position_mode (PositionMode, optional): position calculation mode. Defaults to
+                PositionMode.PARAMETER.
+
+        Raises:
+            ValueError: position must be a float or a point
+
+        Returns:
+            Vector: position on the underlying curve
+        """
+        if isinstance(position, (float, int)):
+            comp_curve, occt_param = self._occt_param_at(position, position_mode)
+        else:
+            try:
+                point_on_curve = Vector(position)
+            except Exception as exc:
+                raise ValueError("position must be a float or a point") from exc
+            if isinstance(self, Wire):
+                closest_edge = min(
+                    self.edges(), key=lambda e: e.distance_to(point_on_curve)
+                )
+            else:
+                closest_edge = self
+            u_value = closest_edge.param_at_point(point_on_curve)
+            comp_curve, occt_param = closest_edge._occt_param_at(u_value)
+
+        derivative_gp_vec = comp_curve.DN(occt_param, order)
+        if derivative_gp_vec.Magnitude() == 0:
+            return Vector(0, 0, 0)
+
+        if self.is_forward:
+            return Vector(derivative_gp_vec)
+        return Vector(derivative_gp_vec) * -1
+
     def edge(self) -> Edge | None:
         """Return the Edge"""
         return Shape.get_single_shape(self, "Edge")
@@ -822,11 +868,11 @@ class Mixin1D(Shape):
         return line
 
     def position_at(
-        self, distance: float, position_mode: PositionMode = PositionMode.PARAMETER
+        self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> Vector:
         """Position At
 
-        Generate a position along the underlying curve.
+        Generate a position along the underlying Wire.
 
         Args:
             distance (float): distance or parameter value
@@ -836,18 +882,12 @@ class Mixin1D(Shape):
         Returns:
             Vector: position on the underlying curve
         """
-        curve = self.geom_adaptor()
+        # Find the TopoDS_Edge and parameter on that edge at given position
+        edge_curve_adaptor, occt_edge_param = self._occt_param_at(
+            position, position_mode
+        )
 
-        if position_mode == PositionMode.PARAMETER:
-            if not self.is_forward:
-                distance = 1 - distance
-            param = self.param_at(distance)
-        else:
-            if not self.is_forward:
-                distance = self.length - distance
-            param = self.param_at(distance / self.length)
-
-        return Vector(curve.Value(param))
+        return Vector(edge_curve_adaptor.Value(occt_edge_param))
 
     def positions(
         self,
@@ -1191,51 +1231,10 @@ class Mixin1D(Shape):
             position_mode (PositionMode, optional): position calculation mode.
                 Defaults to PositionMode.PARAMETER.
 
-        Raises:
-            ValueError: invalid position
-
         Returns:
             Vector: tangent value
         """
-
-        if isinstance(position, (float, int)):
-            if not self.is_forward:
-                if position_mode == PositionMode.PARAMETER:
-                    position = 1 - position
-                else:
-                    position = self.length - position
-
-            curve = self.geom_adaptor()
-            if position_mode == PositionMode.PARAMETER:
-                parameter = self.param_at(position)
-            else:
-                parameter = self.param_at(position / self.length)
-        else:
-            try:
-                pnt = Vector(position)
-            except Exception as exc:
-                raise ValueError("position must be a float or a point") from exc
-            # GeomAPI_ProjectPointOnCurve only works with Edges so find
-            # the closest Edge if the shape has multiple Edges.
-            my_edges: list[Edge] = self.edges()
-            distances = [(e.distance_to(pnt), i) for i, e in enumerate(my_edges)]
-            sorted_distances = sorted(distances, key=lambda x: x[0])
-            closest_edge = my_edges[sorted_distances[0][1]]
-            # Get the extreme of the parameter values for this Edge
-            first: float = closest_edge.param_at(0)
-            last: float = closest_edge.param_at(1)
-            # Extract the Geom_Curve from the Shape
-            curve = BRep_Tool.Curve_s(closest_edge.wrapped, first, last)
-            projector = GeomAPI_ProjectPointOnCurve(pnt.to_pnt(), curve)
-            parameter = projector.LowerDistanceParameter()
-
-        tmp = gp_Pnt()
-        res = gp_Vec()
-        curve.D1(parameter, tmp, res)
-
-        if self.is_forward:
-            return Vector(gp_Dir(res))
-        return Vector(gp_Dir(res)) * -1
+        return self.derivative_at(position, 1, position_mode).normalized()
 
     def vertex(self) -> Vertex | None:
         """Return the Vertex"""
@@ -1789,6 +1788,36 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
 
         return return_value
 
+    # def derivative_at(
+    #     self,
+    #     position: float,
+    #     order: int = 2,
+    #     position_mode: PositionMode = PositionMode.PARAMETER,
+    # ) -> Vector:
+    #     """Derivative At
+
+    #     Generate a derivative along the underlying curve.
+
+    #     Args:
+    #         position (float): distance or parameter value
+    #         order (int): derivative order. Defaults to 2
+    #         position_mode (PositionMode, optional): position calculation mode. Defaults to
+    #             PositionMode.PARAMETER.
+
+    #     Returns:
+    #         Vector: position on the underlying curve
+    #     """
+    #     comp_curve, occt_param = self._occt_param_at(position, position_mode)
+    #     derivative_gp_vec = comp_curve.DN(occt_param, order)
+    #     if derivative_gp_vec.Magnitude() == 0:
+    #         return Vector(0, 0, 0)
+    #     else:
+    #         gp_dir = gp_Dir(derivative_gp_vec)
+
+    #     if self.is_forward:
+    #         return Vector(gp_dir)
+    #     return Vector(gp_dir) * -1
+
     def distribute_locations(
         self: Wire | Edge,
         count: int,
@@ -2092,6 +2121,26 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return ShapeList(common_vertices + common_edges)
         return None
 
+    def _occt_param_at(
+        self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
+    ) -> tuple[BRepAdaptor_CompCurve, float]:
+        comp_curve = self.geom_adaptor()
+        length = GCPnts_AbscissaPoint.Length_s(comp_curve)
+
+        if position_mode == PositionMode.PARAMETER:
+            if not self.is_forward:
+                position = 1 - position
+            value = position
+        else:
+            if not self.is_forward:
+                position = self.length - position
+            value = position / self.length
+
+        occt_param = GCPnts_AbscissaPoint(
+            comp_curve, length * value, comp_curve.FirstParameter()
+        ).Parameter()
+        return comp_curve, occt_param
+
     def param_at_point(self, point: VectorLike) -> float:
         """param_at_point
 
@@ -2162,6 +2211,24 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                     return round(float(result.x), TOL_DIGITS)
 
         raise RuntimeError("Unable to find parameter, Edge is too complex")
+
+    # def position_at(
+    #     self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
+    # ) -> Vector:
+    #     """Position At
+
+    #     Generate a position along the underlying curve.
+
+    #     Args:
+    #         position (float): distance or parameter value
+    #         position_mode (PositionMode, optional): position calculation mode. Defaults to
+    #             PositionMode.PARAMETER.
+
+    #     Returns:
+    #         Vector: position on the underlying curve
+    #     """
+    #     comp_curve, occt_param = self._occt_param_at(position, position_mode)
+    #     return Vector(comp_curve.Value(occt_param))
 
     def project_to_shape(
         self,
@@ -2999,6 +3066,50 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
             raise ValueError(f"{point} not on wire")
 
         return distance / wire_length
+
+    def _occt_param_at(
+        self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
+    ) -> tuple[BRepAdaptor_CompCurve, float]:
+        wire_curve_adaptor = self.geom_adaptor()
+
+        if position_mode == PositionMode.PARAMETER:
+            if not self.is_forward:
+                position = 1 - position
+            occt_wire_param = self.param_at(position)
+        else:
+            if not self.is_forward:
+                position = self.length - position
+            occt_wire_param = self.param_at(position / self.length)
+
+        topods_edge_at_position = TopoDS_Edge()
+        occt_edge_params = wire_curve_adaptor.Edge(
+            occt_wire_param, topods_edge_at_position
+        )
+        edge_curve_adaptor = BRepAdaptor_Curve(topods_edge_at_position)
+
+        return edge_curve_adaptor, occt_edge_params[0]
+
+    # def position_at(
+    #     self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
+    # ) -> Vector:
+    #     """Position At
+
+    #     Generate a position along the underlying Wire.
+
+    #     Args:
+    #         distance (float): distance or parameter value
+    #         position_mode (PositionMode, optional): position calculation mode. Defaults to
+    #             PositionMode.PARAMETER.
+
+    #     Returns:
+    #         Vector: position on the underlying curve
+    #     """
+    #     # Find the TopoDS_Edge and parameter on that edge at given position
+    #     edge_curve_adaptor, occt_edge_param = self._occt_param_at(
+    #         position, position_mode
+    #     )
+
+    #     return Vector(edge_curve_adaptor.Value(occt_edge_param))
 
     def project_to_shape(
         self,
