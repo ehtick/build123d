@@ -113,6 +113,7 @@ from OCP.GeomAPI import (
 )
 from OCP.GeomAbs import GeomAbs_JoinType
 from OCP.GeomAdaptor import GeomAdaptor_Curve
+from OCP.GeomConvert import GeomConvert_CompCurveToBSplineCurve
 from OCP.GeomFill import (
     GeomFill_CorrectedFrenet,
     GeomFill_Frenet,
@@ -2144,6 +2145,9 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     def param_at_point(self, point: VectorLike) -> float:
         """param_at_point
 
+        Returns a normalized u value (between 0.0 and 1.0) representing
+        the position on the Edge that is closest to the given point.
+
         Args:
             point (VectorLike): point on Edge
 
@@ -2152,27 +2156,47 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             RuntimeError: failed to find parameter
 
         Returns:
-            float: parameter value at point on edge
+            float: normalized u value at point on edge
         """
 
-        # Note that this search algorithm would ideally be replaced with
-        # an OCP based solution, something like that which is shown below.
-        # However, there are known issues with the OCP methods for some
-        # curves which may return negative values or incorrect values at
-        # end points. Also note that this search takes about 1.3ms on a
-        # complex curve while the OCP methods take about 0.4ms.
-        #
-        # curve = BRep_Tool.Curve_s(self.wrapped, float(), float())
-        # param_min, param_max = BRep_Tool.Range_s(self.wrapped)
-        # projector = GeomAPI_ProjectPointOnCurve(point.to_pnt(), curve)
-        # param_value = projector.LowerDistanceParameter()
-        # u_value = (param_value - param_min) / (param_max - param_min)
+        pnt = Vector(point)
+        # Extract the edge's end parameters
+        param_min, param_max = BRep_Tool.Range_s(self.wrapped)
+        param_range = param_max - param_min
 
-        point = Vector(point)
+        # Method 1: the point is a Vertex
 
-        separation = self.distance_to(point)
+        # Check to see if the point is a Vertex of the Edge
+        # Note: on a closed edge a single point is ambiguous so the result
+        # is undefined with respect to matching the "start" or "end".
+        nearest_vertex = min(self.vertices(), key=lambda v: (Vector(v) - pnt).length)
+        if (Vector(nearest_vertex) - pnt).length <= TOLERANCE:
+            param = BRep_Tool.Parameter_s(nearest_vertex.wrapped, self.wrapped)
+            return (param - param_min) / param_range
+
+        separation = self.distance_to(pnt)
         if not isclose_b(separation, 0, abs_tol=TOLERANCE):
-            raise ValueError(f"point ({point}) is {separation} from edge")
+            raise ValueError(f"point ({pnt}) is {separation} from edge")
+
+        # Method 2: project the point onto the edge
+        # There are known issues with the OCP methods for some
+        # curves which may return negative values or incorrect values at
+        # end points.
+
+        # Extract the normalized parameter using OCCT GeomAPI_ProjectPointOnCurve
+        curve = BRep_Tool.Curve_s(self.wrapped, float(), float())
+        projector = GeomAPI_ProjectPointOnCurve(pnt.to_pnt(), curve)
+        param = projector.LowerDistanceParameter()
+        # Note that for some periodic curves the LowerDistanceParameter might
+        # be outside the given range
+        u_value = ((param - param_min) % param_range) / param_range
+        # Validate that GeomAPI_ProjectPointOnCurve worked correctly
+        if (self.position_at(u_value) - pnt).length < TOLERANCE:
+            return u_value
+
+        # Method 3: search the edge for the point
+        # Note that this search takes about 1.3ms on a complex curve while the
+        # OCP methods take about 0.4ms.
 
         # This algorithm finds the normalized [0, 1] parameter of a point on an edge
         # by minimizing the 3D distance between the edge and the given point.
@@ -2195,7 +2219,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 lo, hi = i * step, (i + 1) * step
 
                 result = minimize_scalar(
-                    lambda u: (self.position_at(u) - point).length,
+                    lambda u: (self.position_at(u) - pnt).length,
                     bounds=(lo, hi),
                     method="bounded",
                     options={"xatol": TOLERANCE / 2},
@@ -3028,44 +3052,68 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
     def param_at_point(self, point: VectorLike) -> float:
         """Parameter at point on Wire"""
 
+        # return self._to_bspline().param_at_point(point)
+
         # OCP doesn't support this so this algorithm finds the edge that contains the
         # point, finds the u value/fractional distance of the point on that edge and
         # sums up the length of the edges from the start to the edge with the point.
 
-        wire_length = self.length
-        edge_list = self.edges()
-        target = self.position_at(0)  # To start, find the edge at the beginning
-        distance = 0.0  # distance along wire
-        found = False
+        point_on_curve = Vector(point)
+        closest_edge = min(self.edges(), key=lambda e: e.distance_to(point_on_curve))
+        print(f"{closest_edge.is_forward=}")
+        distance_along_wire = (
+            closest_edge.param_at_point(point_on_curve) * closest_edge.length
+        )
+        wire_explorer = BRepTools_WireExplorer(self.wrapped)
 
-        while edge_list:
-            # Find the edge closest to the target
-            edge = sorted(edge_list, key=lambda e: e.distance_to(target))[0]
-            edge_list.pop(edge_list.index(edge))
+        while wire_explorer.More():
+            topods_edge = wire_explorer.Current()
+            # Skip degenerate edges
+            if BRep_Tool.Degenerated_s(topods_edge):
+                wire_explorer.Next()
+                continue
 
-            # The edge might be flipped requiring the u value to be reversed
-            edge_p0 = edge.position_at(0)
-            edge_p1 = edge.position_at(1)
-            flipped = (target - edge_p0).length > (target - edge_p1).length
-
-            # Set the next start to "end" of the current edge
-            target = edge_p0 if flipped else edge_p1
-
-            # If this edge contain the point, get a fractional distance - otherwise the whole
-            if edge.distance_to(point) <= TOLERANCE:
-                found = True
-                u_value = edge.param_at_point(point)
-                if flipped:
-                    distance += (1 - u_value) * edge.length
-                else:
-                    distance += u_value * edge.length
+            if topods_edge.IsEqual(closest_edge.wrapped):
                 break
-            distance += edge.length
+            distance_along_wire += GCPnts_AbscissaPoint.Length_s(
+                BRepAdaptor_Curve(topods_edge)
+            )
+            wire_explorer.Next()
 
-        if not found:
-            raise ValueError(f"{point} not on wire")
+        return distance_along_wire / self.length
+        # edge_list = self.edges()
+        # target = self.position_at(0)  # To start, find the edge at the beginning
+        # distance = 0.0  # distance along wire
+        # found = False
 
-        return distance / wire_length
+        # while edge_list:
+        #     # Find the edge closest to the target
+        #     edge = sorted(edge_list, key=lambda e: e.distance_to(target))[0]
+        #     edge_list.pop(edge_list.index(edge))
+
+        #     # The edge might be flipped requiring the u value to be reversed
+        #     edge_p0 = edge.position_at(0)
+        #     edge_p1 = edge.position_at(1)
+        #     flipped = (target - edge_p0).length > (target - edge_p1).length
+
+        #     # Set the next start to "end" of the current edge
+        #     target = edge_p0 if flipped else edge_p1
+
+        #     # If this edge contain the point, get a fractional distance - otherwise the whole
+        #     if edge.distance_to(point) <= TOLERANCE:
+        #         found = True
+        #         u_value = edge.param_at_point(point)
+        #         if flipped:
+        #             distance += (1 - u_value) * edge.length
+        #         else:
+        #             distance += u_value * edge.length
+        #         break
+        #     distance += edge.length
+
+        # if not found:
+        #     raise ValueError(f"{point} not on wire")
+
+        # return distance / wire_length
 
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
@@ -3234,6 +3282,44 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         wire_builder.Build()
 
         return self.__class__.cast(wire_builder.Wire())
+
+    def _to_bspline(self) -> Edge:
+        """Build a single bspline Edge from the wire.
+
+        Note that the result may contain knots (i.e. corners with only C0 continuity)
+        that aren't vertices.
+
+        Raises:
+            RuntimeError: failed to build bspline
+
+        Returns:
+            Edge: of type GeomType.BSPLINE
+        """
+        # Build a single Geom_BSplineCurve from the wire, in *topological order*
+        builder = GeomConvert_CompCurveToBSplineCurve()
+        wire_explorer = BRepTools_WireExplorer(self.wrapped)
+
+        while wire_explorer.More():
+            topods_edge = wire_explorer.Current()
+            # Skip degenerate edges
+            if BRep_Tool.Degenerated_s(topods_edge):
+                wire_explorer.Next()
+                continue
+            param_min, param_max = BRep_Tool.Range_s(topods_edge)
+            new_curve = BRep_Tool.Curve_s(topods_edge, float(), float())
+            trimmed_curve = Geom_TrimmedCurve(new_curve, param_min, param_max)
+
+            # Append this edge's trimmed curve into the composite spline.
+            ok = builder.Add(trimmed_curve, TOLERANCE)
+            if not ok:
+                raise RuntimeError("Failed to build bspline.")
+            wire_explorer.Next()
+
+        edge_builder = BRepBuilderAPI_MakeEdge(builder.BSplineCurve())
+        if not edge_builder.IsDone():
+            raise RuntimeError("Failed to build bspline.")
+
+        return Edge(edge_builder.Edge())
 
     def to_wire(self) -> Wire:
         """Return Wire - used as a pair with Edge.to_wire when self is Wire | Edge"""
