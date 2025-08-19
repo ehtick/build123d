@@ -825,22 +825,40 @@ class Mixin1D(Shape):
         offset_edges = offset_wire.edges()
         return offset_edges[0] if len(offset_edges) == 1 else offset_wire
 
-    def param_at(self, distance: float) -> float:
-        """Parameter along a curve
+    def param_at(self, position: float) -> float:
+        """
+        Map a normalized arc-length position to the underlying OCCT parameter.
 
-        Compute parameter value at the specified normalized distance.
+        The meaning of the returned parameter depends on the type of self:
+
+        - **Edge**: Returns the native OCCT curve parameter corresponding to the
+        given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
+        edges, OCCT may return a value **outside** the edge's nominal parameter
+        range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
+        the period). If you require a value folded into the edge's range, apply a
+        modulo with the parameter span.
+
+        - **Wire**: Returns a *composite* parameter encoding both the edge index
+        and the position within that edge: the **integer part** is the zero-based
+        count of fully traversed edges, and the **fractional part** is the
+        normalized position in `[0.0, 1.0]` along the current edge.
 
         Args:
-            d (float): normalized distance (0.0 >= d >= 1.0)
+            position (float): Normalized arc-length position along the shape,
+                where `0.0` is the start and `1.0` is the end. Values outside
+                `[0.0, 1.0]` are not validated and yield OCCT-dependent results.
 
         Returns:
-            float: parameter value
+            float: OCCT parameter (for edges) **or** composite “edgeIndex + fraction”
+            parameter (for wires), as described above.
+
         """
+
         curve = self.geom_adaptor()
 
         length = GCPnts_AbscissaPoint.Length_s(curve)
         return GCPnts_AbscissaPoint(
-            curve, length * distance, curve.FirstParameter()
+            curve, length * position, curve.FirstParameter()
         ).Parameter()
 
     def perpendicular_line(
@@ -876,7 +894,7 @@ class Mixin1D(Shape):
         Generate a position along the underlying Wire.
 
         Args:
-            distance (float): distance or parameter value
+            position (float): distance or parameter value
             position_mode (PositionMode, optional): position calculation mode. Defaults to
                 PositionMode.PARAMETER.
 
@@ -2125,6 +2143,29 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_CompCurve, float]:
+        """
+        Map a position on this edge to its underlying OCCT parameter.
+
+        This returns the OCCT `BRepAdaptor_CompCurve` for the edge together with
+        the corresponding (non-normalized) curve parameter at the given position.
+        The interpretation of `position` depends on `position_mode`:
+
+        - ``PositionMode.PARAMETER``: `position` is a normalized curve parameter in [0, 1].
+        - ``PositionMode.DISTANCE``: `position` is an arc length distance along the edge.
+
+        Edge orientation (`is_forward`) is taken into account so that positions are
+        measured consistently along the geometric curve.
+
+        Args:
+            position (float): Position along the edge, either a normalized parameter
+                (0-1) or a distance, depending on `position_mode`.
+            position_mode (PositionMode, optional): How to interpret `position`.
+                Defaults to ``PositionMode.PARAMETER``.
+
+        Returns:
+            tuple[BRepAdaptor_CompCurve, float]: The curve adaptor for this edge and
+            the corresponding OCCT curve parameter.
+        """
         comp_curve = self.geom_adaptor()
         length = GCPnts_AbscissaPoint.Length_s(comp_curve)
 
@@ -2143,22 +2184,45 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         return comp_curve, occt_param
 
     def param_at_point(self, point: VectorLike) -> float:
-        """param_at_point
+        """
+        Return the normalized parameter (∈ [0.0, 1.0]) of the location on this edge
+        closest to `point`.
 
-        Returns a normalized u value (between 0.0 and 1.0) representing
-        the position on the Edge that is closest to the given point.
+        This method always returns a **normalized** parameter across the edge's full
+        OCCT parameter range, even though the underlying OCP/OCCT queries work in
+        native (non-normalized) parameters. It is robust to several OCCT quirks:
+
+        1) Vertex snap (fast path)
+        If `point` coincides (within tolerance) with one of the edge's vertices,
+        that vertex's OCCT parameter is used and normalized to [0, 1].
+        Note: for a closed edge, a vertex may represent both start and end; the
+        mapping is therefore ambiguous and either end may be chosen.
+
+        2) Projection via GeomAPI_ProjectPointOnCurve
+        The OCCT projector's `LowerDistanceParameter()` can legitimately return a
+        value **outside** the edge's [param_min, param_max] (e.g., periodic curves
+        or implementation behavior). The result is wrapped back into range using a
+        modulo by the parameter span and then normalized to [0, 1]. The projected
+        answer is accepted only if re-evaluating the 3D point at that normalized
+        parameter is within tolerance of the input `point`.
+
+        3) Fallback numeric search (robust path)
+        If the projector fails the validation, a bounded 1D search is performed
+        over [0, 1] using progressive subdivision and local minimization of the
+        3D distance ‖edge(u) - point‖. The first minimum found under geometric
+        resolution is returned.
 
         Args:
-            point (VectorLike): point on Edge
+            point (VectorLike): A point expected to lie on this edge (within tolerance).
 
         Raises:
-            ValueError: point not on edge
-            RuntimeError: failed to find parameter
-
+            ValueError: If `point` is not on the edge within tolerance.
+            RuntimeError: If no parameter can be found (e.g., extremely pathological
+                curves or numerical failure).
         Returns:
-            float: normalized u value at point on edge
+            float: Normalized parameter in [0.0, 1.0] corresponding to the point's
+            closest location on the edge.
         """
-
         pnt = Vector(point)
         # Extract the edge's end parameters
         param_min, param_max = BRep_Tool.Range_s(self.wrapped)
@@ -2235,24 +2299,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                     return round(float(result.x), TOL_DIGITS)
 
         raise RuntimeError("Unable to find parameter, Edge is too complex")
-
-    # def position_at(
-    #     self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
-    # ) -> Vector:
-    #     """Position At
-
-    #     Generate a position along the underlying curve.
-
-    #     Args:
-    #         position (float): distance or parameter value
-    #         position_mode (PositionMode, optional): position calculation mode. Defaults to
-    #             PositionMode.PARAMETER.
-
-    #     Returns:
-    #         Vector: position on the underlying curve
-    #     """
-    #     comp_curve, occt_param = self._occt_param_at(position, position_mode)
-    #     return Vector(comp_curve.Value(occt_param))
 
     def project_to_shape(
         self,
@@ -3050,74 +3096,83 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return ordered_edges
 
     def param_at_point(self, point: VectorLike) -> float:
-        """Parameter at point on Wire"""
+        """
+        Return the normalized wire parameter for the point closest to this wire.
 
-        # return self._to_bspline().param_at_point(point)
+        This method projects the given point onto the wire, finds the nearest edge,
+        and accumulates arc lengths to determine the fractional position along the
+        entire wire. The result is normalized to the interval [0.0, 1.0], where:
 
-        # OCP doesn't support this so this algorithm finds the edge that contains the
-        # point, finds the u value/fractional distance of the point on that edge and
-        # sums up the length of the edges from the start to the edge with the point.
+        - 0.0 corresponds to the start of the wire
+        - 1.0 corresponds to the end of the wire
 
+        Unlike the edge version of this method, the returned value is **not**
+        an OCCT curve parameter, but a normalized parameter across the wire as a whole.
+
+        Args:
+            point (VectorLike): The point to project onto the wire.
+
+        Returns:
+            float: Normalized parameter in [0.0, 1.0] representing the relative
+            position of the projected point along the wire.
+        """
         point_on_curve = Vector(point)
         closest_edge = min(self.edges(), key=lambda e: e.distance_to(point_on_curve))
-        print(f"{closest_edge.is_forward=}")
         distance_along_wire = (
             closest_edge.param_at_point(point_on_curve) * closest_edge.length
         )
-        wire_explorer = BRepTools_WireExplorer(self.wrapped)
+        # Compensate for different directionss
+        # if closest_edge.is_forward ^ self.is_forward:  # opposite directions
+        #     distance_along_wire = closest_edge.length - distance_along_wire
 
+        # Find all of the edges prior to the closest edge
+        wire_explorer = BRepTools_WireExplorer(self.wrapped)
         while wire_explorer.More():
             topods_edge = wire_explorer.Current()
             # Skip degenerate edges
             if BRep_Tool.Degenerated_s(topods_edge):
                 wire_explorer.Next()
                 continue
-
+            # Stop when we find the closest edge
             if topods_edge.IsEqual(closest_edge.wrapped):
                 break
+            # Add the length of the current edge to the running total
             distance_along_wire += GCPnts_AbscissaPoint.Length_s(
                 BRepAdaptor_Curve(topods_edge)
             )
             wire_explorer.Next()
 
         return distance_along_wire / self.length
-        # edge_list = self.edges()
-        # target = self.position_at(0)  # To start, find the edge at the beginning
-        # distance = 0.0  # distance along wire
-        # found = False
-
-        # while edge_list:
-        #     # Find the edge closest to the target
-        #     edge = sorted(edge_list, key=lambda e: e.distance_to(target))[0]
-        #     edge_list.pop(edge_list.index(edge))
-
-        #     # The edge might be flipped requiring the u value to be reversed
-        #     edge_p0 = edge.position_at(0)
-        #     edge_p1 = edge.position_at(1)
-        #     flipped = (target - edge_p0).length > (target - edge_p1).length
-
-        #     # Set the next start to "end" of the current edge
-        #     target = edge_p0 if flipped else edge_p1
-
-        #     # If this edge contain the point, get a fractional distance - otherwise the whole
-        #     if edge.distance_to(point) <= TOLERANCE:
-        #         found = True
-        #         u_value = edge.param_at_point(point)
-        #         if flipped:
-        #             distance += (1 - u_value) * edge.length
-        #         else:
-        #             distance += u_value * edge.length
-        #         break
-        #     distance += edge.length
-
-        # if not found:
-        #     raise ValueError(f"{point} not on wire")
-
-        # return distance / wire_length
 
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_CompCurve, float]:
+        """
+        Map a position along this wire to the underlying OCCT edge and curve parameter.
+
+        Unlike the edge version, this method determines which constituent edge of the
+        wire contains the requested position, then returns a curve adaptor for that
+        edge together with the corresponding OCCT parameter.
+
+        The interpretation of `position` depends on `position_mode`:
+
+        - ``PositionMode.PARAMETER``: `position` is a normalized parameter in [0, 1]
+        across the entire wire.
+        - ``PositionMode.DISTANCE``: `position` is an arc length distance along the wire.
+
+        Edge and wire orientation (`is_forward`) is respected so that positions are
+        measured consistently along the wire.
+
+        Args:
+            position (float): Position along the wire, either a normalized parameter
+                (0-1) or a distance, depending on `position_mode`.
+            position_mode (PositionMode, optional): How to interpret `position`.
+                Defaults to ``PositionMode.PARAMETER``.
+
+        Returns:
+            tuple[BRepAdaptor_Curve, float]: The curve adaptor for the specific edge
+            at the given position, and the corresponding OCCT parameter on that edge.
+        """
         wire_curve_adaptor = self.geom_adaptor()
 
         if position_mode == PositionMode.PARAMETER:
@@ -3136,28 +3191,6 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         edge_curve_adaptor = BRepAdaptor_Curve(topods_edge_at_position)
 
         return edge_curve_adaptor, occt_edge_params[0]
-
-    # def position_at(
-    #     self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
-    # ) -> Vector:
-    #     """Position At
-
-    #     Generate a position along the underlying Wire.
-
-    #     Args:
-    #         distance (float): distance or parameter value
-    #         position_mode (PositionMode, optional): position calculation mode. Defaults to
-    #             PositionMode.PARAMETER.
-
-    #     Returns:
-    #         Vector: position on the underlying curve
-    #     """
-    #     # Find the TopoDS_Edge and parameter on that edge at given position
-    #     edge_curve_adaptor, occt_edge_param = self._occt_param_at(
-    #         position, position_mode
-    #     )
-
-    #     return Vector(edge_curve_adaptor.Value(occt_edge_param))
 
     def project_to_shape(
         self,
@@ -3284,16 +3317,35 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return self.__class__.cast(wire_builder.Wire())
 
     def _to_bspline(self) -> Edge:
-        """Build a single bspline Edge from the wire.
+        """
+        Collapse this wire into a single BSpline edge (internal use).
 
-        Note that the result may contain knots (i.e. corners with only C0 continuity)
-        that aren't vertices.
+        Concatenates the wire's constituent edges—**in topological order**—into one
+        `Geom_BSplineCurve` using OCP/OCCT's `GeomConvert_CompCurveToBSplineCurve`.
+        Degenerate edges are skipped. The resulting topology is a **single Edge**;
+        former junctions between original edges become **internal spline knots**
+        (C0 corners) but **not vertices**.
+
+        ⚠️ Not intended for general user workflows. The loss of vertex boundaries
+        can make downstream operations (e.g., splitting at vertices, continuity checks,
+        feature recognition) surprising. This is primarily useful for internal tasks
+        that benefit from a single-curve representation (e.g., length/abscissa queries
+        or parameter mapping along the entire wire).
+
+        Behavior & caveats:
+        - Orientation and section order follow the wire's topological sequence.
+        - Junctions with only C0 continuity are preserved as spline knots, not as
+            topological vertices.
+        - The returned edge's parameterization is that of the composite BSpline
+            (not a normalized [0,1] wire parameter).
+        - Failure to append any segment or to build the final edge raises an error.
 
         Raises:
-            RuntimeError: failed to build bspline
+            RuntimeError: If any segment cannot be appended to the composite spline
+                or the final BSpline edge cannot be built.
 
         Returns:
-            Edge: of type GeomType.BSPLINE
+            Edge: A single edge whose geometry is `GeomType.BSPLINE`.
         """
         # Build a single Geom_BSplineCurve from the wire, in *topological order*
         builder = GeomConvert_CompCurveToBSplineCurve()
