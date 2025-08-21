@@ -162,6 +162,10 @@ class TestEdge(unittest.TestCase):
         with self.assertRaises(ValueError):
             line.find_intersection_points(Plane.YZ)
 
+        circle.wrapped = None
+        with self.assertRaises(ValueError):
+            circle.find_intersection_points(line)
+
     # def test_intersections_tolerance(self):
 
     # Multiple operands not currently supported
@@ -387,6 +391,10 @@ class TestEdge(unittest.TestCase):
         geom_surface = Face.make_rect(4, 4).geom_adaptor()
         with self.assertRaises(TypeError):
             Edge.make_line((0, 0), (1, 0))._extend_spline(True, geom_surface)
+        spline = Edge.make_spline([(0, 0), (1,), (2, 0)])
+        spline.wrapped = None
+        with self.assertRaises(ValueError):
+            spline._extend_spline(True, geom_surface)
 
     @patch.object(GeomProjLib, "Project_s", return_value=None)
     def test_extend_spline_failed_snap(self, mock_is_valid):
@@ -394,6 +402,12 @@ class TestEdge(unittest.TestCase):
         spline = Edge.make_spline([(0, 0), (1, 0), (2, 0)])
         with self.assertRaises(RuntimeError):
             spline._extend_spline(True, geom_surface)
+
+    def test_geom_adaptor(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.geom_adaptor()
 
 
 class TestWireToBSpline(unittest.TestCase):

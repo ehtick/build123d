@@ -42,7 +42,7 @@ from build123d.objects_curve import Polyline
 from build123d.objects_part import Box, Cylinder
 from build123d.operations_part import extrude
 from build123d.operations_generic import fillet
-from build123d.topology import Compound, Edge, Face, Solid, Wire
+from build123d.topology import Compound, Edge, Face, Solid, Vertex, Wire
 
 
 class TestMixin1D(unittest.TestCase):
@@ -183,8 +183,12 @@ class TestMixin1D(unittest.TestCase):
             (0, 0, 1),
             5,
         )
+        line = Edge.make_line((0, 0, 0), (1, 1, 1))
         with self.assertRaises(ValueError):
-            Edge.make_line((0, 0, 0), (1, 1, 1)).normal()
+            line.normal()
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.normal()
 
     def test_center(self):
         c = Edge.make_circle(1, start_angle=0, end_angle=180)
@@ -195,6 +199,9 @@ class TestMixin1D(unittest.TestCase):
             5,
         )
         self.assertAlmostEqual(c.center(CenterOf.BOUNDING_BOX), (0, 0.5, 0), 5)
+        c.wrapped = None
+        with self.assertRaises(ValueError):
+            c.center()
 
     def test_location_at(self):
         loc = Edge.make_circle(1).location_at(0.25)
@@ -268,6 +275,9 @@ class TestMixin1D(unittest.TestCase):
         bbox = ellipse.bounding_box()
         self.assertAlmostEqual(bbox.min, (-1, -1, -1), 5)
         self.assertAlmostEqual(bbox.max, (1, 1, 1), 5)
+        circle.wrapped = None
+        with self.assertRaises(ValueError):
+            circle.project(target, (0, 0, -1))
 
     def test_project2(self):
         target = Cylinder(1, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
@@ -282,6 +292,10 @@ class TestMixin1D(unittest.TestCase):
         hole_edges = plate.edges().filter_by(GeomType.CIRCLE)
         self.assertTrue(hole_edges.sort_by(Axis.Z)[-1].is_forward)
         self.assertFalse(hole_edges.sort_by(Axis.Z)[0].is_forward)
+        e = Edge.make_line((0, 0), (1, 0))
+        e.wrapped = None
+        with self.assertRaises(ValueError):
+            e.is_forward
 
     def test_offset_2d(self):
         base_wire = Wire.make_polygon([(0, 0), (1, 0), (1, 1)], close=False)
@@ -384,6 +398,43 @@ class TestMixin1D(unittest.TestCase):
             self.assertEqual(e.topo_parent, phone_case_f)
         phone_case_ff = fillet(perimeter, 1)
         self.assertLess(phone_case_ff.volume, phone_case_f.volume)
+
+    def test_is_closed(self):
+        self.assertTrue(Edge.make_circle(1).is_closed)
+        self.assertTrue(Face.make_rect(1, 1).outer_wire().is_closed)
+        self.assertFalse(Edge.make_line((0, 0), (1, 0)).is_closed)
+        e = Edge.make_circle(1)
+        e.wrapped = None
+        with self.assertRaises(ValueError):
+            e.is_closed
+
+    def test_add(self):
+        e = Edge.make_line((0, 0), (1, 0))
+        e_plus = e + None
+        self.assertTrue(e.is_same(e_plus))
+
+    def test_derivative_at(self):
+        self.assertAlmostEqual(
+            Edge.make_line((0, 0), (1, 0)).derivative_at((0, 0), 2), (0, 0, 0), 5
+        )
+
+    def test_project_to_viewport(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.project_to_viewport((0, 0, 0))
+
+    def test_split(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.split(Plane.XZ.offset(0.5))
+
+    def test_extrude(self):
+        pnt = Vertex(1, 0, 0)
+        pnt.wrapped = None
+        with self.assertRaises(ValueError):
+            Edge.extrude(pnt, (0, 0, 1))
 
 
 if __name__ == "__main__":

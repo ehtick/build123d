@@ -690,7 +690,7 @@ class Axis(metaclass=AxisMeta):
         self.wrapped: gp_Ax1 = gp_ax1  # type: ignore[annotation-unchecked]
 
     @property
-    def position(self):
+    def position(self) -> Vector:
         """The position or origin of the Axis"""
         return Vector(self.wrapped.Location())
 
@@ -700,7 +700,7 @@ class Axis(metaclass=AxisMeta):
         self.wrapped.SetLocation(Vector(position).to_pnt())
 
     @property
-    def direction(self):
+    def direction(self) -> Vector:
         """The normalized direction of the Axis"""
         return Vector(self.wrapped.Direction())
 
