@@ -451,11 +451,13 @@ class TestShape(unittest.TestCase):
         b = Box(1, 1, 1).locate(Pos(2, 2, 0))
         b.color = Color("blue")  # Blue
         c = Cylinder(1, 1).locate(Pos(-2, 2, 0))
+        c.color = "red"
         a = Compound(children=[b, c])
         a.color = Color(0, 1, 0)
-        # Check that assigned colors stay and iheritance works
+        # Check that assigned colors stay and inheritance works
         np.testing.assert_allclose(tuple(a.color), (0, 1, 0, 1), 1e-5)
         np.testing.assert_allclose(tuple(b.color), (0, 0, 1, 1), 1e-5)
+        np.testing.assert_allclose(tuple(c.color), (1, 0, 0, 1), 1e-5)
 
     def test_ocp_section(self):
         # Vertex

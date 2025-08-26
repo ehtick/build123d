@@ -47,6 +47,7 @@ dependencies = [
     "trianglesolver",
     "sympy",
     "scipy",
+    "webcolors ~= 24.8.0",
 ]
 
 [project.urls]
