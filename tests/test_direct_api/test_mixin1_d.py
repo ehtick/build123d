@@ -354,6 +354,11 @@ class TestMixin1D(unittest.TestCase):
         self.assertAlmostEqual(common.z_dir.Y, 0, 5)
         self.assertAlmostEqual(common.z_dir.Z, 0, 5)
 
+    def test_discretize(self):
+        edge = Edge.make_circle(2, start_angle=0, end_angle=180)
+        points = edge.discretize(0.1)
+        self.assertEqual(len(points), 6)
+
     def test_edge_volume(self):
         edge = Edge.make_line((0, 0), (1, 1))
         self.assertAlmostEqual(edge.volume, 0, 5)
