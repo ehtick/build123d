@@ -201,7 +201,7 @@ def import_step(filename: PathLike | str | bytes) -> Compound:
             else:
                 sub_shape = topods_lut[type(sub_topo_shape)](sub_topo_shape)
 
-            sub_shape.color = Color(get_color(sub_topo_shape))
+            sub_shape.color = get_color(sub_topo_shape)
             sub_shape.label = get_name(ref_tdf_label)
             sub_shape.move(Location(shape_tool.GetLocation_s(sub_tdf_label)))
 

@@ -31,9 +31,11 @@ import unittest
 
 import numpy as np
 from build123d.geometry import Color
+from OCP.Quantity import Quantity_ColorRGBA
 
 
 class TestColor(unittest.TestCase):
+    # name + alpha overload
     def test_name1(self):
         c = Color("blue")
         np.testing.assert_allclose(tuple(c), (0, 0, 1, 1), 1e-5)
@@ -46,6 +48,7 @@ class TestColor(unittest.TestCase):
         c = Color("blue", 0.5)
         np.testing.assert_allclose(tuple(c), (0, 0, 1, 0.5), 1e-5)
 
+    # red + green + blue + alpha overload
     def test_rgb0(self):
         c = Color(0.0, 1.0, 0.0)
         np.testing.assert_allclose(tuple(c), (0, 1, 0, 1), 1e-5)
@@ -65,14 +68,7 @@ class TestColor(unittest.TestCase):
         c = Color(red=0.1, green=0.2, blue=0.3, alpha=0.5)
         np.testing.assert_allclose(tuple(c), (0.1, 0.2, 0.3, 0.5), 1e-5)
 
-    def test_bad_color_name(self):
-        with self.assertRaises(ValueError):
-            Color("build123d")
-
-    def test_to_tuple(self):
-        c = Color("blue", alpha=0.5)
-        np.testing.assert_allclose(tuple(c), (0, 0, 1, 0.5), 1e-5)
-
+    # hex (int) + alpha overload
     def test_hex(self):
         c = Color(0x996692)
         np.testing.assert_allclose(
@@ -98,6 +94,11 @@ class TestColor(unittest.TestCase):
         c = Color(0, 0, 1, 1)
         np.testing.assert_allclose(tuple(c), (0, 0, 1, 1), 1e-5)
 
+    # Methods
+    def test_to_tuple(self):
+        c = Color("blue", alpha=0.5)
+        np.testing.assert_allclose(tuple(c), (0, 0, 1, 0.5), 1e-5)
+
     def test_copy(self):
         c = Color(0.1, 0.2, 0.3, alpha=0.4)
         c_copy = copy.copy(c)
@@ -105,8 +106,12 @@ class TestColor(unittest.TestCase):
 
     def test_str_repr(self):
         c = Color(1, 0, 0)
-        self.assertEqual(str(c), "Color: (1.0, 0.0, 0.0, 1.0) ~ RED")
+        self.assertEqual(str(c), "Color: (1.0, 0.0, 0.0, 1.0) is 'RED'")
         self.assertEqual(repr(c), "Color(1.0, 0.0, 0.0, 1.0)")
+
+        c = Color(1, .5, 0)
+        self.assertEqual(str(c), "Color: (1.0, 0.5, 0.0, 1.0) near 'DARKGOLDENROD1'")
+        self.assertEqual(repr(c), "Color(1.0, 0.5, 0.0, 1.0)")
 
     def test_tuple(self):
         c = Color((0.1,))
@@ -117,9 +122,73 @@ class TestColor(unittest.TestCase):
         np.testing.assert_allclose(tuple(c), (0.1, 0.2, 0.3, 1.0), 1e-5)
         c = Color((0.1, 0.2, 0.3, 0.4))
         np.testing.assert_allclose(tuple(c), (0.1, 0.2, 0.3, 0.4), 1e-5)
-        c = Color(color_tuple=(0.1, 0.2, 0.3, 0.4))
+        c = Color(color_like=(0.1, 0.2, 0.3, 0.4))
         np.testing.assert_allclose(tuple(c), (0.1, 0.2, 0.3, 0.4), 1e-5)
 
+    # color_like overload
+    def test_color_like(self):
+        red_color_likes = [
+            Quantity_ColorRGBA(1, 0, 0, 1),
+            "red",
+            "red ",
+            ("red",),
+            ("red", 1),
+            "#ff0000",
+            " #ff0000 ",
+            ("#ff0000",),
+            ("#ff0000", 1),
+            0xff0000,
+            (0xff0000),
+            (0xff0000, 0xff),
+            (1, 0, 0),
+            (1, 0, 0, 1),
+            (1., 0., 0.),
+            (1., 0., 0., 1.)
+            ]
+        expected = (1, 0, 0, 1)
+        for cl in red_color_likes:
+            np.testing.assert_allclose(tuple(Color(cl)), expected, 1e-5)
+            np.testing.assert_allclose(tuple(Color(color_like=cl)), expected, 1e-5)
+
+        incomplete_color_likes = [
+            (Color(), (1, 1, 1, 1)),
+            (1., (1, 1, 1, 1)),
+            ((1.,), (1, 1, 1, 1)),
+            ((1., 0.), (1, 0, 1, 1)),
+            ]
+        for cl, expected in incomplete_color_likes:
+            np.testing.assert_allclose(tuple(Color(cl)), expected, 1e-5)
+            np.testing.assert_allclose(tuple(Color(color_like=cl)), expected, 1e-5)
+
+        alpha_color_likes = [
+            Quantity_ColorRGBA(1, 0, 0, 0.6),
+            ("red", 0.6),
+            ("#ff0000", 0.6),
+            (0xff0000, 153),
+            (1., 0., 0., 0.6)
+            ]
+        expected = (1, 0, 0, 0.6)
+        for cl in alpha_color_likes:
+            np.testing.assert_allclose(tuple(Color(cl)), expected, 1e-5)
+            np.testing.assert_allclose(tuple(Color(color_like=cl)), expected, 1e-5)
+
+    # Exceptions
+    def test_bad_color_name(self):
+        with self.assertRaises(ValueError):
+            Color("build123d")
+
+    def test_bad_color_type(self):
+        with self.assertRaises(TypeError):
+            Color(dict({"name": "red", "alpha": 1}))
+
+        with self.assertRaises(TypeError):
+            Color("red", "blue")
+
+        with self.assertRaises(TypeError):
+            Color(1., "blue")
+
+        with self.assertRaises(TypeError):
+            Color(1, "blue")
 
 if __name__ == "__main__":
     unittest.main()
