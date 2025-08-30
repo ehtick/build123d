@@ -32,9 +32,11 @@ import unittest
 
 import numpy as np
 from build123d.build_enums import Side
-from build123d.geometry import Axis, Color, Location
-from build123d.objects_curve import Polyline, Spline
+from build123d.build_line import BuildLine
+from build123d.geometry import Axis, Color, Location, Plane, Vector
+from build123d.objects_curve import Line, PolarLine, Polyline, Spline
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
+from build123d.operations_generic import fillet
 from build123d.topology import Edge, Face, Wire
 
 
@@ -172,6 +174,20 @@ class TestWire(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             w1.param_at_point((20, 20, 20))
+
+    def test_param_at_point_reversed_edges(self):
+        with BuildLine(Plane.YZ) as wing_line:
+            l1 = Line((0, 65), (80 / 2 + 1.526 * 4, 65))
+            PolarLine(
+                l1 @ 1, 20.371288916, direction=Vector(0, 1, 0).rotate(Axis.X, -75)
+            )
+            fillet(wing_line.vertices(), 7)
+
+        w = wing_line.wire()
+        params = [w.param_at_point(w @ (i / 20)) for i in range(21)]
+        self.assertTrue(params == sorted(params))
+        for i, param in enumerate(params):
+            self.assertAlmostEqual(param, i / 20, 6)
 
     def test_order_edges(self):
         w1 = Wire(
