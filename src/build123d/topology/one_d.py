@@ -80,7 +80,7 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeWire,
     BRepBuilderAPI_NonManifoldWire,
 )
-from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_SupportType
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepLib import BRepLib, BRepLib_FindSurface
@@ -2266,7 +2266,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         param = projector.LowerDistanceParameter()
         # Note that for some periodic curves the LowerDistanceParameter might
         # be outside the given range
-        u_value = ((param - param_min) % param_range) / param_range
+        curve_adaptor = BRepAdaptor_Curve(self.wrapped)
+        if curve_adaptor.IsPeriodic():
+            u_value = ((param - param_min) % curve_adaptor.Period()) / param_range
+        else:
+            u_value = (param - param_min) / param_range
         # Validate that GeomAPI_ProjectPointOnCurve worked correctly
         if (self.position_at(u_value) - pnt).length < TOLERANCE:
             return u_value
@@ -3180,14 +3184,46 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
             raise ValueError("Can't find point on empty wire")
 
         point_on_curve = Vector(point)
-        closest_edge = min(self.edges(), key=lambda e: e.distance_to(point_on_curve))
-        assert closest_edge.wrapped is not None
-        distance_along_wire = (
-            closest_edge.param_at_point(point_on_curve) * closest_edge.length
+
+        separation = self.distance_to(point)
+        if not isclose_b(separation, 0, abs_tol=TOLERANCE):
+            raise ValueError(f"point ({point}) is {separation} from wire")
+
+        extrema = BRepExtrema_DistShapeShape(
+            Vertex(point_on_curve).wrapped, self.wrapped
         )
-        # Compensate for different directionss
-        # if closest_edge.is_forward ^ self.is_forward:  # opposite directions
-        #     distance_along_wire = closest_edge.length - distance_along_wire
+        extrema.Perform()
+        if not extrema.IsDone() or extrema.NbSolution() == 0:
+            raise ValueError("point is not on Wire")
+
+        supp_type = extrema.SupportTypeShape2(1)
+
+        if supp_type == BRepExtrema_SupportType.BRepExtrema_IsOnEdge:
+            closest_topods_edge = downcast(extrema.SupportOnShape2(1))
+            closest_topods_edge_param = extrema.ParOnEdgeS2(1)[0]
+        elif supp_type == BRepExtrema_SupportType.BRepExtrema_IsVertex:
+            v_hit = downcast(extrema.SupportOnShape2(1))
+            vertex_edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
+            TopExp.MapShapesAndAncestors_s(
+                self.wrapped, ta.TopAbs_VERTEX, ta.TopAbs_EDGE, vertex_edge_map
+            )
+            closest_topods_edge = downcast(vertex_edge_map.FindFromKey(v_hit).First())
+            closest_topods_edge_param = BRep_Tool.Parameter_s(
+                v_hit, closest_topods_edge
+            )
+
+        curve_adaptor = BRepAdaptor_Curve(closest_topods_edge)
+        param_min, param_max = BRep_Tool.Range_s(closest_topods_edge)
+        if curve_adaptor.IsPeriodic():
+            closest_topods_edge_param = (
+                (closest_topods_edge_param - param_min) % curve_adaptor.Period()
+            ) + param_min
+        param_pair = (
+            (param_min, closest_topods_edge_param)
+            if closest_topods_edge.Orientation() == TopAbs_Orientation.TopAbs_FORWARD
+            else (closest_topods_edge_param, param_max)
+        )
+        distance_along_wire = GCPnts_AbscissaPoint.Length_s(curve_adaptor, *param_pair)
 
         # Find all of the edges prior to the closest edge
         wire_explorer = BRepTools_WireExplorer(self.wrapped)
@@ -3198,7 +3234,7 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
                 wire_explorer.Next()
                 continue
             # Stop when we find the closest edge
-            if topods_edge.IsEqual(closest_edge.wrapped):
+            if topods_edge.IsEqual(closest_topods_edge):
                 break
             # Add the length of the current edge to the running total
             distance_along_wire += GCPnts_AbscissaPoint.Length_s(

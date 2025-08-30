@@ -30,8 +30,6 @@ import unittest
 from math import sqrt, pi
 from build123d import *
 
-from ocp_vscode import show
-
 
 def _assertTupleAlmostEquals(self, expected, actual, places, msg=None):
     """Check Tuples"""
@@ -675,9 +673,6 @@ class BuildLineTests(unittest.TestCase):
 
                 # Check coincidence, tangency with each arc
                 _, p1, p2 = start_arc.distance_to_with_closest_points(l1)
-                a1 = Axis(p1, start_arc.tangent_at(p1))
-                a2 = Axis(p2, l1.tangent_at(p2))
-                show(start_arc, l1, p1, p2, a1, a2)
                 self.assertTupleAlmostEquals(tuple(p1), tuple(p2), 5)
                 self.assertAlmostEqual(
                     start_arc.tangent_at(p1).cross(l1.tangent_at(p2)).length, 0, 5

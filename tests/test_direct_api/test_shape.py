@@ -680,7 +680,5 @@ class TestGlobalLocation(unittest.TestCase):
         )
 
 
-from ocp_vscode import show
-
 if __name__ == "__main__":
     unittest.main()
