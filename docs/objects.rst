@@ -158,14 +158,14 @@ The following objects all can be used in BuildLine contexts. Note that
         .. image:: assets/radius_arc_example.svg
 
         +++
-        Arc define by two points and a radius
+        Arc defined by two points and a radius
 
     .. grid-item-card:: :class:`~objects_curve.SagittaArc`
 
         .. image:: assets/sagitta_arc_example.svg
 
         +++
-        Arc define by two points and a sagitta
+        Arc defined by two points and a sagitta
 
     .. grid-item-card:: :class:`~objects_curve.Spline`
 
@@ -179,14 +179,14 @@ The following objects all can be used in BuildLine contexts. Note that
         .. image:: assets/tangent_arc_example.svg
 
         +++
-        Curve define by two points and a tangent
+        Arc defined by two points and a tangent
 
     .. grid-item-card:: :class:`~objects_curve.ThreePointArc`
 
         .. image:: assets/three_point_arc_example.svg
 
         +++
-        Curve define by three points
+        Arc defined by three points
 
     .. grid-item-card:: :class:`~objects_curve.ArcArcTangentLine`
 
