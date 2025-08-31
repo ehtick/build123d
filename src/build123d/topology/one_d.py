@@ -534,12 +534,15 @@ class Mixin1D(Shape):
         if derivative_gp_vec.Magnitude() == 0:
             return Vector(0, 0, 0)
 
-        edge_same_as_wire = closest_forward == self.is_forward
-        derivative = (
-            -Vector(derivative_gp_vec)
-            if (not edge_same_as_wire) and (order % 2 == 1)
-            else Vector(derivative_gp_vec)
-        )
+        derivative = Vector(derivative_gp_vec)
+        # Potentially flip the direction of the derivative
+        if order % 2 == 1:
+            if isinstance(self, Wire):
+                edge_same_as_wire = closest_forward == self.is_forward
+                derivative = derivative if edge_same_as_wire else -derivative
+            else:
+                derivative = derivative if self.is_forward else -derivative
+
         return derivative
 
     def edge(self) -> Edge | None:
