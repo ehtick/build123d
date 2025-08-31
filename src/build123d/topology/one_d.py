@@ -796,20 +796,31 @@ class Mixin1D(Shape):
 
         if side != Side.BOTH:
             # Find and remove the end arcs
-            offset_edges = offset_wire.edges()
-            edges_to_keep: list[list[Edge]] = [[], [], []]
-            i = 0
-            for edge in offset_edges:
-                if edge.geom_type == GeomType.CIRCLE and (
-                    edge.arc_center == line.position_at(0)
-                    or edge.arc_center == line.position_at(1)
-                ):
-                    i += 1
-                else:
-                    edges_to_keep[i].append(edge)
-            edges_to_keep[0] += edges_to_keep[2]
-            wires = [Wire(edges) for edges in edges_to_keep[0:2]]
+            # offset_edges = offset_wire.edges()
+            # edges_to_keep: list[list[Edge]] = [[], [], []]
+            # i = 0
+            # for edge in offset_edges:
+            #     if edge.geom_type == GeomType.CIRCLE and (
+            #         edge.arc_center == line.position_at(0)
+            #         or edge.arc_center == line.position_at(1)
+            #     ):
+            #         i += 1
+            #     else:
+            #         edges_to_keep[i].append(edge)
+            # edges_to_keep[0] += edges_to_keep[2]
+            # wires = [Wire(edges) for edges in edges_to_keep[0:2]]
+            endpoints = (line.position_at(0), line.position_at(1))
+            offset_edges = offset_wire.edges().filter_by(
+                lambda e: (
+                    e.geom_type == GeomType.CIRCLE
+                    and any((e.arc_center - pt).length < TOLERANCE for pt in endpoints)
+                ),
+                reverse=True,
+            )
+            wires = edges_to_wires(offset_edges)
             centers = [w.position_at(0.5) for w in wires]
+            tangent = line.tangent_at(0)
+            start = line.position_at(0)
             angles = [
                 line.tangent_at(0).get_signed_angle(c - line.position_at(0))
                 for c in centers
