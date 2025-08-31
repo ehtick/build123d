@@ -515,28 +515,32 @@ class Mixin1D(Shape):
             Vector: position on the underlying curve
         """
         if isinstance(position, (float, int)):
-            comp_curve, occt_param = self._occt_param_at(position, position_mode)
+            comp_curve, occt_param, closest_forward = self._occt_param_at(
+                position, position_mode
+            )
         else:
             try:
                 point_on_curve = Vector(position)
             except Exception as exc:
                 raise ValueError("position must be a float or a point") from exc
             if isinstance(self, Wire):
-                closest_edge = min(
-                    self.edges(), key=lambda e: e.distance_to(point_on_curve)
-                )
+                closest = min(self.edges(), key=lambda e: e.distance_to(point_on_curve))
             else:
-                closest_edge = self
-            u_value = closest_edge.param_at_point(point_on_curve)
-            comp_curve, occt_param = closest_edge._occt_param_at(u_value)
+                closest = self
+            u_value = closest.param_at_point(point_on_curve)
+            comp_curve, occt_param, closest_forward = closest._occt_param_at(u_value)
 
         derivative_gp_vec = comp_curve.DN(occt_param, order)
         if derivative_gp_vec.Magnitude() == 0:
             return Vector(0, 0, 0)
 
-        if self.is_forward:
-            return Vector(derivative_gp_vec)
-        return Vector(derivative_gp_vec) * -1
+        edge_same_as_wire = closest_forward == self.is_forward
+        derivative = (
+            -Vector(derivative_gp_vec)
+            if (not edge_same_as_wire) and (order % 2 == 1)
+            else Vector(derivative_gp_vec)
+        )
+        return derivative
 
     def edge(self) -> Edge | None:
         """Return the Edge"""
@@ -925,7 +929,7 @@ class Mixin1D(Shape):
             Vector: position on the underlying curve
         """
         # Find the TopoDS_Edge and parameter on that edge at given position
-        edge_curve_adaptor, occt_edge_param = self._occt_param_at(
+        edge_curve_adaptor, occt_edge_param, _ = self._occt_param_at(
             position, position_mode
         )
 
@@ -2160,7 +2164,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
 
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
-    ) -> tuple[BRepAdaptor_Curve, float]:
+    ) -> tuple[BRepAdaptor_Curve, float, bool]:
         """
         Map a position on this edge to its underlying OCCT parameter.
 
@@ -2181,8 +2185,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 Defaults to ``PositionMode.PARAMETER``.
 
         Returns:
-            tuple[BRepAdaptor_CompCurve, float]: The curve adaptor for this edge and
-            the corresponding OCCT curve parameter.
+            tuple[BRepAdaptor_CompCurve, float, bool]: The curve adaptor for this edge,
+            the corresponding OCCT curve parameter and is_forward.
         """
         comp_curve = self.geom_adaptor()
         length = GCPnts_AbscissaPoint.Length_s(comp_curve)
@@ -2199,7 +2203,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         occt_param = GCPnts_AbscissaPoint(
             comp_curve, length * value, comp_curve.FirstParameter()
         ).Parameter()
-        return comp_curve, occt_param
+        return comp_curve, occt_param, self.is_forward
 
     def param_at_point(self, point: VectorLike) -> float:
         """
@@ -3257,7 +3261,7 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
 
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
-    ) -> tuple[BRepAdaptor_Curve, float]:
+    ) -> tuple[BRepAdaptor_Curve, float, bool]:
         """
         Map a position along this wire to the underlying OCCT edge and curve parameter.
 
@@ -3282,7 +3286,8 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
 
         Returns:
             tuple[BRepAdaptor_Curve, float]: The curve adaptor for the specific edge
-            at the given position, and the corresponding OCCT parameter on that edge.
+            at the given position, the corresponding OCCT parameter on that edge and
+            if edge is_forward.
         """
         wire_curve_adaptor = self.geom_adaptor()
 
@@ -3301,7 +3306,11 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         )
         edge_curve_adaptor = BRepAdaptor_Curve(topods_edge_at_position)
 
-        return edge_curve_adaptor, occt_edge_params[0]
+        return (
+            edge_curve_adaptor,
+            occt_edge_params[0],
+            topods_edge_at_position.Orientation() == TopAbs_Orientation.TopAbs_FORWARD,
+        )
 
     def project_to_shape(
         self,

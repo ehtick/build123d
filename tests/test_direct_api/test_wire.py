@@ -189,6 +189,20 @@ class TestWire(unittest.TestCase):
         for i, param in enumerate(params):
             self.assertAlmostEqual(param, i / 20, 6)
 
+    def test_tangent_at_reversed_edges(self):
+        with BuildLine(Plane.YZ) as wing_line:
+            l1 = Line((0, 65), (80 / 2 + 1.526 * 4, 65))
+            PolarLine(
+                l1 @ 1, 20.371288916, direction=Vector(0, 1, 0).rotate(Axis.X, -75)
+            )
+            fillet(wing_line.vertices(), 7)
+
+        w = wing_line.wire()
+        self.assertAlmostEqual(
+            w.tangent_at(0), (0, -0.2588190451025, 0.9659258262891), 6
+        )
+        self.assertAlmostEqual(w.tangent_at(1), (0, -1, 0), 6)
+
     def test_order_edges(self):
         w1 = Wire(
             [
