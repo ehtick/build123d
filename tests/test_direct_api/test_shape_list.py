@@ -118,6 +118,24 @@ class TestShapeList(unittest.TestCase):
         self.assertEqual(len(box.edges().filter_by(Axis.X)), 4)
         self.assertEqual(len(box.vertices().filter_by(Axis.X)), 0)
 
+    def test_filter_by_plane(self):
+        c1 = Cylinder(1, 3)
+        c2 = Cylinder(1, 3, rotation=(90, 0, 0))
+
+        sel1 = c1.faces().filter_by(Plane.XY)
+        sel2 = c1.edges().filter_by(Plane.XY)
+        sel3 = c2.faces().filter_by(Plane.XZ)
+        sel4 = c2.edges().filter_by(Plane.XZ)
+        sel5 = c1.wires().filter_by(Plane.XY)
+        sel6 = c2.wires().filter_by(Plane.XZ)
+
+        self.assertEqual(len(sel1), 2)
+        self.assertEqual(len(sel2), 2)
+        self.assertEqual(len(sel3), 2)
+        self.assertEqual(len(sel4), 2)
+        self.assertEqual(len(sel5), 2)
+        self.assertEqual(len(sel6), 2)
+
     def test_filter_by_callable_predicate(self):
         boxes = [Solid.make_box(1, 1, 1) for _ in range(3)]
         boxes[0].label = "A"

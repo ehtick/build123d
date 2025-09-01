@@ -2531,9 +2531,9 @@ class ShapeList(list[T]):
 
         def plane_parallel_predicate(plane: Plane, tolerance: float):
             plane_axis = Axis(plane.origin, plane.z_dir)
-            plane_xyz = plane.z_dir.wrapped.XYZ()
 
             def pred(shape: Shape):
+
                 if shape.is_planar_face:
                     assert shape.wrapped is not None and isinstance(
                         shape.wrapped, TopoDS_Face
@@ -2550,6 +2550,9 @@ class ShapeList(list[T]):
                 if isinstance(shape.wrapped, TopoDS_Wire):
                     return all(pred(e) for e in shape.edges())
                 if isinstance(shape.wrapped, TopoDS_Edge):
+                    plane_xyz = (
+                        plane * Location(shape.location).inverse()
+                    ).z_dir.wrapped.XYZ()
                     for curve in shape.wrapped.TShape().Curves():
                         if curve.IsCurve3D():
                             return ShapeAnalysis_Curve.IsPlanar_s(
