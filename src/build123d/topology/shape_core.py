@@ -72,7 +72,7 @@ from anytree import NodeMixin, RenderTree
 from IPython.lib.pretty import RepresentationPrinter, pretty
 from OCP.Bnd import Bnd_Box, Bnd_OBB
 from OCP.BOPAlgo import BOPAlgo_GlueEnum
-from OCP.BRep import BRep_Tool
+from OCP.BRep import BRep_TEdge, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgoAPI import (
     BRepAlgoAPI_BooleanOperation,
@@ -105,7 +105,7 @@ from OCP.gce import gce_MakeLin
 from OCP.Geom import Geom_Line
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomLib import GeomLib_IsPlanarSurface
-from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
+from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec, gp_XYZ
 from OCP.GProp import GProp_GProps
 from OCP.ShapeAnalysis import ShapeAnalysis_Curve
 from OCP.ShapeCustom import ShapeCustom, ShapeCustom_RestrictionParameters
@@ -518,6 +518,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
             - It is commonly used in structural analysis, mechanical simulations,
               and physics-based motion calculations.
         """
+        if self.wrapped is None:
+            raise ValueError("Can't calculate matrix for empty shape")
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         inertia_matrix = properties.MatrixOfInertia()
@@ -573,6 +575,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (Vector(0, 1, 0), 1000.0),
             (Vector(0, 0, 1), 300.0)]
         """
+        if self.wrapped is None:
+            raise ValueError("Can't calculate properties for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         principal_props = properties.PrincipalProperties()
@@ -610,6 +615,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (150.0, 200.0, 50.0)
 
         """
+        if self.wrapped is None:
+            raise ValueError("Can't calculate moments for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         return properties.StaticMoments()
@@ -1633,6 +1641,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             - The radius of gyration is computed based on the shape’s mass properties.
             - It is useful for evaluating structural stability and rotational behavior.
         """
+        if self.wrapped is None:
+            raise ValueError("Can't calculate radius of gyration for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         return properties.RadiusOfGyration(axis.wrapped)
@@ -1852,12 +1863,16 @@ class Shape(NodeMixin, Generic[TOPODS]):
             raise ValueError("perimeter must be a closed Wire or Edge")
         perimeter_edges = TopTools_SequenceOfShape()
         for perimeter_edge in perimeter.edges():
+            if perimeter_edge.wrapped is None:
+                continue
             perimeter_edges.Append(perimeter_edge.wrapped)
 
         # Split the shells by the perimeter edges
         lefts: list[Shell] = []
         rights: list[Shell] = []
         for target_shell in self.shells():
+            if target_shell.wrapped is None:
+                continue
             constructor = BRepFeat_SplitShape(target_shell.wrapped)
             constructor.Add(perimeter_edges)
             constructor.Build()
@@ -2550,10 +2565,16 @@ class ShapeList(list[T]):
                 if isinstance(shape.wrapped, TopoDS_Wire):
                     return all(pred(e) for e in shape.edges())
                 if isinstance(shape.wrapped, TopoDS_Edge):
-                    plane_xyz = (
-                        plane * Location(shape.location).inverse()
-                    ).z_dir.wrapped.XYZ()
-                    for curve in shape.wrapped.TShape().Curves():
+                    if shape.location is None:
+                        return False
+                    plane_xyz = tcast(
+                        gp_XYZ,
+                        (
+                            tcast(Plane, plane * Location(shape.location).inverse())
+                        ).z_dir.wrapped.XYZ(),
+                    )
+                    t_edge = tcast(BRep_TEdge, shape.wrapped.TShape())
+                    for curve in t_edge.Curves():
                         if curve.IsCurve3D():
                             return ShapeAnalysis_Curve.IsPlanar_s(
                                 curve.Curve3D(), plane_xyz, tolerance
