@@ -31,13 +31,16 @@ import random
 import unittest
 
 import numpy as np
-from build123d.build_enums import Side
+from build123d.topology.shape_core import TOLERANCE
+
+from build123d.build_enums import GeomType, Side
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Color, Location, Plane, Vector
-from build123d.objects_curve import Line, PolarLine, Polyline, Spline
+from build123d.objects_curve import Curve, Line, PolarLine, Polyline, Spline
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import fillet
 from build123d.topology import Edge, Face, Wire
+from OCP.BRepAdaptor import BRepAdaptor_CompCurve
 
 
 class TestWire(unittest.TestCase):
@@ -64,6 +67,9 @@ class TestWire(unittest.TestCase):
         self.assertAlmostEqual(
             squaroid.length, 4 * (1 - 2 * 0.1) + 2 * math.pi * 0.1, 5
         )
+        square.wrapped = None
+        with self.assertRaises(ValueError):
+            square.fillet_2d(0.1, square.vertices())
 
     def test_chamfer_2d(self):
         square = Wire.make_rect(1, 1)
@@ -71,6 +77,18 @@ class TestWire(unittest.TestCase):
         self.assertAlmostEqual(
             squaroid.length, 4 * (1 - 2 * 0.1 + 0.1 * math.sqrt(2)), 5
         )
+        verts = square.vertices()
+        verts[0].wrapped = None
+        three_corners = square.chamfer_2d(0.1, 0.1, verts)
+        self.assertEqual(len(three_corners.edges()), 7)
+
+        square.wrapped = None
+        with self.assertRaises(ValueError):
+            square.chamfer_2d(0.1, 0.1, square.vertices())
+
+    def test_close(self):
+        t = Polyline((0, 0), (1, 0), (0, 1), close=True)
+        self.assertIs(t, t.close())
 
     def test_chamfer_2d_edge(self):
         square = Wire.make_rect(1, 1)
@@ -98,7 +116,15 @@ class TestWire(unittest.TestCase):
         hull_wire = Wire.make_convex_hull(adjoining_edges)
         self.assertAlmostEqual(Face(hull_wire).area, 319.9612, 4)
 
-    # def test_fix_degenerate_edges(self):
+    def test_fix_degenerate_edges(self):
+        e0 = Edge.make_line((0, 0), (1, 0))
+        e1 = Edge.make_line((2, 0), (1, 0))
+
+        w = Wire([e0, e1])
+        w.wrapped = None
+        with self.assertRaises(ValueError):
+            w.fix_degenerate_edges(0.1)
+
     #     # Can't find a way to create one
     #     edge0 = Edge.make_line((0, 0, 0), (1, 0, 0))
     #     edge1 = Edge.make_line(edge0 @ 0, edge0 @ 0 + Vector(0, 1, 0))
@@ -175,6 +201,10 @@ class TestWire(unittest.TestCase):
         with self.assertRaises(ValueError):
             w1.param_at_point((20, 20, 20))
 
+        w1.wrapped = None
+        with self.assertRaises(ValueError):
+            w1.param_at_point((0, 0))
+
     def test_param_at_point_reversed_edges(self):
         with BuildLine(Plane.YZ) as wing_line:
             l1 = Line((0, 65), (80 / 2 + 1.526 * 4, 65))
@@ -216,6 +246,13 @@ class TestWire(unittest.TestCase):
         self.assertAlmostEqual(ordered_edges[1] @ 0, (1, 0, 0), 5)
         self.assertAlmostEqual(ordered_edges[2] @ 0, (1, 1, 0), 5)
 
+    def test_geom_adaptor(self):
+        w = Polyline((0, 0), (1, 0), (1, 1))
+        self.assertTrue(isinstance(w.geom_adaptor(), BRepAdaptor_CompCurve))
+        w.wrapped = None
+        with self.assertRaises(ValueError):
+            w.geom_adaptor()
+
     def test_constructor(self):
         e0 = Edge.make_line((0, 0), (1, 0))
         e1 = Edge.make_line((1, 0), (1, 1))
@@ -241,8 +278,79 @@ class TestWire(unittest.TestCase):
         c0 = Polyline((0, 0), (1, 0), (1, 1))
         w8 = Wire(c0)
         self.assertTrue(w8.is_valid)
+        w9 = Wire(Curve([e0, e1]))
+        self.assertTrue(w9.is_valid)
         with self.assertRaises(ValueError):
             Wire(bob="fred")
+
+
+class TestWireToBSpline(unittest.TestCase):
+    def setUp(self):
+        # A simple rectilinear, multi-segment wire:
+        # p0 ── p1
+        #       │
+        #       p2 ── p3
+        self.p0 = Vector(0, 0, 0)
+        self.p1 = Vector(20, 0, 0)
+        self.p2 = Vector(20, 10, 0)
+        self.p3 = Vector(35, 10, 0)
+
+        e01 = Edge.make_line(self.p0, self.p1)
+        e12 = Edge.make_line(self.p1, self.p2)
+        e23 = Edge.make_line(self.p2, self.p3)
+
+        self.wire = Wire([e01, e12, e23])
+
+    def test_to_bspline_basic_properties(self):
+        bs = self.wire._to_bspline()
+
+        # 1) Type/geom check
+        self.assertIsInstance(bs, Edge)
+        self.assertEqual(bs.geom_type, GeomType.BSPLINE)
+
+        # 2) Endpoint preservation
+        self.assertLess((Vector(bs.vertices()[0]) - self.p0).length, TOLERANCE)
+        self.assertLess((Vector(bs.vertices()[-1]) - self.p3).length, TOLERANCE)
+
+        # 3) Length preservation (within numerical tolerance)
+        self.assertAlmostEqual(bs.length, self.wire.length, delta=1e-6)
+
+        # 4) Topology collapse: single edge has only 2 vertices (start/end)
+        self.assertEqual(len(bs.vertices()), 2)
+
+        # 5) The composite BSpline should pass through former junctions
+        for junction in (self.p1, self.p2):
+            self.assertLess(bs.distance_to(junction), 1e-6)
+
+        # 6) Normalized parameter increases along former junctions
+        u_p1 = bs.param_at_point(self.p1)
+        u_p2 = bs.param_at_point(self.p2)
+        self.assertGreater(u_p1, 0.0)
+        self.assertLess(u_p2, 1.0)
+        self.assertLess(u_p1, u_p2)
+
+        # 7) Re-evaluating at those parameters should be close to the junctions
+        self.assertLess((bs.position_at(u_p1) - self.p1).length, 1e-6)
+        self.assertLess((bs.position_at(u_p2) - self.p2).length, 1e-6)
+
+        w = self.wire
+        w.wrapped = None
+        with self.assertRaises(ValueError):
+            w._to_bspline()
+
+    def test_to_bspline_orientation(self):
+        # Ensure the BSpline follows the wire's topological order
+        bs = self.wire._to_bspline()
+
+        # Start ~ p0, end ~ p3
+        self.assertLess((bs.position_at(0.0) - self.p0).length, 1e-6)
+        self.assertLess((bs.position_at(1.0) - self.p3).length, 1e-6)
+
+        # Parameters at interior points should sit between 0 and 1
+        u0 = bs.param_at_point(self.p1)
+        u1 = bs.param_at_point(self.p2)
+        self.assertTrue(0.0 < u0 < 1.0)
+        self.assertTrue(0.0 < u1 < 1.0)
 
 
 if __name__ == "__main__":

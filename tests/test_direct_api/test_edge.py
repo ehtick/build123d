@@ -32,7 +32,6 @@ import unittest
 
 from unittest.mock import patch, PropertyMock
 
-from build123d.topology.shape_core import TOLERANCE
 from build123d.build_enums import AngularDirection, GeomType, PositionMode, Transition
 from build123d.geometry import Axis, Plane, Vector
 from build123d.objects_curve import CenterArc, EllipticalCenterArc
@@ -187,6 +186,10 @@ class TestEdge(unittest.TestCase):
         with self.assertRaises(ValueError):
             line.trim(0.75, 0.25)
 
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.trim(0.1, 0.9)
+
     def test_trim_to_length(self):
 
         e1 = Edge.make_line((0, 0), (10, 10))
@@ -209,6 +212,10 @@ class TestEdge(unittest.TestCase):
         a4 = Axis((0, 0, 0), (1, 1, 1))
         e4_trim = Edge(a4).trim_to_length(0.5, 2)
         self.assertAlmostEqual(e4_trim.length, 2, 5)
+
+        e1.wrapped = None
+        with self.assertRaises(ValueError):
+            e1.trim_to_length(0.1, 2)
 
     def test_bezier(self):
         with self.assertRaises(ValueError):
@@ -278,6 +285,10 @@ class TestEdge(unittest.TestCase):
         with self.assertRaises(ValueError):
             edge.param_at_point((-1, 1))
 
+        ea.wrapped = None
+        with self.assertRaises(ValueError):
+            ea.param_at_point((15, 5))
+
     def test_param_at_point_bspline(self):
         # Define a complex spline with inflections and non-monotonic behavior
         curve = Edge.make_spline(
@@ -314,6 +325,10 @@ class TestEdge(unittest.TestCase):
 
         e2r = e2.reversed(reconstruct=True)
         self.assertAlmostEqual((e2 @ 0.1).X, -(e2r @ 0.1).X, 5)
+
+        e2.wrapped = None
+        with self.assertRaises(ValueError):
+            e2.reversed()
 
     def test_init(self):
         with self.assertRaises(TypeError):
@@ -408,70 +423,6 @@ class TestEdge(unittest.TestCase):
         line.wrapped = None
         with self.assertRaises(ValueError):
             line.geom_adaptor()
-
-
-class TestWireToBSpline(unittest.TestCase):
-    def setUp(self):
-        # A simple rectilinear, multi-segment wire:
-        # p0 ── p1
-        #       │
-        #       p2 ── p3
-        self.p0 = Vector(0, 0, 0)
-        self.p1 = Vector(20, 0, 0)
-        self.p2 = Vector(20, 10, 0)
-        self.p3 = Vector(35, 10, 0)
-
-        e01 = Edge.make_line(self.p0, self.p1)
-        e12 = Edge.make_line(self.p1, self.p2)
-        e23 = Edge.make_line(self.p2, self.p3)
-
-        self.wire = Wire([e01, e12, e23])
-
-    def test_to_bspline_basic_properties(self):
-        bs = self.wire._to_bspline()
-
-        # 1) Type/geom check
-        self.assertIsInstance(bs, Edge)
-        self.assertEqual(bs.geom_type, GeomType.BSPLINE)
-
-        # 2) Endpoint preservation
-        self.assertLess((Vector(bs.vertices()[0]) - self.p0).length, TOLERANCE)
-        self.assertLess((Vector(bs.vertices()[-1]) - self.p3).length, TOLERANCE)
-
-        # 3) Length preservation (within numerical tolerance)
-        self.assertAlmostEqual(bs.length, self.wire.length, delta=1e-6)
-
-        # 4) Topology collapse: single edge has only 2 vertices (start/end)
-        self.assertEqual(len(bs.vertices()), 2)
-
-        # 5) The composite BSpline should pass through former junctions
-        for junction in (self.p1, self.p2):
-            self.assertLess(bs.distance_to(junction), 1e-6)
-
-        # 6) Normalized parameter increases along former junctions
-        u_p1 = bs.param_at_point(self.p1)
-        u_p2 = bs.param_at_point(self.p2)
-        self.assertGreater(u_p1, 0.0)
-        self.assertLess(u_p2, 1.0)
-        self.assertLess(u_p1, u_p2)
-
-        # 7) Re-evaluating at those parameters should be close to the junctions
-        self.assertLess((bs.position_at(u_p1) - self.p1).length, 1e-6)
-        self.assertLess((bs.position_at(u_p2) - self.p2).length, 1e-6)
-
-    def test_to_bspline_orientation(self):
-        # Ensure the BSpline follows the wire's topological order
-        bs = self.wire._to_bspline()
-
-        # Start ~ p0, end ~ p3
-        self.assertLess((bs.position_at(0.0) - self.p0).length, 1e-6)
-        self.assertLess((bs.position_at(1.0) - self.p3).length, 1e-6)
-
-        # Parameters at interior points should sit between 0 and 1
-        u0 = bs.param_at_point(self.p1)
-        u1 = bs.param_at_point(self.p2)
-        self.assertTrue(0.0 < u0 < 1.0)
-        self.assertTrue(0.0 < u1 < 1.0)
 
 
 if __name__ == "__main__":

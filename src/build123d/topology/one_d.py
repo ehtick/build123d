@@ -152,6 +152,7 @@ from OCP.TopoDS import (
     TopoDS_Face,
     TopoDS_Shape,
     TopoDS_Shell,
+    TopoDS_Vertex,
     TopoDS_Wire,
 )
 from OCP.gp import (
@@ -803,19 +804,6 @@ class Mixin1D(Shape):
 
         if side != Side.BOTH:
             # Find and remove the end arcs
-            # offset_edges = offset_wire.edges()
-            # edges_to_keep: list[list[Edge]] = [[], [], []]
-            # i = 0
-            # for edge in offset_edges:
-            #     if edge.geom_type == GeomType.CIRCLE and (
-            #         edge.arc_center == line.position_at(0)
-            #         or edge.arc_center == line.position_at(1)
-            #     ):
-            #         i += 1
-            #     else:
-            #         edges_to_keep[i].append(edge)
-            # edges_to_keep[0] += edges_to_keep[2]
-            # wires = [Wire(edges) for edges in edges_to_keep[0:2]]
             endpoints = (line.position_at(0), line.position_at(1))
             offset_edges = offset_wire.edges().filter_by(
                 lambda e: (
@@ -826,8 +814,6 @@ class Mixin1D(Shape):
             )
             wires = edges_to_wires(offset_edges)
             centers = [w.position_at(0.5) for w in wires]
-            tangent = line.tangent_at(0)
-            start = line.position_at(0)
             angles = [
                 line.tangent_at(0).get_signed_angle(c - line.position_at(0))
                 for c in centers
@@ -2619,7 +2605,6 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
                 edge, label, color, parent = args[:4] + (None,) * (4 - l_a)
             elif isinstance(args[0], Wire):
                 wire, label, color, parent = args[:4] + (None,) * (4 - l_a)
-            # elif isinstance(args[0], Curve):
             elif (
                 hasattr(args[0], "wrapped")
                 and isinstance(args[0].wrapped, TopoDS_Compound)
@@ -3202,14 +3187,14 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
             raise ValueError("Can't find point on empty wire")
 
         point_on_curve = Vector(point)
+        vertex_on_curve = Vertex(point_on_curve)
+        assert vertex_on_curve.wrapped is not None
 
         separation = self.distance_to(point)
         if not isclose_b(separation, 0, abs_tol=TOLERANCE):
             raise ValueError(f"point ({point}) is {separation} from wire")
 
-        extrema = BRepExtrema_DistShapeShape(
-            Vertex(point_on_curve).wrapped, self.wrapped
-        )
+        extrema = BRepExtrema_DistShapeShape(vertex_on_curve.wrapped, self.wrapped)
         extrema.Perform()
         if not extrema.IsDone() or extrema.NbSolution() == 0:
             raise ValueError("point is not on Wire")
@@ -3217,15 +3202,19 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         supp_type = extrema.SupportTypeShape2(1)
 
         if supp_type == BRepExtrema_SupportType.BRepExtrema_IsOnEdge:
-            closest_topods_edge = downcast(extrema.SupportOnShape2(1))
+            closest_topods_edge = tcast(
+                TopoDS_Edge, downcast(extrema.SupportOnShape2(1))
+            )
             closest_topods_edge_param = extrema.ParOnEdgeS2(1)[0]
         elif supp_type == BRepExtrema_SupportType.BRepExtrema_IsVertex:
-            v_hit = downcast(extrema.SupportOnShape2(1))
+            v_hit = tcast(TopoDS_Vertex, downcast(extrema.SupportOnShape2(1)))
             vertex_edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
             TopExp.MapShapesAndAncestors_s(
                 self.wrapped, ta.TopAbs_VERTEX, ta.TopAbs_EDGE, vertex_edge_map
             )
-            closest_topods_edge = downcast(vertex_edge_map.FindFromKey(v_hit).First())
+            closest_topods_edge = tcast(
+                TopoDS_Edge, downcast(vertex_edge_map.FindFromKey(v_hit).First())
+            )
             closest_topods_edge_param = BRep_Tool.Parameter_s(
                 v_hit, closest_topods_edge
             )
