@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import copy as copy_module
 from collections.abc import Iterable
+from itertools import product
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
 import sympy  # type: ignore
@@ -37,6 +38,7 @@ import sympy  # type: ignore
 from build123d.build_common import WorkplaneList, flatten_sequence, validate_inputs
 from build123d.build_enums import (
     AngularDirection,
+    ContinuityLevel,
     GeomType,
     LengthMode,
     Keep,
@@ -78,7 +80,8 @@ class BaseLineObject(Wire):
     def __init__(self, curve: Wire, mode: Mode = Mode.ADD):
         # Use the helper function to handle adding the curve to the context
         _add_curve_to_context(curve, mode)
-        super().__init__(curve.wrapped)
+        if curve.wrapped is not None:
+            super().__init__(curve.wrapped)
 
 
 class BaseEdgeObject(Edge):
@@ -126,6 +129,169 @@ class Bezier(BaseEdgeObject):
         curve = Edge.make_bezier(*polls, weights=weights)
 
         super().__init__(curve, mode=mode)
+
+
+class BlendCurve(BaseEdgeObject):
+    """Line Object: BlendCurve
+
+    Create a smooth Bézier-based transition curve between two existing edges.
+
+    The blend is constructed as a cubic (C1) or quintic (C2) Bézier curve
+    whose control points are determined from the position, first derivative,
+    and (for C2) second derivative of the input curves at the chosen endpoints.
+    Optional scalar multipliers can be applied to the endpoint tangents to
+    control the "tension" of the blend.
+
+    Args:
+        curve0 (Edge): First curve to blend from.
+        curve1 (Edge): Second curve to blend to.
+        continuity (ContinuityLevel, optional):
+            Desired geometric continuity at the join:
+            - ContinuityLevel.C0: position match only (straight line)
+            - ContinuityLevel.C1: match position and tangent direction (cubic Bézier)
+            - ContinuityLevel.C2: match position, tangent, and curvature (quintic Bézier)
+            Defaults to ContinuityLevel.C2.
+        end_points (tuple[VectorLike, VectorLike] | None, optional):
+            Pair of points specifying the connection points on `curve0` and `curve1`.
+            Each must coincide (within TOLERANCE) with the start or end of the
+            respective curve. If None, the closest pair of endpoints is chosen.
+            Defaults to None.
+        tangent_scalars (tuple[float, float] | None, optional):
+            Scalar multipliers applied to the first derivatives at the start
+            of `curve0` and the end of `curve1` before computing control points.
+            Useful for adjusting the pull/tension of the blend without altering
+            the base curves. Defaults to (1.0, 1.0).
+        mode (Mode, optional): Boolean operation mode when used in a
+            BuildLine context. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: `tangent_scalars` must be a pair of float values.
+        ValueError: If specified `end_points` are not coincident with the start
+            or end of their respective curves.
+
+    Example:
+        >>> blend = BlendCurve(curve_a, curve_b, ContinuityLevel.C1, tangent_scalars=(1.2, 0.8))
+        >>> show(blend)
+    """
+
+    def __init__(
+        self,
+        curve0: Edge,
+        curve1: Edge,
+        continuity: ContinuityLevel = ContinuityLevel.C2,
+        end_points: tuple[VectorLike, VectorLike] | None = None,
+        tangent_scalars: tuple[float, float] | None = None,
+        mode: Mode = Mode.ADD,
+    ):
+        #
+        # Process the inputs
+
+        tan_scalars = (1.0, 1.0) if tangent_scalars is None else tangent_scalars
+        if len(tan_scalars) != 2:
+            raise ValueError("tangent_scalars must be a (start, end) pair")
+
+        # Find the vertices that will be connected using closest if None
+        end_pnts = (
+            min(
+                product(curve0.vertices(), curve1.vertices()),
+                key=lambda pair: pair[0].distance_to(pair[1]),
+            )
+            if end_points is None
+            else end_points
+        )
+
+        # Find the Edge parameter that matches the end points
+        curves: tuple[Edge, Edge] = (curve0, curve1)
+        end_params = [0, 0]
+        for i, end_pnt in enumerate(end_pnts):
+            curve_start_pnt = curves[i].position_at(0)
+            curve_end_pnt = curves[i].position_at(1)
+            given_end_pnt = Vector(end_pnt)
+            if (given_end_pnt - curve_start_pnt).length < TOLERANCE:
+                end_params[i] = 0
+            elif (given_end_pnt - curve_end_pnt).length < TOLERANCE:
+                end_params[i] = 1
+            else:
+                raise ValueError(
+                    "end_points must be at either the start or end of a curve"
+                )
+
+        #
+        # Bézier endpoint derivative constraints (degree n=5 case)
+        #
+        # For a degree-n Bézier curve:
+        #   B(t)   = Σ_{i=0}^n binom(n,i) (1-t)^(n-i) t^i  P_i
+        #   B'(t)  = n(P_1 - P_0) at t=0
+        #            n(P_n - P_{n-1}) at t=1
+        #   B''(t) = n(n-1)(P_2 - 2P_1 + P_0) at t=0
+        #            n(n-1)(P_{n-2} - 2P_{n-1} + P_n) at t=1
+        #
+        # Matching a desired start derivative D0 and curvature vector K0:
+        #   P1 = P0 + (1/n) * D0
+        #   P2 = P0 + (2/n) * D0 + (1/(n*(n-1))) * K0
+        #
+        # Matching a desired end derivative D1 and curvature vector K1:
+        #   P_{n-1} = P_n - (1/n) * D1
+        #   P_{n-2} = P_n - (2/n) * D1 + (1/(n*(n-1))) * K1
+        #
+        # For n=5 specifically:
+        #   P1 = P0 + D0 / 5
+        #   P2 = P0 + (2*D0)/5 + K0/20
+        #   P4 = P5 - D1 / 5
+        #   P3 = P5 - (2*D1)/5 + K1/20
+        #
+        # D0, D1 are first derivatives at endpoints (can be scaled for tension).
+        # K0, K1 are second derivatives at endpoints (for C² continuity).
+        # Works in any dimension; P_i are vectors in ℝ² or ℝ³.
+
+        #
+        # | Math symbol | Meaning in code            | Python name  |
+        # | ----------- | -------------------------- | ------------ |
+        # | P_0         | start position             | start_pos    |
+        # | P_1         | 1st control pt after start | ctrl_pnt1    |
+        # | P_2         | 2nd control pt after start | ctrl_pnt2    |
+        # | P_{n-2}     | 2nd control pt before end  | ctrl_pnt3    |
+        # | P_{n-1}     | 1st control pt before end  | ctrl_pnt4    |
+        # | P_n         | end position               | end_pos      |
+        # | D_0         | derivative at start        | start_deriv  |
+        # | D_1         | derivative at end          | end_deriv    |
+        # | K_0         | curvature vec at start     | start_curv   |
+        # | K_1         | curvature vec at end       | end_curv     |
+
+        start_pos = curve0.position_at(end_params[0])
+        end_pos = curve1.position_at(end_params[1])
+
+        # Note: derivative_at(..,1) is being used instead of tangent_at as
+        # derivate_at isn't normalized which allows for a natural "speed" to be used
+        # if no scalar is provided.
+        start_deriv = curve0.derivative_at(end_params[0], 1) * tan_scalars[0]
+        end_deriv = curve1.derivative_at(end_params[1], 1) * tan_scalars[1]
+
+        if continuity == ContinuityLevel.C0:
+            joining_curve = Line(start_pos, end_pos)
+        elif continuity == ContinuityLevel.C1:
+            cntl_pnt1 = start_pos + start_deriv / 3
+            cntl_pnt4 = end_pos - end_deriv / 3
+            cntl_pnts = [start_pos, cntl_pnt1, cntl_pnt4, end_pos]  # degree-3 Bézier
+            joining_curve = Bezier(*cntl_pnts)
+        else:  # C2
+            start_curv = curve0.derivative_at(end_params[0], 2)
+            end_curv = curve1.derivative_at(end_params[1], 2)
+            cntl_pnt1 = start_pos + start_deriv / 5
+            cntl_pnt2 = start_pos + (2 * start_deriv) / 5 + start_curv / 20
+            cntl_pnt4 = end_pos - end_deriv / 5
+            cntl_pnt3 = end_pos - (2 * end_deriv) / 5 + end_curv / 20
+            cntl_pnts = [
+                start_pos,
+                cntl_pnt1,
+                cntl_pnt2,
+                cntl_pnt3,
+                cntl_pnt4,
+                end_pos,
+            ]  # degree-5 Bézier
+            joining_curve = Bezier(*cntl_pnts)
+
+        super().__init__(joining_curve, mode=mode)
 
 
 class CenterArc(BaseEdgeObject):

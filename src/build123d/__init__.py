@@ -80,6 +80,7 @@ __all__ = [
     # 1D Curve Objects
     "BaseLineObject",
     "Bezier",
+    "BlendCurve",
     "CenterArc",
     "DoubleTangentArc",
     "EllipticalCenterArc",

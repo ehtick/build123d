@@ -18,6 +18,7 @@ Cheat Sheet
             | :class:`~objects_curve.ArcArcTangentArc`
             | :class:`~objects_curve.ArcArcTangentLine`
             | :class:`~objects_curve.Bezier`
+            | :class:`~objects_curve.BlendCurve`
             | :class:`~objects_curve.CenterArc`
             | :class:`~objects_curve.DoubleTangentArc`
             | :class:`~objects_curve.EllipticalCenterArc`
