@@ -37,8 +37,8 @@ from build123d.build_enums import (
     Side,
     SortBy,
 )
-from build123d.geometry import Axis, Location, Plane, Vector
-from build123d.objects_curve import Polyline
+from build123d.geometry import Axis, Location, Plane, Rot, Vector, TOLERANCE
+from build123d.objects_curve import CenterArc, Line, Polyline
 from build123d.objects_part import Box, Cylinder
 from build123d.operations_part import extrude
 from build123d.operations_generic import fillet
@@ -435,6 +435,66 @@ class TestMixin1D(unittest.TestCase):
         pnt.wrapped = None
         with self.assertRaises(ValueError):
             Edge.extrude(pnt, (0, 0, 1))
+
+
+class TestCurvatureComb(unittest.TestCase):
+    def test_raises_if_not_on_XY(self):
+        line_xz = Polyline((0, 0, 0), (1, 0, 0), (0, 0, 1))
+        with self.assertRaises(ValueError):
+            _ = line_xz.curvature_comb()
+
+    def test_empty_curve(self):
+        c = CenterArc((0, 0), 1, 0, 360)
+        c.wrapped = None
+        with self.assertRaises(ValueError):
+            c.curvature_comb()
+
+    def test_circle_constant_height_and_count(self):
+        radius = 5.0
+        count = 64
+        max_tooth = 2.0
+
+        # A closed circle in the XY plane
+        c = CenterArc((0, 0), radius, 0, 360)
+        comb = c.curvature_comb(count=count, max_tooth_size=max_tooth)
+
+        # For a closed curve, endpoint is excluded but the method still returns `count` samples.
+        self.assertEqual(len(comb), count)
+
+        # On a circle, kappa = 1/R => all teeth should have the same length = max_tooth
+        lengths = [edge.length for edge in comb]
+        self.assertTrue(all(abs(L - max_tooth) <= TOLERANCE for L in lengths))
+
+        # Direction check: teeth should be radial (perpendicular to tangent),
+        # i.e., aligned with (start_point - center). For Circle(...) center is (0,0,0).
+        center = Vector(0, 0, 0)
+        for edge in comb[:: max(1, len(comb) // 8)]:  # sample a few
+            p0 = edge.position_at(0.0)
+            p1 = edge.position_at(1.0)
+            tooth_dir = (p1 - p0).normalized()
+            radial = (p0 - center).normalized()
+            # allow either direction (outward/inward), check colinearity
+            cross_len = tooth_dir.cross(radial).length
+            self.assertLessEqual(cross_len, 1e-3)
+
+    def test_line_near_zero_teeth_and_count(self):
+        # Straight segment in XY => curvature = 0 everywhere
+        line = Line((0, 0), (10, 0))
+
+        count = 25
+        comb = line.curvature_comb(count=count, max_tooth_size=3.0)
+
+        self.assertEqual(len(comb), 0)  # They are 0 length so skipped
+
+    def test_open_arc_count_and_variation(self):
+        # Open arc: teeth count == requested count; lengths not constant in general
+        arc = CenterArc((0, 0), 5, 0, 180)  # open, CCW half-circle
+        count = 40
+        comb = arc.curvature_comb(count=count, max_tooth_size=1.0)
+        self.assertEqual(len(comb), count)
+        # For a circular arc, curvature is constant, so lengths should still be constant
+        lengths = [e.length for e in comb]
+        self.assertLessEqual(max(lengths) - min(lengths), 1e-6)
 
 
 if __name__ == "__main__":

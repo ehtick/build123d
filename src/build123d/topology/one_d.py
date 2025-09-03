@@ -53,10 +53,11 @@ from __future__ import annotations
 
 import copy
 import itertools
+import numpy as np
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
-from math import radians, inf, pi, cos, copysign, ceil, floor
+from math import radians, inf, pi, cos, copysign, ceil, floor, isclose
 from typing import cast as tcast
 from typing import Literal, overload, TYPE_CHECKING
 from typing_extensions import Self
@@ -492,6 +493,89 @@ class Mixin1D(Shape):
                 result = c_plane if common else None
 
         return result
+
+    def curvature_comb(
+        self, count: int = 100, max_tooth_size: float | None = None
+    ) -> ShapeList[Edge]:
+        """
+        Build a *curvature comb* for a planar (XY) 1D curve.
+
+        A curvature comb is a set of short line segments (“teeth”) erected
+        perpendicular to the curve that visualize the signed curvature κ(u).
+        Tooth length is proportional to |κ| and the direction encodes the sign
+        (left normal for κ>0, right normal for κ<0). This is useful for inspecting
+        fairness and continuity (C0/C1/C2) of edges and wires.
+
+        Args:
+            count (int, optional): Number of uniformly spaced samples over the normalized
+                parameter. Increase for a denser comb. Defaults to 100.
+            max_tooth_size (float | None, optional): Maximum tooth height in model units.
+                If None, set to 10% maximum curve dimension. Defaults to None.
+
+        Raises:
+            ValueError: Empty curve.
+            ValueError: If the curve is not planar on `Plane.XY`.
+
+        Returns:
+            ShapeList[Edge]: A list of short `Edge` objects (lines) anchored on the curve
+            and oriented along the left normal `n̂ = normalize(t) × +Z`.
+
+        Notes:
+            - On circles, κ = 1/R so tooth length is constant.
+            - On straight segments, κ = 0 so no teeth are drawn.
+            - At inflection points κ→0 and the tooth flips direction.
+            - At C0 corners the tangent is discontinuous; nearby teeth may jump.
+            C1 yields continuous direction; C2 yields continuous magnitude as well.
+
+        Example:
+            >>> comb = my_wire.curvature_comb(count=200, max_tooth_size=2.0)
+            >>> show(my_wire, Curve(comb))
+
+        """
+        if self.wrapped is None:
+            raise ValueError("Can't create curvature_comb for empty curve")
+        pln = self.common_plane()
+        if pln is None or not isclose(abs(pln.z_dir.Z), 1.0, abs_tol=TOLERANCE):
+            raise ValueError("curvature_comb only works for curves on Plane.XY")
+
+        # If periodic the first and last tooth would be the same so skip them
+        u_values = np.linspace(0, 1, count, endpoint=not self.is_closed)
+
+        # first pass: gather kappas for scaling
+        kappas = []
+        tangents, curvatures = [], []
+        for u in u_values:
+            tangent = self.derivative_at(u, 1)
+            curvature = self.derivative_at(u, 2)
+            tangents.append(tangent)
+            curvatures.append(curvature)
+            cross = tangent.cross(curvature)
+            kappa = cross.length / (tangent.length**3 + TOLERANCE)
+            # signed for XY:
+            sign = 1.0 if cross.Z >= 0 else -1.0
+            kappas.append(sign * kappa)
+
+        # choose a scale so the tallest tooth is max_tooth_size
+        max_kappa_size = max(TOLERANCE, max(abs(k) for k in kappas))
+        curve_size = max(self.bounding_box().size)
+        max_tooth_size = (
+            max_tooth_size if max_tooth_size is not None else curve_size / 10
+        )
+        scale = max_tooth_size / max_kappa_size
+
+        comb_edges = ShapeList[Edge]()
+        for u, kappa, tangent in zip(u_values, kappas, tangents):
+            # Avoid tiny teeth
+            if abs(length := scale * kappa) < TOLERANCE:
+                continue
+            pnt_on_curve = self @ u
+            # left normal in XY (principal normal direction for a planar curve)
+            kappa_dir = tangent.normalized().cross(Vector(0, 0, 1))
+            comb_edges.append(
+                Edge.make_line(pnt_on_curve, pnt_on_curve + length * kappa_dir)
+            )
+
+        return comb_edges
 
     def derivative_at(
         self,
