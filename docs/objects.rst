@@ -83,6 +83,13 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Curve defined by control points and weights
 
+    .. grid-item-card:: :class:`~objects_curve.BlendCurve`
+
+        .. image:: assets/example_blend_curve.svg
+
+        +++
+        Curve blending curvature of two curves
+
     .. grid-item-card:: :class:`~objects_curve.CenterArc`
 
         .. image:: assets/center_arc_example.svg
@@ -222,6 +229,7 @@ Reference
 
 .. autoclass:: BaseLineObject
 .. autoclass:: Bezier
+.. autoclass:: BlendCurve
 .. autoclass:: CenterArc
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
