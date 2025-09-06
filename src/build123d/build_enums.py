@@ -29,9 +29,15 @@ license:
 from __future__ import annotations
 
 from enum import Enum, auto, IntEnum, unique
-from typing import Union
+from typing import TypeAlias, Union
 
-from typing import TypeAlias
+from OCP.GccEnt import (
+    GccEnt_unqualified,
+    GccEnt_enclosing,
+    GccEnt_enclosed,
+    GccEnt_outside,
+    GccEnt_noqualifier,
+)
 
 
 class Align(Enum):
@@ -248,6 +254,17 @@ class FontStyle(Enum):
         return f"<{self.__class__.__name__}.{self.name}>"
 
 
+class LengthConstraint(Enum):
+    """Length Constraint for sagatti selection"""
+
+    SHORT = 0
+    LONG = -1
+    BOTH = 1
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}.{self.name}>"
+
+
 class LengthMode(Enum):
     """Method of specifying length along PolarLine"""
 
@@ -298,6 +315,18 @@ class PageSize(Enum):
     LETTER = auto()
     LEGAL = auto()
     LEDGER = auto()
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}.{self.name}>"
+
+
+class PositionConstraint(Enum):
+    """Position Constraint for edge selection"""
+
+    UNQUALIFIED = GccEnt_unqualified
+    ENCLOSING = GccEnt_enclosing
+    ENCLOSED = GccEnt_enclosed
+    OUTSIDE = GccEnt_outside
 
     def __repr__(self):
         return f"<{self.__class__.__name__}.{self.name}>"
