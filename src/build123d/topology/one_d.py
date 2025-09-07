@@ -1909,24 +1909,12 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         return cls(BRepBuilderAPI_MakeEdge(circle_geom).Edge())
 
     @classmethod
-    # def make_tangent_arcs(
-    #     cls,
-    #     object_one: tuple[Edge,PositionConstraint] | Vertex | VectorLike,
-    #     object_two: tuple[Edge,PositionConstraint] | Vertex | VectorLike,
-    #     radius: float,
-    #     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT
-    # ) -> ShapeList[Edge]:
-
     def make_tangent_arcs(
         cls,
-        object_one: Edge | Vertex | VectorLike,
-        object_two: Edge | Vertex | VectorLike,
+        object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
         radius: float,
-        constaints: tuple[PositionConstraint, PositionConstraint, LengthConstraint] = (
-            PositionConstraint.UNQUALIFIED,
-            PositionConstraint.UNQUALIFIED,
-            LengthConstraint.SHORT,
-        ),
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     ) -> ShapeList[Edge]:
         """
         Create all planar circular arcs of a given radius that are tangent/contacting
@@ -1952,6 +1940,16 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 circle solution.
 
         """
+
+        if isinstance(object_1, tuple):
+            object_one, object_one_constraint = object_1
+        else:
+            object_one = object_1
+        if isinstance(object_2, tuple):
+            object_two, object_two_constraint = object_2
+        else:
+            object_two = object_2
+
         # Reuse a single XY plane for 3D->2D projection and for 2D-edge building
         _pln_xy = gp_Pln(gp_Ax3(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0)))
         _surf_xy = Geom_Plane(_pln_xy)
@@ -2102,8 +2100,12 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         # ---------------------------
         # Build inputs and GCC
         # ---------------------------
-        q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(object_one, constaints[0])
-        q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(object_two, constaints[1])
+        q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(
+            object_one, object_one_constraint
+        )
+        q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
+            object_two, object_two_constraint
+        )
 
         # Put the Edge arg first when exactly one is an Edge (improves robustness)
         if is_edge1 ^ is_edge2:
@@ -2149,13 +2151,13 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             )
 
             # Build BOTH sagitta arcs and select by LengthConstraint
-            if constaints[2].value == LengthConstraint.BOTH:
+            if sagitta_constraint == LengthConstraint.BOTH:
                 solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
             else:
                 solutions.append(
                     _two_arc_edges_from_params(circ, u_circ1, u_circ2).sort_by(
                         Edge.length
-                    )[constaints[2].value]
+                    )[sagitta_constraint.value]
                 )
         return ShapeList(solutions)
 
