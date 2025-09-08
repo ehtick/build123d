@@ -3,11 +3,35 @@ build123d topology
 
 name: utils.py
 by:   Gumyr
-date: September 07, 2025
+date: January 07, 2025
 
 desc:
 
-This module houses utilities used within the topology modules.
+This module provides utility functions and helper classes for the build123d CAD library, enabling
+advanced geometric operations and facilitating the use of the OpenCascade CAD kernel. It complements
+the core library by offering reusable and modular tools for manipulating shapes, performing Boolean
+operations, and validating geometry.
+
+Key Features:
+- **Geometric Utilities**:
+  - `polar`: Converts polar coordinates to Cartesian.
+  - `tuplify`: Normalizes inputs into consistent tuples.
+  - `find_max_dimension`: Computes the maximum bounding dimension of shapes.
+
+- **Shape Creation**:
+  - `_make_loft`: Creates lofted shapes from wires and vertices.
+  - `_make_topods_compound_from_shapes`: Constructs compounds from multiple shapes.
+  - `_make_topods_face_from_wires`: Generates planar faces with optional holes.
+
+- **Boolean Operations**:
+  - `_topods_bool_op`: Generic Boolean operations for TopoDS_Shapes.
+  - `new_edges`: Identifies newly created edges from combined shapes.
+
+- **Enhanced Math**:
+  - `isclose_b`: Overrides `math.isclose` with a stricter absolute tolerance.
+
+This module is a critical component of build123d, supporting complex CAD workflows and geometric
+transformations while maintaining a clean, extensible API.
 
 license:
 
@@ -29,453 +53,378 @@ license:
 
 from __future__ import annotations
 
-import copy
-import itertools
-import warnings
-from collections.abc import Iterable
-from itertools import combinations
-from math import ceil, copysign, cos, floor, inf, isclose, pi, radians
-from typing import Callable, TypeVar, TYPE_CHECKING, Literal
-from typing import cast as tcast
-from typing import overload
+from math import radians, sin, cos, isclose
+from typing import Any, TYPE_CHECKING
 
-import numpy as np
-import OCP.TopAbs as ta
+from collections.abc import Iterable
+
 from OCP.BRep import BRep_Tool
-from OCP.BRepAdaptor import BRepAdaptor_CompCurve, BRepAdaptor_Curve
 from OCP.BRepAlgoAPI import (
-    BRepAlgoAPI_Common,
-    BRepAlgoAPI_Section,
+    BRepAlgoAPI_BooleanOperation,
+    BRepAlgoAPI_Cut,
     BRepAlgoAPI_Splitter,
 )
-from OCP.BRepBuilderAPI import (
-    BRepBuilderAPI_DisconnectedWire,
-    BRepBuilderAPI_EmptyWire,
-    BRepBuilderAPI_MakeEdge,
-    BRepBuilderAPI_MakeEdge2d,
-    BRepBuilderAPI_MakeFace,
-    BRepBuilderAPI_MakePolygon,
-    BRepBuilderAPI_MakeWire,
-    BRepBuilderAPI_NonManifoldWire,
-)
-from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_SupportType
-from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
-from OCP.BRepGProp import BRepGProp, BRepGProp_Face
-from OCP.BRepLib import BRepLib, BRepLib_FindSurface
-from OCP.BRepLProp import BRepLProp
-from OCP.BRepOffset import BRepOffset_MakeOffset
-from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
-from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
-from OCP.BRepProj import BRepProj_Projection
-from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
-from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
-from OCP.GCPnts import GCPnts_AbscissaPoint
-from OCP.Geom import (
-    Geom_BezierCurve,
-    Geom_BSplineCurve,
-    Geom_ConicalSurface,
-    Geom_CylindricalSurface,
-    Geom_Line,
-    Geom_Plane,
-    Geom_Surface,
-    Geom_TrimmedCurve,
-)
-from OCP.Geom2d import (
-    Geom2d_CartesianPoint,
-    Geom2d_Circle,
-    Geom2d_Curve,
-    Geom2d_Line,
-    Geom2d_Point,
-    Geom2d_TrimmedCurve,
-)
-from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
-from OCP.Geom2dAPI import Geom2dAPI_InterCurveCurve
-from OCP.Geom2dGcc import Geom2dGcc_Circ2d2TanRad, Geom2dGcc_QualifiedCurve
-from OCP.GeomAbs import (
-    GeomAbs_C0,
-    GeomAbs_C1,
-    GeomAbs_C2,
-    GeomAbs_G1,
-    GeomAbs_G2,
-    GeomAbs_JoinType,
-)
-from OCP.GeomAdaptor import GeomAdaptor_Curve
-from OCP.GeomAPI import (
-    GeomAPI,
-    GeomAPI_IntCS,
-    GeomAPI_Interpolate,
-    GeomAPI_PointsToBSpline,
-    GeomAPI_ProjectPointOnCurve,
-)
-from OCP.GeomConvert import GeomConvert_CompCurveToBSplineCurve
-from OCP.GeomFill import (
-    GeomFill_CorrectedFrenet,
-    GeomFill_Frenet,
-    GeomFill_TrihedronLaw,
-)
-from OCP.GeomProjLib import GeomProjLib
-from OCP.gp import (
-    gp_Ax1,
-    gp_Ax2,
-    gp_Ax3,
-    gp_Circ,
-    gp_Circ2d,
-    gp_Dir,
-    gp_Dir2d,
-    gp_Elips,
-    gp_Pln,
-    gp_Pnt,
-    gp_Pnt2d,
-    gp_Trsf,
-    gp_Vec,
-)
-from OCP.GProp import GProp_GProps
-from OCP.HLRAlgo import HLRAlgo_Projector
-from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
-from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
-from OCP.ShapeFix import ShapeFix_Shape, ShapeFix_Wireframe
-from OCP.Standard import (
-    Standard_ConstructionError,
-    Standard_Failure,
-    Standard_NoSuchObject,
-)
-from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
-from OCP.TColStd import (
-    TColStd_Array1OfReal,
-    TColStd_HArray1OfBoolean,
-    TColStd_HArray1OfReal,
-)
-from OCP.TopAbs import TopAbs_Orientation, TopAbs_ShapeEnum
-from OCP.TopExp import TopExp, TopExp_Explorer
-from OCP.TopLoc import TopLoc_Location
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCP.BRepLib import BRepLib_FindSurface
+from OCP.BRepOffsetAPI import BRepOffsetAPI_ThruSections
+from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+from OCP.ShapeFix import ShapeFix_Face, ShapeFix_Shape
+from OCP.TopAbs import TopAbs_ShapeEnum
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopTools import TopTools_ListOfShape
 from OCP.TopoDS import (
     TopoDS,
+    TopoDS_Builder,
     TopoDS_Compound,
-    TopoDS_Edge,
     TopoDS_Face,
     TopoDS_Shape,
     TopoDS_Shell,
     TopoDS_Vertex,
+    TopoDS_Edge,
     TopoDS_Wire,
 )
-from OCP.TopTools import (
-    TopTools_HSequenceOfShape,
-    TopTools_IndexedDataMapOfShapeListOfShape,
-    TopTools_IndexedMapOfShape,
-    TopTools_ListOfShape,
-)
-from scipy.optimize import minimize_scalar
-from scipy.spatial import ConvexHull
-from typing_extensions import Self
+from build123d.geometry import TOLERANCE, BoundBox, Vector, VectorLike
 
-from build123d.build_enums import (
-    AngularDirection,
-    CenterOf,
-    ContinuityLevel,
-    FrameMethod,
-    GeomType,
-    Keep,
-    Kind,
-    LengthConstraint,
-    PositionConstraint,
-    PositionMode,
-    Side,
-)
-from build123d.geometry import (
-    DEG2RAD,
-    TOL_DIGITS,
-    TOLERANCE,
-    Axis,
-    Color,
-    Location,
-    Plane,
-    Vector,
-    VectorLike,
-    logger,
-)
-
-from .shape_core import (
-    Shape,
-    ShapeList,
-    SkipClean,
-    TrimmingTool,
-    downcast,
-    get_top_level_topods_shapes,
-    shapetype,
-    topods_dim,
-    unwrap_topods_compound,
-)
-from .utils import (
-    _extrude_topods_shape,
-    _make_topods_face_from_wires,
-    _topods_bool_op,
-    isclose_b,
-)
-from .zero_d import Vertex, topo_explore_common_vertex
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from build123d.topology.one_d import Edge
-
-TWrap = TypeVar("TWrap")  # whatever the factory returns (Edge or a subclass)
-
-# Reuse a single XY plane for 3D->2D projection and for 2D-edge building
-_pln_xy = gp_Pln(gp_Ax3(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0)))
-_surf_xy = Geom_Plane(_pln_xy)
+from .shape_core import Shape, ShapeList, downcast, shapetype, unwrap_topods_compound
 
 
-# ---------------------------
-# Normalization utilities
-# ---------------------------
-def _norm_on_period(u: float, first: float, per: float) -> float:
-    """Map parameter u into [first, first+per)."""
-    if per <= 0.0:
-        return u
-    k = floor((u - first) / per)
-    return u - k * per
+if TYPE_CHECKING:  # pragma: no cover
+    from .zero_d import Vertex  # pylint: disable=R0801
+    from .one_d import Edge, Wire  # pylint: disable=R0801
 
 
-def _forward_delta(u1: float, u2: float, first: float, period: float) -> float:
-    """
-    Forward (positive) delta from u1 to u2 on a periodic domain anchored at
-    'first'.
-    """
-    u1n = _norm_on_period(u1, first, period)
-    u2n = _norm_on_period(u2, first, period)
-    delta = u2n - u1n
-    if delta < 0.0:
-        delta += period
-    return delta
+def _extrude_topods_shape(obj: TopoDS_Shape, direction: VectorLike) -> TopoDS_Shape:
+    """extrude
 
-
-# ---------------------------
-# Core helpers
-# ---------------------------
-def _edge_to_qualified_2d(
-    edge: TopoDS_Edge, position_constaint: PositionConstraint
-) -> tuple[Geom2dGcc_QualifiedCurve, Geom2d_Curve, float, float]:
-    """Convert a TopoDS_Edge into 2d curve & extract properties"""
-
-    # 1) Underlying curve + range (also retrieve location to be safe)
-    loc = edge.Location()
-    hcurve3d = BRep_Tool.Curve_s(edge, float(), float())
-    first, last = BRep_Tool.Range_s(edge)
-
-    if hcurve3d is None:
-        raise ValueError("Edge has no underlying 3D curve.")
-
-    # 2) Apply location if the edge is positioned by a TopLoc_Location
-    if not loc.IsIdentity():
-        trsf = loc.Transformation()
-        hcurve3d = hcurve3d.Transformed(trsf)
-
-    # 3) Convert to 2D on Plane.XY (Z-up frame at origin)
-    hcurve2d = GeomAPI.To2d_s(hcurve3d, _pln_xy)  # -> Handle_Geom2d_Curve
-
-    # 4) Wrap in an adaptor using the same parametric range
-    adapt2d = Geom2dAdaptor_Curve(hcurve2d, first, last)
-
-    # 5) Create the qualified curve (unqualified is fine here)
-    qcurve = Geom2dGcc_QualifiedCurve(adapt2d, position_constaint.value)
-    return qcurve, hcurve2d, first, last
-
-
-def _edge_from_circle(h2d_circle: Geom2d_Circle, u1: float, u2: float) -> TopoDS_Edge:
-    """Build a 3D edge on XY from a trimmed 2D circle segment [u1, u2]."""
-    arc2d = Geom2d_TrimmedCurve(h2d_circle, u1, u2, True)  # sense=True
-    return BRepBuilderAPI_MakeEdge(arc2d, _surf_xy).Edge()
-
-
-def _param_in_trim(u: float, first: float, last: float, h2d: Geom2d_Curve) -> bool:
-    """Normalize (if periodic) then test [first, last] with tolerance."""
-    u = _norm_on_period(u, first, h2d.Period()) if h2d.IsPeriodic() else u
-    return (u >= first - TOLERANCE) and (u <= last + TOLERANCE)
-
-
-def _as_gcc_arg(
-    obj: Edge | Vertex | VectorLike, constaint: PositionConstraint
-) -> tuple[
-    Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint,
-    Geom2d_Curve | None,
-    float | None,
-    float | None,
-    bool,
-]:
-    """
-    Normalize input to a GCC argument.
-    Returns: (q_obj, h2d, first, last, is_edge)
-    - Edge -> (QualifiedCurve, h2d, first, last, True)
-    - Vertex/VectorLike -> (CartesianPoint, None, None, None, False)
-    """
-    if isinstance(obj.wrapped, TopoDS_Edge):
-        return _edge_to_qualified_2d(obj.wrapped, constaint) + (True,)
-
-    loc_xyz = obj.position if isinstance(obj, Vertex) else Vector()
-    try:
-        base = Vector(obj)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Expected Edge | Vertex | VectorLike") from exc
-
-    gp_pnt = gp_Pnt2d(base.X + loc_xyz.X, base.Y + loc_xyz.Y)
-    return Geom2d_CartesianPoint(gp_pnt), None, None, None, False
-
-
-def _two_arc_edges_from_params(
-    circ: gp_Circ2d, u1: float, u2: float
-) -> ShapeList[Edge]:
-    """
-    Given two parameters on a circle, return both the forward (minor)
-    and complementary (major) arcs as TopoDS_Edge(s).
-    Uses centralized normalization utilities.
-    """
-    h2d_circle = Geom2d_Circle(circ)
-    per = h2d_circle.Period()  # usually 2*pi
-
-    # Minor (forward) span
-    d = _forward_delta(u1, u2, 0.0, per)  # anchor at 0 for circle convenience
-    u1n = _norm_on_period(u1, 0.0, per)
-    u2n = _norm_on_period(u2, 0.0, per)
-
-    # Guard degeneracy
-    if d <= TOLERANCE or abs(per - d) <= TOLERANCE:
-        return ShapeList()
-
-    minor = _edge_from_circle(h2d_circle, u1n, u1n + d)
-    major = _edge_from_circle(h2d_circle, u2n, u2n + (per - d))
-    return ShapeList([Edge(minor), Edge(major)])
-
-
-def _qstr(q) -> str:
-    # Works with OCP's GccEnt enum values
-    try:
-        from OCP.GccEnt import (
-            GccEnt_enclosed,
-            GccEnt_enclosing,
-            GccEnt_outside,
-        )
-
-        try:
-            from OCP.GccEnt import GccEnt_unqualified
-        except ImportError:
-            # Some OCCT versions name this 'noqualifier'
-            from OCP.GccEnt import GccEnt_noqualifier as GccEnt_unqualified
-        mapping = {
-            GccEnt_enclosed: "enclosed",
-            GccEnt_enclosing: "enclosing",
-            GccEnt_outside: "outside",
-            GccEnt_unqualified: "unqualified",
-        }
-        return mapping.get(q, f"unknown({int(q)})")
-    except Exception:
-        # Fallback if enums aren't importable for any reason
-        return str(int(q))
-
-
-def make_tangent_edges(
-    cls,
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    radius: float,
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
-    *,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
-) -> list[TWrap]:
-    """
-    Create all planar circular arcs of a given radius that are tangent/contacting
-    the two provided objects on the XY plane.
-
-    Inputs must be coplanar with ``Plane.XY``. Non-coplanar edges are not supported.
+    Extrude a Shape in the provided direction.
+    * Vertices generate Edges
+    * Edges generate Faces
+    * Wires generate Shells
+    * Faces generate Solids
+    * Shells generate Compounds
 
     Args:
-        object_one (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-            by the circle(s)
-        object_two (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-            by the circle(s)
-        radius (float): Circle radius for all candidate solutions.
+        direction (VectorLike): direction and magnitude of extrusion
 
     Raises:
-        ValueError: Invalid input
-        ValueError: Invalid curve
-        RuntimeError: no valid circle solutions found
+        ValueError: Unsupported class
+        RuntimeError: Generated invalid result
 
     Returns:
-        ShapeList[Edge]: A list of planar circular edges (on XY) representing both
-            the minor and major arcs between the two tangency points for every valid
-            circle solution.
-
+        TopoDS_Shape: extruded shape
     """
+    direction = Vector(direction)
 
-    if isinstance(object_1, tuple):
-        object_one, object_one_constraint = object_1
-    else:
-        object_one = object_1
-    if isinstance(object_2, tuple):
-        object_two, object_two_constraint = object_2
-    else:
-        object_two = object_2
+    if obj is None or not isinstance(
+        obj,
+        (TopoDS_Vertex, TopoDS_Edge, TopoDS_Wire, TopoDS_Face, TopoDS_Shell),
+    ):
+        raise ValueError(f"extrude not supported for {type(obj)}")
 
-    # ---------------------------
-    # Build inputs and GCC
-    # ---------------------------
-    q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(
-        object_one, object_one_constraint
-    )
-    q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
-        object_two, object_two_constraint
-    )
+    prism_builder = BRepPrimAPI_MakePrism(obj, direction.wrapped)
+    extrusion = downcast(prism_builder.Shape())
+    shape_type = extrusion.ShapeType()
+    if shape_type == TopAbs_ShapeEnum.TopAbs_COMPSOLID:
+        solids = []
+        explorer = TopExp_Explorer(extrusion, TopAbs_ShapeEnum.TopAbs_SOLID)
+        while explorer.More():
+            solids.append(downcast(explorer.Current()))
+            explorer.Next()
+        extrusion = _make_topods_compound_from_shapes(solids)
+    return extrusion
 
-    # Put the Edge arg first when exactly one is an Edge (improves robustness)
-    if is_edge1 ^ is_edge2:
-        q_o1, q_o2 = (q_o1, q_o2) if is_edge1 else (q_o2, q_o1)
 
-    gcc = Geom2dGcc_Circ2d2TanRad(q_o1, q_o2, radius, TOLERANCE)
-    if not gcc.IsDone() or gcc.NbSolutions() == 0:
-        raise RuntimeError("Unable to find a tangent arc")
+def _make_loft(
+    objs: Iterable[Vertex | Wire],
+    filled: bool,
+    ruled: bool = False,
+) -> TopoDS_Shape:
+    """make loft
 
-    def _valid_on_arg1(u: float) -> bool:
-        return True if not is_edge1 else _param_in_trim(u, e1_first, e1_last, h_e1)
+    Makes a loft from a list of wires and vertices. Vertices can appear only at the
+    beginning or end of the list, but cannot appear consecutively within the list
+    nor between wires.
 
-    def _valid_on_arg2(u: float) -> bool:
-        return True if not is_edge2 else _param_in_trim(u, e2_first, e2_last, h_e2)
+    Args:
+        wires (list[Wire]): section perimeters
+        ruled (bool, optional): stepped or smooth. Defaults to False (smooth).
 
-    # ---------------------------
-    # Solutions
-    # ---------------------------
-    solutions: list[Edge] = []
-    for i in range(1, gcc.NbSolutions() + 1):
-        circ = gcc.ThisSolution(i)  # gp_Circ2d
+    Raises:
+        ValueError: Too few wires
 
-        # Tangency on curve 1
-        p1 = gp_Pnt2d()
-        u_circ1, u_arg1 = gcc.Tangency1(i, p1)
-        if not _valid_on_arg1(u_arg1):
-            continue
+    Returns:
+        TopoDS_Shape: Lofted object
+    """
+    objs = list(objs)  # To determine its length
+    if len(objs) < 2:
+        raise ValueError("More than one wire is required")
+    vertices = [obj for obj in objs if isinstance(obj.wrapped, TopoDS_Vertex)]
+    vertex_count = len(vertices)
 
-        # Tangency on curve 2
-        p2 = gp_Pnt2d()
-        u_circ2, u_arg2 = gcc.Tangency2(i, p2)
-        if not _valid_on_arg2(u_arg2):
-            continue
+    if vertex_count > 2:
+        raise ValueError("Only two vertices are allowed")
 
-        qual1 = GccEnt_Position(int())
-        qual2 = GccEnt_Position(int())
-        gcc.WhichQualifier(i, qual1, qual2)  # returns two GccEnt_Position values
-        print(
-            f"Solution {i}: "
-            f"arg1={_qstr(qual1)}, arg2={_qstr(qual2)} | "
-            f"u_circ=({u_circ1:.6g}, {u_circ2:.6g}) "
-            f"u_arg=({u_arg1:.6g}, {u_arg2:.6g})"
+    if vertex_count == 1 and not (
+        isinstance(objs[0].wrapped, TopoDS_Vertex)
+        or isinstance(objs[-1].wrapped, TopoDS_Vertex)
+    ):
+        raise ValueError(
+            "The vertex must be either at the beginning or end of the list"
         )
 
-        # Build BOTH sagitta arcs and select by LengthConstraint
-        if sagitta_constraint == LengthConstraint.BOTH:
-            solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
-        else:
-            arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
-            arcs = sorted(
-                arcs, key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e))
+    if vertex_count == 2:
+        if len(objs) == 2:
+            raise ValueError(
+                "You can't have only 2 vertices to loft; try adding some wires"
             )
-            solutions.append(arcs[sagitta_constraint.value])
-    return ShapeList([edge_factory(e) for e in solutions])
+        if not (
+            isinstance(objs[0].wrapped, TopoDS_Vertex)
+            and isinstance(objs[-1].wrapped, TopoDS_Vertex)
+        ):
+            raise ValueError(
+                "The vertices must be at the beginning and end of the list"
+            )
+
+    loft_builder = BRepOffsetAPI_ThruSections(filled, ruled)
+
+    for obj in objs:
+        if isinstance(obj.wrapped, TopoDS_Vertex):
+            loft_builder.AddVertex(obj.wrapped)
+        elif isinstance(obj.wrapped, TopoDS_Wire):
+            loft_builder.AddWire(obj.wrapped)
+
+    loft_builder.Build()
+
+    return loft_builder.Shape()
+
+
+def _make_topods_compound_from_shapes(
+    occt_shapes: Iterable[TopoDS_Shape | None],
+) -> TopoDS_Compound:
+    """Create an OCCT TopoDS_Compound
+
+    Create an OCCT TopoDS_Compound object from an iterable of TopoDS_Shape objects
+
+    Args:
+        occt_shapes (Iterable[TopoDS_Shape]): OCCT shapes
+
+    Returns:
+        TopoDS_Compound: OCCT compound
+    """
+    comp = TopoDS_Compound()
+    comp_builder = TopoDS_Builder()
+    comp_builder.MakeCompound(comp)
+
+    for shape in occt_shapes:
+        if shape is not None:
+            comp_builder.Add(comp, shape)
+
+    return comp
+
+
+def _make_topods_face_from_wires(
+    outer_wire: TopoDS_Wire, inner_wires: Iterable[TopoDS_Wire] | None = None
+) -> TopoDS_Face:
+    """_make_topods_face_from_wires
+
+    Makes a planar face from one or more wires
+
+    Args:
+        outer_wire (TopoDS_Wire): closed perimeter wire
+        inner_wires (Iterable[TopoDS_Wire], optional): holes. Defaults to None.
+
+    Raises:
+        ValueError: outer wire not closed
+        ValueError: wires not planar
+        ValueError: inner wire not closed
+        ValueError: internal error
+
+    Returns:
+        TopoDS_Face: planar face potentially with holes
+    """
+    if inner_wires and not BRep_Tool.IsClosed_s(outer_wire):
+        raise ValueError("Cannot build face(s): outer wire is not closed")
+    inner_wires = list(inner_wires) if inner_wires else []
+
+    # check if wires are coplanar
+    verification_compound = _make_topods_compound_from_shapes(
+        [outer_wire] + inner_wires
+    )
+    if not BRepLib_FindSurface(verification_compound, OnlyPlane=True).Found():
+        raise ValueError("Cannot build face(s): wires not planar")
+
+    # fix outer wire
+    sf_s = ShapeFix_Shape(outer_wire)
+    sf_s.Perform()
+    topo_wire = TopoDS.Wire_s(sf_s.Shape())
+
+    face_builder = BRepBuilderAPI_MakeFace(topo_wire, True)
+
+    for inner_wire in inner_wires:
+        if not BRep_Tool.IsClosed_s(inner_wire):
+            raise ValueError("Cannot build face(s): inner wire is not closed")
+        face_builder.Add(inner_wire)
+
+    face_builder.Build()
+
+    if not face_builder.IsDone():
+        raise ValueError(f"Cannot build face(s): {face_builder.Error()}")
+
+    face = face_builder.Face()
+
+    sf_f = ShapeFix_Face(face)
+    sf_f.FixOrientation()
+    sf_f.Perform()
+
+    return TopoDS.Face_s(sf_f.Result())
+
+
+def _topods_bool_op(
+    args: Iterable[TopoDS_Shape],
+    tools: Iterable[TopoDS_Shape],
+    operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter,
+) -> TopoDS_Shape:
+    """Generic boolean operation for TopoDS_Shapes
+
+    Args:
+        args: Iterable[TopoDS_Shape]:
+        tools: Iterable[TopoDS_Shape]:
+        operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter:
+
+    Returns: TopoDS_Shape
+
+    """
+    args = list(args)
+    tools = list(tools)
+    arg = TopTools_ListOfShape()
+    for obj in args:
+        arg.Append(obj)
+
+    tool = TopTools_ListOfShape()
+    for obj in tools:
+        tool.Append(obj)
+
+    operation.SetArguments(arg)
+    operation.SetTools(tool)
+
+    operation.SetRunParallel(True)
+    operation.Build()
+
+    result = downcast(operation.Shape())
+    # Remove unnecessary TopoDS_Compound around single shape
+    if isinstance(result, TopoDS_Compound):
+        result = unwrap_topods_compound(result, True)
+
+    return result
+
+
+def delta(shapes_one: Iterable[Shape], shapes_two: Iterable[Shape]) -> list[Shape]:
+    """Compare the OCCT objects of each list and return the differences"""
+    shapes_one = list(shapes_one)
+    shapes_two = list(shapes_two)
+    occt_one = {shape.wrapped for shape in shapes_one}
+    occt_two = {shape.wrapped for shape in shapes_two}
+    occt_delta = list(occt_one - occt_two)
+
+    all_shapes = []
+    for shapes in [shapes_one, shapes_two]:
+        all_shapes.extend(shapes if isinstance(shapes, list) else [*shapes])
+    shape_delta = [shape for shape in all_shapes if shape.wrapped in occt_delta]
+    return shape_delta
+
+
+def find_max_dimension(shapes: Shape | Iterable[Shape]) -> float:
+    """Return the maximum dimension of one or more shapes"""
+    shapes = shapes if isinstance(shapes, Iterable) else [shapes]
+    composite = _make_topods_compound_from_shapes([s.wrapped for s in shapes])
+    bbox = BoundBox.from_topo_ds(composite, tolerance=TOLERANCE, optimal=True)
+    return bbox.diagonal
+
+
+def isclose_b(x: float, y: float, rel_tol=1e-9, abs_tol=1e-14) -> bool:
+    """Determine whether two floating point numbers are close in value.
+    Overridden abs_tol default for the math.isclose function.
+
+    Args:
+        x (float): First value to compare
+        y (float): Second value to compare
+        rel_tol (float, optional): Maximum difference for being considered "close",
+            relative to the magnitude of the input values. Defaults to 1e-9.
+        abs_tol (float, optional): Maximum difference for being considered "close",
+            regardless of the magnitude of the input values. Defaults to 1e-14
+            (unlike math.isclose which defaults to zero).
+
+    Returns: True if a is close in value to b, and False otherwise.
+    """
+    return isclose(x, y, rel_tol=rel_tol, abs_tol=abs_tol)
+
+
+def new_edges(*objects: Shape, combined: Shape) -> ShapeList[Edge]:
+    """new_edges
+
+    Given a sequence of shapes and the combination of those shapes, find the newly added edges
+
+    Args:
+        objects (Shape): sequence of shapes
+        combined (Shape): result of the combination of objects
+
+    Returns:
+        ShapeList[Edge]: new edges
+    """
+    # Create a list of combined object edges
+    combined_topo_edges = TopTools_ListOfShape()
+    for edge in combined.edges():
+        if edge.wrapped is not None:
+            combined_topo_edges.Append(edge.wrapped)
+
+    # Create a list of original object edges
+    original_topo_edges = TopTools_ListOfShape()
+    for edge in [e for obj in objects for e in obj.edges()]:
+        if edge.wrapped is not None:
+            original_topo_edges.Append(edge.wrapped)
+
+    # Cut the original edges from the combined edges
+    operation = BRepAlgoAPI_Cut()
+    operation.SetArguments(combined_topo_edges)
+    operation.SetTools(original_topo_edges)
+    operation.SetRunParallel(True)
+    operation.Build()
+
+    edges = []
+    explorer = TopExp_Explorer(operation.Shape(), TopAbs_ShapeEnum.TopAbs_EDGE)
+    while explorer.More():
+        found_edge = combined.__class__.cast(downcast(explorer.Current()))
+        found_edge.topo_parent = combined
+        edges.append(found_edge)
+        explorer.Next()
+
+    return ShapeList(edges)
+
+
+def polar(length: float, angle: float) -> tuple[float, float]:
+    """Convert polar coordinates into cartesian coordinates"""
+    return (length * cos(radians(angle)), length * sin(radians(angle)))
+
+
+def tuplify(obj: Any, dim: int) -> tuple | None:
+    """Create a size tuple"""
+    if obj is None:
+        result = None
+    elif isinstance(obj, (tuple, list)):
+        result = tuple(obj)
+    else:
+        result = tuple([obj] * dim)
+    return result
+
+
+def unwrapped_shapetype(obj: Shape) -> TopAbs_ShapeEnum:
+    """Return Shape's TopAbs_ShapeEnum"""
+    if isinstance(obj.wrapped, TopoDS_Compound):
+        shapetypes = {shapetype(o.wrapped) for o in obj}
+        if len(shapetypes) == 1:
+            result = shapetypes.pop()
+        else:
+            result = shapetype(obj.wrapped)
+    else:
+        result = shapetype(obj.wrapped)
+    return result

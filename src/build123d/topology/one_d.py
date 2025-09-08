@@ -57,9 +57,8 @@ import warnings
 from collections.abc import Iterable
 from itertools import combinations
 from math import ceil, copysign, cos, floor, inf, isclose, pi, radians
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 from typing import cast as tcast
-from typing import overload
 
 import numpy as np
 import OCP.TopAbs as ta
@@ -235,6 +234,13 @@ from .utils import (
     isclose_b,
 )
 from .zero_d import Vertex, topo_explore_common_vertex
+from .constrained_lines import (
+    _make_2tan_rad_arcs,
+    _make_2tan_on_arcs,
+    _make_3tan_arcs,
+    _make_tan_cen_arcs,
+    _make_tan_on_rad_arcs,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .composite import Compound, Curve, Part, Sketch  # pylint: disable=R0801
@@ -1578,6 +1584,228 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return_value = cls(BRepBuilderAPI_MakeEdge(circle_geom).Edge())
         return return_value
 
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        tangency_two: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        *,
+        radius: float,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs of a given radius that are tangent/contacting
+        the two provided objects on the XY plane.
+        Args:
+            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+            tangency_two (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            sagitta_constraint (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        tangency_two: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        *,
+        center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs whose circle is tangent to two objects and whose
+        CENTER lies on a given locus (line/circle/curve) on the XY plane.
+
+        Args:
+            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+            tangency_two (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            center_on (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                the **center locus** (not a tangency target)
+            sagitta_constraint (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        tangency_two: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        tangency_three: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        *,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create planar circular arc(s) on XY tangent to three provided objects.
+
+        Args:
+            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+            tangency_two (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+            tangency_three (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            sagitta_constraint (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        *,
+        center: VectorLike,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY whose center is fixed and that are tangent/contacting
+        a single object.
+
+        Args:
+            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            center (VectorLike): center position
+            sagitta_constraint (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        *,
+        radius: float,
+        center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY that:
+        - are tangent/contacting a single object, and
+        - have a fixed radius, and
+        - have their CENTER constrained to lie on a given locus curve.
+
+        Args:
+            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            center_on (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+                the **center locus** (not a tangency target)
+            sagitta_constraint (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        *args,
+        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+        **kwargs,
+    ) -> ShapeList[Edge]:
+
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+        tangency_three = args[2] if len(args) > 2 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+        tangency_three = kwargs.pop("tangency_three", tangency_three)
+
+        radius = kwargs.pop("radius", None)
+        center = kwargs.pop("center", None)
+        center_on = kwargs.pop("center_on", None)
+
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        # --- validate inputs ---
+        tangencies = [
+            t for t in (tangency_one, tangency_two, tangency_three) if t is not None
+        ]
+        tan_count = len(tangencies)
+        if not (1 <= tan_count <= 3):
+            raise TypeError("Provide 1 to 3 tangency targets.")
+        if (
+            sum(x is not None for x in (radius, center, center_on)) > 1
+            and tan_count != 2
+        ):
+            raise TypeError("Ambiguous constraint combination.")
+
+        # Disallow qualifiers on points/vertices (enforce at runtime)
+        if any(isinstance(t, tuple) and not isinstance(t[0], Edge) for t in tangencies):
+            raise TypeError("Only Edge targets may be qualified.")
+
+        # Radius sanity
+        if radius is not None and radius <= 0:
+            raise ValueError("radius must be > 0.0")
+
+        # --- decide problem kind ---
+        if (
+            tan_count == 2
+            and radius is not None
+            and center is None
+            and center_on is None
+        ):
+            return _make_2tan_rad_arcs(
+                *tangencies,
+                radius,
+                sagitta_constraint,
+                edge_factory=cls,
+            )
+        if (
+            tan_count == 2
+            and center_on is not None
+            and radius is None
+            and center is None
+        ):
+            return _make_2tan_on_arcs(
+                *tangencies, center_on, sagitta_constraint, edge_factory=cls
+            )
+        if tan_count == 3 and radius is None and center is None and center_on is None:
+            return _make_3tan_arcs(tangencies, sagitta_constraint, edge_factory=cls)
+        if (
+            tan_count == 1
+            and center is not None
+            and radius is None
+            and center_on is None
+        ):
+            return _make_tan_cen_arcs(
+                *tangencies, center, sagitta_constraint, edge_factory=cls
+            )
+        if tan_count == 1 and center_on is not None and radius is not None:
+            return _make_tan_on_rad_arcs(
+                *tangencies, center_on, radius, sagitta_constraint, edge_factory=cls
+            )
+
+        raise ValueError("Unsupported or ambiguous combination of constraints.")
+
     @classmethod
     def make_ellipse(
         cls,
@@ -1907,259 +2135,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         ).Value()
 
         return cls(BRepBuilderAPI_MakeEdge(circle_geom).Edge())
-
-    @classmethod
-    def make_tangent_arcs(
-        cls,
-        object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-        object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-        radius: float,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
-    ) -> ShapeList[Edge]:
-        """
-        Create all planar circular arcs of a given radius that are tangent/contacting
-        the two provided objects on the XY plane.
-
-        Inputs must be coplanar with ``Plane.XY``. Non-coplanar edges are not supported.
-
-        Args:
-            object_one (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-                by the circle(s)
-            object_two (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-                by the circle(s)
-            radius (float): Circle radius for all candidate solutions.
-
-        Raises:
-            ValueError: Invalid input
-            ValueError: Invalid curve
-            RuntimeError: no valid circle solutions found
-
-        Returns:
-            ShapeList[Edge]: A list of planar circular edges (on XY) representing both
-                the minor and major arcs between the two tangency points for every valid
-                circle solution.
-
-        """
-
-        if isinstance(object_1, tuple):
-            object_one, object_one_constraint = object_1
-        else:
-            object_one = object_1
-        if isinstance(object_2, tuple):
-            object_two, object_two_constraint = object_2
-        else:
-            object_two = object_2
-
-        # Reuse a single XY plane for 3D->2D projection and for 2D-edge building
-        _pln_xy = gp_Pln(gp_Ax3(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 0.0, 1.0)))
-        _surf_xy = Geom_Plane(_pln_xy)
-
-        # ---------------------------
-        # Normalization utilities
-        # ---------------------------
-        def _norm_on_period(u: float, first: float, per: float) -> float:
-            """Map parameter u into [first, first+per)."""
-            if per <= 0.0:
-                return u
-            k = floor((u - first) / per)
-            return u - k * per
-
-        def _forward_delta(u1: float, u2: float, first: float, period: float) -> float:
-            """
-            Forward (positive) delta from u1 to u2 on a periodic domain anchored at
-            'first'.
-            """
-            u1n = _norm_on_period(u1, first, period)
-            u2n = _norm_on_period(u2, first, period)
-            delta = u2n - u1n
-            if delta < 0.0:
-                delta += period
-            return delta
-
-        # ---------------------------
-        # Core helpers
-        # ---------------------------
-        def _edge_to_qualified_2d(
-            edge: TopoDS_Edge, position_constaint: PositionConstraint
-        ) -> tuple[Geom2dGcc_QualifiedCurve, Geom2d_Curve, float, float]:
-            """Convert a TopoDS_Edge into 2d curve & extract properties"""
-
-            # 1) Underlying curve + range (also retrieve location to be safe)
-            loc = edge.Location()
-            hcurve3d = BRep_Tool.Curve_s(edge, float(), float())
-            first, last = BRep_Tool.Range_s(edge)
-
-            if hcurve3d is None:
-                raise ValueError("Edge has no underlying 3D curve.")
-
-            # 2) Apply location if the edge is positioned by a TopLoc_Location
-            if not loc.IsIdentity():
-                trsf = loc.Transformation()
-                hcurve3d = hcurve3d.Transformed(trsf)
-
-            # 3) Convert to 2D on Plane.XY (Z-up frame at origin)
-            hcurve2d = GeomAPI.To2d_s(hcurve3d, _pln_xy)  # -> Handle_Geom2d_Curve
-
-            # 4) Wrap in an adaptor using the same parametric range
-            adapt2d = Geom2dAdaptor_Curve(hcurve2d, first, last)
-
-            # 5) Create the qualified curve (unqualified is fine here)
-            qcurve = Geom2dGcc_QualifiedCurve(adapt2d, position_constaint.value)
-            return qcurve, hcurve2d, first, last
-
-        def _edge_from_circle(
-            h2d_circle: Geom2d_Circle, u1: float, u2: float
-        ) -> TopoDS_Edge:
-            """Build a 3D edge on XY from a trimmed 2D circle segment [u1, u2]."""
-            arc2d = Geom2d_TrimmedCurve(h2d_circle, u1, u2, True)  # sense=True
-            return BRepBuilderAPI_MakeEdge(arc2d, _surf_xy).Edge()
-
-        def _param_in_trim(
-            u: float, first: float, last: float, h2d: Geom2d_Curve
-        ) -> bool:
-            """Normalize (if periodic) then test [first, last] with tolerance."""
-            u = _norm_on_period(u, first, h2d.Period()) if h2d.IsPeriodic() else u
-            return (u >= first - TOLERANCE) and (u <= last + TOLERANCE)
-
-        def _as_gcc_arg(
-            obj: Edge | Vertex | VectorLike, constaint: PositionConstraint
-        ) -> tuple[
-            Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint,
-            Geom2d_Curve | None,
-            float | None,
-            float | None,
-            bool,
-        ]:
-            """
-            Normalize input to a GCC argument.
-            Returns: (q_obj, h2d, first, last, is_edge)
-            - Edge -> (QualifiedCurve, h2d, first, last, True)
-            - Vertex/VectorLike -> (CartesianPoint, None, None, None, False)
-            """
-            if isinstance(obj, Edge):
-                return _edge_to_qualified_2d(obj.wrapped, constaint) + (True,)
-
-            loc_xyz = obj.position if isinstance(obj, Vertex) else Vector()
-            try:
-                base = Vector(obj)
-            except (TypeError, ValueError) as exc:
-                raise ValueError("Expected Edge | Vertex | VectorLike") from exc
-
-            gp_pnt = gp_Pnt2d(base.X + loc_xyz.X, base.Y + loc_xyz.Y)
-            return Geom2d_CartesianPoint(gp_pnt), None, None, None, False
-
-        def _two_arc_edges_from_params(
-            circ: gp_Circ2d, u1: float, u2: float
-        ) -> ShapeList[Edge]:
-            """
-            Given two parameters on a circle, return both the forward (minor)
-            and complementary (major) arcs as TopoDS_Edge(s).
-            Uses centralized normalization utilities.
-            """
-            h2d_circle = Geom2d_Circle(circ)
-            per = h2d_circle.Period()  # usually 2*pi
-
-            # Minor (forward) span
-            d = _forward_delta(u1, u2, 0.0, per)  # anchor at 0 for circle convenience
-            u1n = _norm_on_period(u1, 0.0, per)
-            u2n = _norm_on_period(u2, 0.0, per)
-
-            # Guard degeneracy
-            if d <= TOLERANCE or abs(per - d) <= TOLERANCE:
-                return ShapeList()
-
-            minor = _edge_from_circle(h2d_circle, u1n, u1n + d)
-            major = _edge_from_circle(h2d_circle, u2n, u2n + (per - d))
-            return ShapeList([Edge(minor), Edge(major)])
-
-        def _qstr(q) -> str:
-            # Works with OCP's GccEnt enum values
-            try:
-                from OCP.GccEnt import (
-                    GccEnt_enclosed,
-                    GccEnt_enclosing,
-                    GccEnt_outside,
-                )
-
-                try:
-                    from OCP.GccEnt import GccEnt_unqualified
-                except ImportError:
-                    # Some OCCT versions name this 'noqualifier'
-                    from OCP.GccEnt import GccEnt_noqualifier as GccEnt_unqualified
-                mapping = {
-                    GccEnt_enclosed: "enclosed",
-                    GccEnt_enclosing: "enclosing",
-                    GccEnt_outside: "outside",
-                    GccEnt_unqualified: "unqualified",
-                }
-                return mapping.get(q, f"unknown({int(q)})")
-            except Exception:
-                # Fallback if enums aren't importable for any reason
-                return str(int(q))
-
-        # ---------------------------
-        # Build inputs and GCC
-        # ---------------------------
-        q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(
-            object_one, object_one_constraint
-        )
-        q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
-            object_two, object_two_constraint
-        )
-
-        # Put the Edge arg first when exactly one is an Edge (improves robustness)
-        if is_edge1 ^ is_edge2:
-            q_o1, q_o2 = (q_o1, q_o2) if is_edge1 else (q_o2, q_o1)
-
-        gcc = Geom2dGcc_Circ2d2TanRad(q_o1, q_o2, radius, TOLERANCE)
-        if not gcc.IsDone() or gcc.NbSolutions() == 0:
-            raise RuntimeError("Unable to find a tangent arc")
-
-        def _valid_on_arg1(u: float) -> bool:
-            return True if not is_edge1 else _param_in_trim(u, e1_first, e1_last, h_e1)
-
-        def _valid_on_arg2(u: float) -> bool:
-            return True if not is_edge2 else _param_in_trim(u, e2_first, e2_last, h_e2)
-
-        # ---------------------------
-        # Solutions
-        # ---------------------------
-        solutions: list[Edge] = []
-        for i in range(1, gcc.NbSolutions() + 1):
-            circ = gcc.ThisSolution(i)  # gp_Circ2d
-
-            # Tangency on curve 1
-            p1 = gp_Pnt2d()
-            u_circ1, u_arg1 = gcc.Tangency1(i, p1)
-            if not _valid_on_arg1(u_arg1):
-                continue
-
-            # Tangency on curve 2
-            p2 = gp_Pnt2d()
-            u_circ2, u_arg2 = gcc.Tangency2(i, p2)
-            if not _valid_on_arg2(u_arg2):
-                continue
-
-            qual1 = GccEnt_Position(int())
-            qual2 = GccEnt_Position(int())
-            gcc.WhichQualifier(i, qual1, qual2)  # returns two GccEnt_Position values
-            print(
-                f"Solution {i}: "
-                f"arg1={_qstr(qual1)}, arg2={_qstr(qual2)} | "
-                f"u_circ=({u_circ1:.6g}, {u_circ2:.6g}) "
-                f"u_arg=({u_arg1:.6g}, {u_arg2:.6g})"
-            )
-
-            # Build BOTH sagitta arcs and select by LengthConstraint
-            if sagitta_constraint == LengthConstraint.BOTH:
-                solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
-            else:
-                solutions.append(
-                    _two_arc_edges_from_params(circ, u_circ1, u_circ2).sort_by(
-                        Edge.length
-                    )[sagitta_constraint.value]
-                )
-        return ShapeList(solutions)
 
     @classmethod
     def make_three_point_arc(
