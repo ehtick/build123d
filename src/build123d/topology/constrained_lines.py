@@ -45,6 +45,7 @@ from OCP.Geom2d import (
     Geom2d_TrimmedCurve,
 )
 from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
+from OCP.Geom2dAPI import Geom2dAPI_ProjectPointOnCurve
 from OCP.Geom2dGcc import (
     Geom2dGcc_Circ2d2TanOn,
     Geom2dGcc_Circ2d2TanOnGeo,
@@ -56,7 +57,7 @@ from OCP.Geom2dGcc import (
     Geom2dGcc_QualifiedCurve,
 )
 from OCP.GeomAbs import GeomAbs_CurveType
-from OCP.GeomAPI import GeomAPI
+from OCP.GeomAPI import GeomAPI, GeomAPI_ProjectPointOnCurve
 from OCP.gp import (
     gp_Ax2d,
     gp_Ax3,
@@ -433,6 +434,23 @@ def _make_2tan_on_arcs(
         if not _valid_on_arg2(u_arg2):
             continue
 
+        # Center must lie on the trimmed center_on curve segment
+        center2d = circ.Location()  # gp_Pnt2d
+
+        # Project center onto the (trimmed) 2D locus
+        proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_on2d)
+        if proj.NbPoints() == 0:
+            continue  # no projection -> reject
+
+        u_on = proj.Parameter(1)
+        # Optional: make sure it's actually on the curve (not just near)
+        if proj.Distance(1) > TOLERANCE:
+            continue
+
+        # Respect the trimmed interval (handles periodic curves too)
+        if not _param_in_trim(u_on, on_first, on_last, h_on2d):
+            continue
+
         # Build sagitta arc(s) and select by LengthConstraint
         if sagitta_constraint == LengthConstraint.BOTH:
             solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
@@ -492,8 +510,12 @@ def _make_3tan_arcs(
     q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(object_two, obj2_qual)
     q_o3, h_e3, e3_first, e3_last, is_edge3 = _as_gcc_arg(object_three, obj3_qual)
 
+    guesses = [
+        (l - f) / 2 + f
+        for f, l in [(e1_first, e1_last), (e2_first, e2_last), (e3_first, e3_last)]
+    ]
     # For 3Tan we keep the user-given order so the arc endpoints remain (arg1,arg2)
-    gcc = Geom2dGcc_Circ2d3Tan(q_o1, q_o2, q_o3, TOLERANCE)
+    gcc = Geom2dGcc_Circ2d3Tan(q_o1, q_o2, q_o3, TOLERANCE, *guesses)
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a circle tangent to all three objects")
 
@@ -635,7 +657,6 @@ def _make_tan_on_rad_arcs(
     object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
     center_on: Edge,
     radius: float,
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,  # unused here
     *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
@@ -648,39 +669,31 @@ def _make_tan_on_rad_arcs(
     Notes
     -----
     - The center locus must be a 2D curve (line/circle/any Geom2d curve) — i.e. an Edge
-      after projection to XY. A point is not a valid 'center_on' locus for this solver.
+      after projection to XY.
     - With only one tangency, the natural geometric result is a full circle; arc cropping
       would require an additional endpoint constraint. This routine therefore returns
       closed circular edges (2π trims) for each valid solution.
     """
 
     # --- unpack optional qualifier on the tangency arg (edges only) ---
-    obj1_qual = PositionConstraint.UNQUALIFIED
     if isinstance(object_1, tuple):
         object_one, obj1_qual = object_1
     else:
-        object_one = object_1
+        object_one, obj1_qual = object_1, PositionConstraint.UNQUALIFIED
 
     # --- build tangency input (point/edge) ---
     q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(object_one, obj1_qual)
 
     # --- center locus ('center_on') must be a curve; ignore any qualifier there ---
     on_obj = center_on[0] if isinstance(center_on, tuple) else center_on
-    if not isinstance(on_obj, Edge):
+    if not isinstance(on_obj.wrapped, TopoDS_Edge):
         raise TypeError("center_on must be an Edge (line/circle/curve) for TanOnRad.")
 
     # Project the center locus Edge to 2D (XY)
     _, h_on2d, on_first, on_last, adapt_on = _edge_to_qualified_2d(
         on_obj.wrapped, PositionConstraint.UNQUALIFIED
     )
-    # adapt_on = Geom2dAdaptor_Curve(h_on2d, on_first, on_last)
-
-    # Choose the appropriate GCC constructor
-    if adapt_on.GetType() == GeomAbs_CurveType.GeomAbs_Line:
-        # gp_lin2d = adapt_on.Line()
-        gcc = Geom2dGcc_Circ2dTanOnRad(q_o1, adapt_on, radius, TOLERANCE)
-    else:
-        gcc = Geom2dGcc_Circ2dTanOnRadGeo(q_o1, adapt_on, radius, TOLERANCE)
+    gcc = Geom2dGcc_Circ2dTanOnRad(q_o1, adapt_on, radius, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find circle(s) for TanOnRad constraints")
@@ -697,6 +710,23 @@ def _make_tan_on_rad_arcs(
         p = gp_Pnt2d()
         _u_on_circ, u_on_arg = gcc.Tangency1(i, p)
         if not _ok1(u_on_arg):
+            continue
+
+        # Center must lie on the trimmed center_on curve segment
+        center2d = circ.Location()  # gp_Pnt2d
+
+        # Project center onto the (trimmed) 2D locus
+        proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_on2d)
+        if proj.NbPoints() == 0:
+            continue  # no projection -> reject
+
+        u_on = proj.Parameter(1)
+        # Optional: make sure it's actually on the curve (not just near)
+        if proj.Distance(1) > TOLERANCE:
+            continue
+
+        # Respect the trimmed interval (handles periodic curves too)
+        if not _param_in_trim(u_on, on_first, on_last, h_on2d):
             continue
 
         h2d = Geom2d_Circle(circ)

@@ -1693,7 +1693,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         *,
         radius: float,
         center_on: Edge,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     ) -> ShapeList[Edge]:
         """make_constrained_arcs
 
@@ -1746,10 +1745,9 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         tan_count = len(tangencies)
         if not (1 <= tan_count <= 3):
             raise TypeError("Provide 1 to 3 tangency targets.")
-        if (
-            sum(x is not None for x in (radius, center, center_on)) > 1
-            and tan_count != 2
-        ):
+        if sum(
+            x is not None for x in (radius, center, center_on)
+        ) > 1 and tan_count not in [1, 2]:
             raise TypeError("Ambiguous constraint combination.")
 
         # Disallow qualifiers on points/vertices (enforce at runtime)
@@ -1783,7 +1781,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 *tangencies, center_on, sagitta_constraint, edge_factory=cls
             )
         if tan_count == 3 and radius is None and center is None and center_on is None:
-            return _make_3tan_arcs(tangencies, sagitta_constraint, edge_factory=cls)
+            return _make_3tan_arcs(*tangencies, sagitta_constraint, edge_factory=cls)
         if (
             tan_count == 1
             and center is not None
@@ -1793,7 +1791,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return _make_tan_cen_arcs(*tangencies, center, edge_factory=cls)
         if tan_count == 1 and center_on is not None and radius is not None:
             return _make_tan_on_rad_arcs(
-                *tangencies, center_on, radius, sagitta_constraint, edge_factory=cls
+                *tangencies, center_on, radius, edge_factory=cls
             )
 
         raise ValueError("Unsupported or ambiguous combination of constraints.")
