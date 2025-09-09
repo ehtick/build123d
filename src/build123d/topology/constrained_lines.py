@@ -550,7 +550,6 @@ def _make_3tan_arcs(
 def _make_tan_cen_arcs(
     object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
     center: VectorLike | Vertex,
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,  # unused here
     *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
@@ -572,7 +571,7 @@ def _make_tan_cen_arcs(
     if isinstance(object_1, tuple):
         object_one, obj1_qual = object_1
     else:
-        object_one = object_1
+        object_one, obj1_qual = object_1, None
 
     # ---------------------------
     # Build fixed center (gp_Pnt2d)
@@ -609,7 +608,7 @@ def _make_tan_cen_arcs(
 
     else:
         # Case B: tangency target is a curve/edge (qualified curve)
-        gcc = Geom2dGcc_Circ2dTanCen(q_o1, c2d, TOLERANCE)
+        gcc = Geom2dGcc_Circ2dTanCen(q_o1, Geom2d_CartesianPoint(c2d), TOLERANCE)
         if not gcc.IsDone() or gcc.NbSolutions() == 0:
             raise RuntimeError(
                 "Unable to find circle(s) tangent to target with fixed center"
