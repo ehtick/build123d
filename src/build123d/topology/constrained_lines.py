@@ -137,7 +137,7 @@ def _edge_to_qualified_2d(
 
     # 5) Create the qualified curve (unqualified is fine here)
     qcurve = Geom2dGcc_QualifiedCurve(adapt2d, position_constaint.value)
-    return qcurve, hcurve2d, first, last
+    return qcurve, hcurve2d, first, last, adapt2d
 
 
 def _edge_from_circle(h2d_circle: Geom2d_Circle, u1: float, u2: float) -> TopoDS_Edge:
@@ -168,7 +168,7 @@ def _as_gcc_arg(
     - Vertex/VectorLike -> (CartesianPoint, None, None, None, False)
     """
     if isinstance(obj.wrapped, TopoDS_Edge):
-        return _edge_to_qualified_2d(obj.wrapped, constaint) + (True,)
+        return _edge_to_qualified_2d(obj.wrapped, constaint)[0:4] + (True,)
 
     loc_xyz = obj.position if isinstance(obj, Vertex) else Vector()
     try:
@@ -263,11 +263,11 @@ def _make_2tan_rad_arcs(
     if isinstance(object_1, tuple):
         object_one, object_one_constraint = object_1
     else:
-        object_one = object_1
+        object_one, object_one_constraint = object_1, None
     if isinstance(object_2, tuple):
         object_two, object_two_constraint = object_2
     else:
-        object_two = object_2
+        object_two, object_two_constraint = object_2, None
 
     # ---------------------------
     # Build inputs and GCC
@@ -337,7 +337,7 @@ def _make_2tan_rad_arcs(
 def _make_2tan_on_arcs(
     object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
     object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    center_on: Edge,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
@@ -392,33 +392,18 @@ def _make_2tan_on_arcs(
     # ---------------------------
     # Build center locus ("On") input
     # ---------------------------
-    # Allow an (Edge, PositionConstraint) tuple for symmetry, but ignore the qualifier here.
-    on_obj = center_on[0] if isinstance(center_on, tuple) else center_on
+    _, h_on2d, on_first, on_last, adapt_on = _edge_to_qualified_2d(
+        center_on.wrapped, PositionConstraint.UNQUALIFIED
+    )
+    # Provide initial guess parameters for all of the lines
+    guesses = []
+    if is_edge1:
+        guesses.append((e1_last - e1_first) / 2 + e1_first)
+    if is_edge2:
+        guesses.append((e2_last - e2_first) / 2 + e2_first)
+    guesses.append((on_last - on_first) / 2 + on_first)
 
-    # 2TanOn expects a 2D locus for the CENTER. Points are not supported here.
-    if isinstance(on_obj, (Vertex, Vector)):
-        raise TypeError(
-            "center_on cannot be a point for 2TanOn; use the 'center=' (TanCen) variant."
-        )
-
-    # Project the 'on' Edge to 2D and choose the appropriate solver
-    if isinstance(on_obj, Edge):
-        # Reuse your projection utility to get a 2D curve
-        # (qualifier irrelevant for the center locus)
-        _, h_on2d, on_first, on_last = _edge_to_qualified_2d(on_obj.wrapped)
-        adapt_on = Geom2dAdaptor_Curve(h_on2d, on_first, on_last)
-
-        # Prefer the analytic 'On' constructor when the locus is a line; otherwise use the Geo variant
-        use_line = adapt_on.GetType() == GeomAbs_CurveType.GeomAbs_Line
-        if use_line:
-            gp_lin2d = adapt_on.Line()
-            gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, gp_lin2d, TOLERANCE)
-        else:
-            # Works for circles and general Geom2d curves as the center locus
-            gcc = Geom2dGcc_Circ2d2TanOnGeo(q_o1, q_o2, h_on2d, TOLERANCE)
-    else:
-        # If it's neither Edge/Vertex/VectorLike (shouldn't happen), bail out clearly
-        raise TypeError("center_on must be an Edge (line/circle/curve) for 2TanOn.")
+    gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE, *guesses)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a tangent arc with center_on constraint")
@@ -649,7 +634,7 @@ def _make_tan_cen_arcs(
 
 def _make_tan_on_rad_arcs(
     object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    center_on: Edge,
     radius: float,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,  # unused here
     *,
@@ -686,15 +671,17 @@ def _make_tan_on_rad_arcs(
         raise TypeError("center_on must be an Edge (line/circle/curve) for TanOnRad.")
 
     # Project the center locus Edge to 2D (XY)
-    _, h_on2d, on_first, on_last = _edge_to_qualified_2d(on_obj.wrapped)
-    adapt_on = Geom2dAdaptor_Curve(h_on2d, on_first, on_last)
+    _, h_on2d, on_first, on_last, adapt_on = _edge_to_qualified_2d(
+        on_obj.wrapped, PositionConstraint.UNQUALIFIED
+    )
+    # adapt_on = Geom2dAdaptor_Curve(h_on2d, on_first, on_last)
 
     # Choose the appropriate GCC constructor
     if adapt_on.GetType() == GeomAbs_CurveType.GeomAbs_Line:
-        gp_lin2d = adapt_on.Line()
-        gcc = Geom2dGcc_Circ2dTanOnRad(q_o1, gp_lin2d, radius, TOLERANCE)
+        # gp_lin2d = adapt_on.Line()
+        gcc = Geom2dGcc_Circ2dTanOnRad(q_o1, adapt_on, radius, TOLERANCE)
     else:
-        gcc = Geom2dGcc_Circ2dTanOnRadGeo(q_o1, h_on2d, radius, TOLERANCE)
+        gcc = Geom2dGcc_Circ2dTanOnRadGeo(q_o1, adapt_on, radius, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find circle(s) for TanOnRad constraints")

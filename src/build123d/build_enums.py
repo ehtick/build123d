@@ -255,7 +255,7 @@ class FontStyle(Enum):
 
 
 class LengthConstraint(Enum):
-    """Length Constraint for sagatti selection"""
+    """Length Constraint for sagitta selection"""
 
     SHORT = 0
     LONG = -1

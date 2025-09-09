@@ -1617,7 +1617,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
         tangency_two: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
         *,
-        center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        center_on: Edge,
         sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     ) -> ShapeList[Edge]:
         """
@@ -1628,8 +1628,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
             tangency_two (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
-            center_on (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
-                the **center locus** (not a tangency target)
+            center_on (Edge): center must lie on this edge
             sagitta_constraint (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
@@ -1697,7 +1696,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         tangency_one: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
         *,
         radius: float,
-        center_on: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+        center_on: Edge,
         sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     ) -> ShapeList[Edge]:
         """make_constrained_arcs
@@ -1711,8 +1710,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
                 Geometric entity to be contacted/touched by the circle(s)
             radius (float): arc radius
-            center_on (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
-                the **center locus** (not a tangency target)
+            center_on (Edge): center must lie on this edge
             sagitta_constraint (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
