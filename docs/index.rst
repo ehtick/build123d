@@ -66,7 +66,7 @@ file or used in an Assembly.  There are three builders available:
 
 The three builders work together in a hierarchy as follows:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildPart() as my_part:
         ...
@@ -83,6 +83,7 @@ added to ``my_part`` once the sketch is complete.
 As an example, consider the design of a tea cup:
 
 .. literalinclude:: ../examples/tea_cup.py
+    :language: build123d
     :start-after: [Code]
     :end-before: [End]
 

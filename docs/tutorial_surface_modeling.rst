@@ -31,7 +31,7 @@ the perimeter of the surface and a central point on that surface.
 To create the perimeter, we'll use a ``BuildLine`` instance as follows. Since the heart is 
 symmetric, we'll only create half of its surface here:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildLine() as heart_half:
         l1 = JernArc((0, 0), (1, 1.4), 40, -17)
@@ -48,13 +48,13 @@ of the heart and archs up off ``Plane.XY``.
 
 In preparation for creating the surface, we'll define a point on the surface:
 
-.. code-block:: python
+.. code-block:: build123d
 
     surface_pnt = l2.edge().arc_center + Vector(0, 0, 1.5)
 
 We will then use this point to create a non-planar ``Face``:
 
-.. code-block:: python
+.. code-block:: build123d
 
     top_right_surface = -Face.make_surface(heart_half.wire(), [surface_pnt]).locate(
         Pos(Z=0.5)
@@ -71,7 +71,7 @@ is up, which isn't necessary but helps with viewing.
 Now that one half of the top of the heart has been created, the remainder of the top 
 and bottom can be created by mirroring:
 
-.. code-block:: python
+.. code-block:: build123d
 
     top_left_surface = top_right_surface.mirror(Plane.YZ)
     bottom_right_surface = top_right_surface.mirror(Plane.XY)
@@ -80,7 +80,7 @@ and bottom can be created by mirroring:
 The sides of the heart are going to be created by extruding the outside of the perimeter 
 as follows:
 
-.. code-block:: python
+.. code-block:: build123d
 
     left_wire = Wire([l3.edge(), l2.edge(), l1.edge()])
     left_side = Face.extrude(left_wire, (0, 0, 1)).locate(Pos(Z=-0.5))
@@ -94,7 +94,7 @@ With the top, bottom, and sides, the complete boundary of the object is defined.
 now put them together, first into a :class:`~topology.Shell` and then into a 
 :class:`~topology.Solid`:
 
-.. code-block:: python
+.. code-block:: build123d
 
     heart = Solid(
         Shell(
@@ -122,7 +122,7 @@ now put them together, first into a :class:`~topology.Shell` and then into a
 Finally, we'll create the frame around the heart as a simple extrusion of a planar 
 shape defined by the perimeter of the heart and merge all of the components together:
 
-  .. code-block:: python
+  .. code-block:: build123d
 
     with BuildPart() as heart_token:
         with BuildSketch() as outline:
