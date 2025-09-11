@@ -264,11 +264,11 @@ def _make_2tan_rad_arcs(
     if isinstance(object_1, tuple):
         object_one, object_one_constraint = object_1
     else:
-        object_one, object_one_constraint = object_1, None
+        object_one, object_one_constraint = object_1, PositionConstraint.UNQUALIFIED
     if isinstance(object_2, tuple):
         object_two, object_two_constraint = object_2
     else:
-        object_two, object_two_constraint = object_2, None
+        object_two, object_two_constraint = object_2, PositionConstraint.UNQUALIFIED
 
     # ---------------------------
     # Build inputs and GCC
@@ -279,10 +279,6 @@ def _make_2tan_rad_arcs(
     q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
         object_two, object_two_constraint
     )
-
-    # Put the Edge arg first when exactly one is an Edge (improves robustness)
-    if is_edge1 ^ is_edge2:
-        q_o1, q_o2 = (q_o1, q_o2) if is_edge1 else (q_o2, q_o1)
 
     gcc = Geom2dGcc_Circ2d2TanRad(q_o1, q_o2, radius, TOLERANCE)
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
@@ -349,25 +345,18 @@ def _make_2tan_on_arcs(
 
     Notes
     -----
-    - `center_on` is treated as a **center locus** (not a tangency target). For a line
-      locus this uses Geom2dGcc_Circ2d2TanOn; for other 2D curves it uses the *Geo variant*.
-    - A point is NOT a valid center locus for the 2TanOn solver; use the TanCen variant
-      (fixed center) for that case.
+    - `center_on` is treated as a **center locus** (not a tangency target).
     """
-
-    # Unpack optional qualifiers on the two tangency args
-    object_one_constraint = PositionConstraint.UNQUALIFIED
-    object_two_constraint = PositionConstraint.UNQUALIFIED
 
     if isinstance(object_1, tuple):
         object_one, object_one_constraint = object_1
     else:
-        object_one = object_1
+        object_one, object_one_constraint = object_1, PositionConstraint.UNQUALIFIED
 
     if isinstance(object_2, tuple):
         object_two, object_two_constraint = object_2
     else:
-        object_two = object_2
+        object_two, object_two_constraint = object_2, PositionConstraint.UNQUALIFIED
 
     # ---------------------------
     # Build tangency inputs
@@ -378,17 +367,6 @@ def _make_2tan_on_arcs(
     q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
         object_two, object_two_constraint
     )
-
-    # Prefer "edge-first" ordering when exactly one arg is an Edge
-    if is_edge1 ^ is_edge2:
-        q_o1, q_o2 = (q_o1, q_o2) if is_edge1 else (q_o2, q_o1)
-        h_e1, h_e2 = (h_e1, h_e2) if is_edge1 else (h_e2, h_e1)
-        e1_first, e1_last, e2_first, e2_last = (
-            (e1_first, e1_last, e2_first, e2_last)
-            if is_edge1
-            else (e2_first, e2_last, e1_first, e1_last)
-        )
-        is_edge1, is_edge2 = (True, False) if is_edge1 else (False, True)
 
     # ---------------------------
     # Build center locus ("On") input
@@ -404,7 +382,10 @@ def _make_2tan_on_arcs(
         guesses.append((e2_last - e2_first) / 2 + e2_first)
     guesses.append((on_last - on_first) / 2 + on_first)
 
-    gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE, *guesses)
+    if is_edge1 or is_edge2:
+        gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE, *guesses)
+    else:
+        gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a tangent arc with center_on constraint")
@@ -510,10 +491,15 @@ def _make_3tan_arcs(
     q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(object_two, obj2_qual)
     q_o3, h_e3, e3_first, e3_last, is_edge3 = _as_gcc_arg(object_three, obj3_qual)
 
-    guesses = [
-        (l - f) / 2 + f
-        for f, l in [(e1_first, e1_last), (e2_first, e2_last), (e3_first, e3_last)]
-    ]
+    # Provide initial guess parameters for all of the lines
+    guesses = []
+    if is_edge1:
+        guesses.append((e1_last - e1_first) / 2 + e1_first)
+    if is_edge2:
+        guesses.append((e2_last - e2_first) / 2 + e2_first)
+    if is_edge3:
+        guesses.append((e3_last - e3_first) / 2 + e3_first)
+
     # For 3Tan we keep the user-given order so the arc endpoints remain (arg1,arg2)
     gcc = Geom2dGcc_Circ2d3Tan(q_o1, q_o2, q_o3, TOLERANCE, *guesses)
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
