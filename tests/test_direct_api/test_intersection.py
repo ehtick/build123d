@@ -59,6 +59,69 @@ def make_params(matrix):
     return params
 
 
+# Geometric test objects
+ax1 = Axis.X
+ax2 = Axis.Y
+ax3 = Axis((0, 0, 5), (1, 0, 0))
+pl1 = Plane.YZ
+pl2 = Plane.XY
+pl3 = Plane.XY.offset(5)
+pl4 = Plane((0, 5, 0))
+vl1 = Vector(2, 0, 0)
+vl2 = Vector(2, 0, 5)
+lc1 = Location((2, 0, 0))
+lc2 = Location((2, 0, 5))
+lc3 = Location((0, 0, 0), (0, 90, 90))
+lc4 = Location((2, 0, 0), (0, 90, 90))
+
+# Geometric test matrix
+geometry_matrix = [
+    Case(ax1, ax3, None, "parallel/skew", None),
+    Case(ax1, ax1, Axis, "collinear", None),
+    Case(ax1, ax2, Vector, "intersecting", None),
+
+    Case(ax1, pl3, None, "parallel", None),
+    Case(ax1, pl2, Axis, "coplanar", None),
+    Case(ax1, pl1, Vector, "intersecting", None),
+
+    Case(ax1, vl2, None, "non-coincident", None),
+    Case(ax1, vl1, Vector, "coincident", None),
+
+    Case(ax1, lc2, None, "non-coincident", None),
+    Case(ax1, lc4, Location, "intersecting, co-z", None),
+    Case(ax1, lc1, Vector, "intersecting", None),
+
+    Case(pl2, pl3, None, "parallel", None),
+    Case(pl2, pl4, Plane, "coplanar", None),
+    Case(pl1, pl2, Axis, "intersecting", None),
+
+    Case(pl3, ax1, None, "parallel", None),
+    Case(pl2, ax1, Axis, "coplanar", None),
+    Case(pl1, ax1, Vector, "intersecting", None),
+
+    Case(pl1, vl2, None, "non-coincident", None),
+    Case(pl2, vl1, Vector, "coincident", None),
+
+    Case(pl1, lc2, None, "non-coincident", None),
+    Case(pl1, lc3, Location, "intersecting, co-z", None),
+    Case(pl2, lc4, Vector, "coincident", None),
+
+    Case(vl1, vl2, None, "non-coincident", None),
+    Case(vl1, vl1, Vector, "coincident", None),
+
+    Case(vl1, lc2, None, "non-coincident", None),
+    Case(vl1, lc1, Vector, "coincident", None),
+
+    Case(lc1, lc2, None, "non-coincident", None),
+    Case(lc1, lc4, Vector, "coincident", None),
+    Case(lc1, lc1, Location, "coincident, co-z", None),
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(geometry_matrix))
+def test_geometry(obj, target, expected):
+    run_test(obj, target, expected)
+
+
 # FreeCAD issue example
 c1 = CenterArc((0, 0), 10, 0, 360).edge()
 c2 = CenterArc((19, 0), 10, 0, 360).edge()

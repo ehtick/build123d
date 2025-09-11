@@ -909,15 +909,15 @@ class Axis(metaclass=AxisMeta):
         """Find intersection of vector and axis"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
+    def intersect(self, location: Location) -> Vector | Location | None:
         """Find intersection of location and axis"""
 
     @overload
-    def intersect(self, axis: Axis) -> Axis | None:
+    def intersect(self, axis: Axis) -> Vector | Axis | None:
         """Find intersection of axis and axis"""
 
     @overload
-    def intersect(self, plane: Plane) -> Axis | None:
+    def intersect(self, plane: Plane) -> Vector | Axis | None:
         """Find intersection of plane and axis"""
 
     def intersect(self, *args, **kwargs):
@@ -965,12 +965,12 @@ class Axis(metaclass=AxisMeta):
             # Find the "direction" of the location
             location_dir = Plane(location).z_dir
 
-            # Is the location on the axis with the same direction?
-            if (
-                self.intersect(location.position) is not None
-                and location_dir == self.direction
-            ):
-                return location
+            if self.intersect(location.position) is not None:
+                # Is the location on the axis with the same direction?
+                if location_dir == self.direction:
+                    return location
+                else:
+                    return location.position
 
         if shape is not None:
             return shape.intersect(self)
@@ -1932,15 +1932,15 @@ class Location:
         """Find intersection of vector and location"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
+    def intersect(self, location: Location) -> Vector | Location | None:
         """Find intersection of location and location"""
 
     @overload
-    def intersect(self, axis: Axis) -> Location | None:
+    def intersect(self, axis: Axis) -> Vector | Location | None:
         """Find intersection of axis and location"""
 
     @overload
-    def intersect(self, plane: Plane) -> Location | None:
+    def intersect(self, plane: Plane) -> Vector | Location | None:
         """Find intersection of plane and location"""
 
     def intersect(self, *args, **kwargs):
@@ -1956,8 +1956,11 @@ class Location:
         if vector is not None and self.position == vector:
             return vector
 
-        if location is not None and self == location:
-            return self
+        if location is not None:
+            if self == location:
+                return self
+            elif self.position == location.position:
+                return self.position
 
         if shape is not None:
             return shape.intersect(self)
@@ -3131,15 +3134,15 @@ class Plane(metaclass=PlaneMeta):
         """Find intersection of vector and plane"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
+    def intersect(self, location: Location) -> Vector | Location | None:
         """Find intersection of location and plane"""
 
     @overload
-    def intersect(self, axis: Axis) -> Axis | Vector | None:
+    def intersect(self, axis: Axis) -> Vector | Axis | None:
         """Find intersection of axis and plane"""
 
     @overload
-    def intersect(self, plane: Plane) -> Axis | None:
+    def intersect(self, plane: Plane) -> Axis | Plane | None:
         """Find intersection of plane and plane"""
 
     @overload
@@ -3172,6 +3175,9 @@ class Plane(metaclass=PlaneMeta):
             return intersection_point
 
         if plane is not None:
+            if self.contains(plane.origin) and self.z_dir == plane.z_dir:
+                return self
+
             surface1 = Geom_Plane(self.wrapped)
             surface2 = Geom_Plane(plane.wrapped)
             intersector = GeomAPI_IntSS(surface1, surface2, TOLERANCE)
@@ -3187,8 +3193,11 @@ class Plane(metaclass=PlaneMeta):
 
         if location is not None:
             pln = Plane(location)
-            if pln.origin == self.origin and pln.z_dir == self.z_dir:
-                return location
+            if self.contains(pln.origin):
+                if self.z_dir == pln.z_dir:
+                    return location
+                else:
+                    return pln.origin
 
         if shape is not None:
             return shape.intersect(self)
