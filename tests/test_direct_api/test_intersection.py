@@ -122,6 +122,35 @@ def test_geometry(obj, target, expected):
     run_test(obj, target, expected)
 
 
+# Shape test matrices
+vt1 = Vertex(2, 0, 0)
+vt2 = Vertex(2, 0, 5)
+
+shape_0d_matrix = [
+    Case(vt1, vt2, None, "non-coincident", None),
+    Case(vt1, vt1, [Vertex], "coincident", None),
+
+    Case(vt1, vl2, None, "non-coincident", None),
+    Case(vt1, vl1, [Vertex], "coincident", None),
+
+    Case(vt1, lc2, None, "non-coincident", None),
+    Case(vt1, lc1, [Vertex], "coincident", None),
+
+    Case(vt2, ax1, None, "non-coincident", None),
+    Case(vt1, ax1, [Vertex], "coincident", None),
+
+    Case(vt2, pl1, None, "non-coincident", None),
+    Case(vt1, pl2, [Vertex], "coincident", None),
+
+    Case(vt1, [vt2, lc1], None, "multi to_intersect, non-coincident", None),
+    Case(vt1, [vt1, lc1], [Vertex], "multi to_intersect, coincident", None),
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(shape_0d_matrix))
+def test_shape_0d(obj, target, expected):
+    run_test(obj, target, expected)
+
+
 # FreeCAD issue example
 c1 = CenterArc((0, 0), 10, 0, 360).edge()
 c2 = CenterArc((19, 0), 10, 0, 360).edge()
