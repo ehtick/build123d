@@ -229,11 +229,9 @@ def _qstr(q) -> str:
 
 
 def _make_2tan_rad_arcs(
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 2
     radius: float,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
-    *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> list[Edge]:
     """
@@ -243,10 +241,8 @@ def _make_2tan_rad_arcs(
     Inputs must be coplanar with ``Plane.XY``. Non-coplanar edges are not supported.
 
     Args:
-        object_one (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-            by the circle(s)
-        object_two (Edge | Vertex | VectorLike): Geometric entity to be contacted/touched
-            by the circle(s)
+        tangencies (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike:
+            Geometric entity to be contacted/touched by the circle(s)
         radius (float): Circle radius for all candidate solutions.
 
     Raises:
@@ -261,34 +257,28 @@ def _make_2tan_rad_arcs(
 
     """
 
-    if isinstance(object_1, tuple):
-        object_one, object_one_constraint = object_1
-    else:
-        object_one, object_one_constraint = object_1, PositionConstraint.UNQUALIFIED
-    if isinstance(object_2, tuple):
-        object_two, object_two_constraint = object_2
-    else:
-        object_two, object_two_constraint = object_2, PositionConstraint.UNQUALIFIED
+    # Unpack optional per-edge qualifiers (default UNQUALIFIED)
+    tangent_tuples = [
+        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
+        for t in tangencies
+    ]
 
-    # ---------------------------
-    # Build inputs and GCC
-    # ---------------------------
-    q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(
-        object_one, object_one_constraint
-    )
-    q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
-        object_two, object_two_constraint
-    )
+    # Build inputs for GCC
+    q_o, h_e, e_first, e_last, is_edge = [[None] * 2 for _ in range(5)]
+    for i in range(len(tangent_tuples)):
+        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
+            *tangent_tuples[i]
+        )
 
-    gcc = Geom2dGcc_Circ2d2TanRad(q_o1, q_o2, radius, TOLERANCE)
+    gcc = Geom2dGcc_Circ2d2TanRad(*q_o, radius, TOLERANCE)
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a tangent arc")
 
-    def _valid_on_arg1(u: float) -> bool:
-        return True if not is_edge1 else _param_in_trim(u, e1_first, e1_last, h_e1)
-
-    def _valid_on_arg2(u: float) -> bool:
-        return True if not is_edge2 else _param_in_trim(u, e2_first, e2_last, h_e2)
+    def _ok(i: int, u: float) -> bool:
+        """Does the given parameter value lie within the edge range?"""
+        return (
+            True if not is_edge[i] else _param_in_trim(u, e_first[i], e_last[i], h_e[i])
+        )
 
     # ---------------------------
     # Solutions
@@ -300,13 +290,13 @@ def _make_2tan_rad_arcs(
         # Tangency on curve 1
         p1 = gp_Pnt2d()
         u_circ1, u_arg1 = gcc.Tangency1(i, p1)
-        if not _valid_on_arg1(u_arg1):
+        if not _ok(0, u_arg1):
             continue
 
         # Tangency on curve 2
         p2 = gp_Pnt2d()
         u_circ2, u_arg2 = gcc.Tangency2(i, p2)
-        if not _valid_on_arg2(u_arg2):
+        if not _ok(1, u_arg2):
             continue
 
         # qual1 = GccEnt_Position(int())
@@ -332,11 +322,9 @@ def _make_2tan_rad_arcs(
 
 
 def _make_2tan_on_arcs(
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 2
     center_on: Edge,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
-    *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
@@ -348,53 +336,41 @@ def _make_2tan_on_arcs(
     - `center_on` is treated as a **center locus** (not a tangency target).
     """
 
-    if isinstance(object_1, tuple):
-        object_one, object_one_constraint = object_1
-    else:
-        object_one, object_one_constraint = object_1, PositionConstraint.UNQUALIFIED
+    # Unpack optional per-edge qualifiers (default UNQUALIFIED)
+    tangent_tuples = [
+        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
+        for t in tangencies
+    ]
 
-    if isinstance(object_2, tuple):
-        object_two, object_two_constraint = object_2
-    else:
-        object_two, object_two_constraint = object_2, PositionConstraint.UNQUALIFIED
+    # Build inputs for GCC
+    q_o, h_e, e_first, e_last, is_edge = [[None] * 3 for _ in range(5)]
+    for i in range(len(tangent_tuples)):
+        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
+            *tangent_tuples[i]
+        )
 
-    # ---------------------------
-    # Build tangency inputs
-    # ---------------------------
-    q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(
-        object_one, object_one_constraint
-    )
-    q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(
-        object_two, object_two_constraint
-    )
-
-    # ---------------------------
     # Build center locus ("On") input
-    # ---------------------------
-    _, h_on2d, on_first, on_last, adapt_on = _edge_to_qualified_2d(
+    _, h_on2d, e_first[2], e_last[2], adapt_on = _edge_to_qualified_2d(
         center_on.wrapped, PositionConstraint.UNQUALIFIED
     )
-    # Provide initial guess parameters for all of the lines
-    guesses = []
-    if is_edge1:
-        guesses.append((e1_last - e1_first) / 2 + e1_first)
-    if is_edge2:
-        guesses.append((e2_last - e2_first) / 2 + e2_first)
-    guesses.append((on_last - on_first) / 2 + on_first)
+    is_edge[2] = True
 
-    if is_edge1 or is_edge2:
-        gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE, *guesses)
+    # Provide initial middle guess parameters for all of the edges
+    guesses = [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+
+    if sum(is_edge) > 1:
+        gcc = Geom2dGcc_Circ2d2TanOn(*q_o[0:2], adapt_on, TOLERANCE, *guesses)
     else:
-        gcc = Geom2dGcc_Circ2d2TanOn(q_o1, q_o2, adapt_on, TOLERANCE)
+        gcc = Geom2dGcc_Circ2d2TanOn(*q_o[0:2], adapt_on, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a tangent arc with center_on constraint")
 
-    def _valid_on_arg1(u: float) -> bool:
-        return True if not is_edge1 else _param_in_trim(u, e1_first, e1_last, h_e1)
-
-    def _valid_on_arg2(u: float) -> bool:
-        return True if not is_edge2 else _param_in_trim(u, e2_first, e2_last, h_e2)
+    def _ok(i: int, u: float) -> bool:
+        """Does the given parameter value lie within the edge range?"""
+        return (
+            True if not is_edge[i] else _param_in_trim(u, e_first[i], e_last[i], h_e[i])
+        )
 
     # ---------------------------
     # Solutions
@@ -406,13 +382,13 @@ def _make_2tan_on_arcs(
         # Tangency on curve 1
         p1 = gp_Pnt2d()
         u_circ1, u_arg1 = gcc.Tangency1(i, p1)
-        if not _valid_on_arg1(u_arg1):
+        if not _ok(0, u_arg1):
             continue
 
         # Tangency on curve 2
         p2 = gp_Pnt2d()
         u_circ2, u_arg2 = gcc.Tangency2(i, p2)
-        if not _valid_on_arg2(u_arg2):
+        if not _ok(1, u_arg2):
             continue
 
         # Center must lie on the trimmed center_on curve segment
@@ -429,7 +405,7 @@ def _make_2tan_on_arcs(
             continue
 
         # Respect the trimmed interval (handles periodic curves too)
-        if not _param_in_trim(u_on, on_first, on_last, h_on2d):
+        if not _param_in_trim(u_on, e_first[2], e_last[2], h_on2d):
             continue
 
         # Build sagitta arc(s) and select by LengthConstraint
@@ -448,71 +424,46 @@ def _make_2tan_on_arcs(
 
 
 def _make_3tan_arcs(
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    object_2: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    object_3: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 3
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
-    *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
     Create planar circular arc(s) on XY tangent to three provided objects.
 
     The circle is determined by the three tangency constraints; the returned arc(s)
-    are trimmed between the two tangency points corresponding to `object_1` and
-    `object_2`. Use `sagitta_constraint` to select the shorter/longer (or both) arc.
+    are trimmed between the two tangency points corresponding to `tangencies[0]` and
+    `tangencies[1]`. Use `sagitta_constraint` to select the shorter/longer (or both) arc.
     Inputs must be representable on Plane.XY.
     """
 
     # Unpack optional per-edge qualifiers (default UNQUALIFIED)
-    obj1_qual = PositionConstraint.UNQUALIFIED
-    obj2_qual = PositionConstraint.UNQUALIFIED
-    obj3_qual = PositionConstraint.UNQUALIFIED
+    tangent_tuples = [
+        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
+        for t in tangencies
+    ]
 
-    if isinstance(object_1, tuple):
-        object_one, obj1_qual = object_1
-    else:
-        object_one = object_1
-
-    if isinstance(object_2, tuple):
-        object_two, obj2_qual = object_2
-    else:
-        object_two = object_2
-
-    if isinstance(object_3, tuple):
-        object_three, obj3_qual = object_3
-    else:
-        object_three = object_3
-
-    # ---------------------------
     # Build inputs for GCC
-    # ---------------------------
-    q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(object_one, obj1_qual)
-    q_o2, h_e2, e2_first, e2_last, is_edge2 = _as_gcc_arg(object_two, obj2_qual)
-    q_o3, h_e3, e3_first, e3_last, is_edge3 = _as_gcc_arg(object_three, obj3_qual)
+    q_o, h_e, e_first, e_last, is_edge = [[None] * 3 for _ in range(5)]
+    for i in range(len(tangent_tuples)):
+        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
+            *tangent_tuples[i]
+        )
 
-    # Provide initial guess parameters for all of the lines
-    guesses = []
-    if is_edge1:
-        guesses.append((e1_last - e1_first) / 2 + e1_first)
-    if is_edge2:
-        guesses.append((e2_last - e2_first) / 2 + e2_first)
-    if is_edge3:
-        guesses.append((e3_last - e3_first) / 2 + e3_first)
+    # Provide initial middle guess parameters for all of the edges
+    guesses = [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
 
-    # For 3Tan we keep the user-given order so the arc endpoints remain (arg1,arg2)
-    gcc = Geom2dGcc_Circ2d3Tan(q_o1, q_o2, q_o3, TOLERANCE, *guesses)
+    # Generate all valid circles tangent to the 3 inputs
+    gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
+
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a circle tangent to all three objects")
 
-    def _ok1(u: float) -> bool:
-        return True if not is_edge1 else _param_in_trim(u, e1_first, e1_last, h_e1)
-
-    def _ok2(u: float) -> bool:
-        return True if not is_edge2 else _param_in_trim(u, e2_first, e2_last, h_e2)
-
-    def _ok3(u: float) -> bool:
-        return True if not is_edge3 else _param_in_trim(u, e3_first, e3_last, h_e3)
+    def _ok(i: int, u: float) -> bool:
+        """Does the given parameter value lie within the edge range?"""
+        return (
+            True if not is_edge[i] else _param_in_trim(u, e_first[i], e_last[i], h_e[i])
+        )
 
     # ---------------------------
     # Enumerate solutions
@@ -524,19 +475,19 @@ def _make_3tan_arcs(
         # Tangency on curve 1 (arc endpoint A)
         p1 = gp_Pnt2d()
         u_circ1, u_arg1 = gcc.Tangency1(i, p1)
-        if not _ok1(u_arg1):
+        if not _ok(0, u_arg1):
             continue
 
         # Tangency on curve 2 (arc endpoint B)
         p2 = gp_Pnt2d()
         u_circ2, u_arg2 = gcc.Tangency2(i, p2)
-        if not _ok2(u_arg2):
+        if not _ok(1, u_arg2):
             continue
 
         # Tangency on curve 3 (validates circle; does not define arc endpoints)
         p3 = gp_Pnt2d()
         _u_circ3, u_arg3 = gcc.Tangency3(i, p3)
-        if not _ok3(u_arg3):
+        if not _ok(2, u_arg3):
             continue
 
         # Build arc(s) between u_circ1 and u_circ2 per LengthConstraint
@@ -556,9 +507,9 @@ def _make_3tan_arcs(
 
 
 def _make_tan_cen_arcs(
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
-    center: VectorLike | Vertex,
+    tangency: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
     *,
+    center: VectorLike | Vertex,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
@@ -575,11 +526,10 @@ def _make_tan_cen_arcs(
     """
 
     # Unpack optional qualifier on the tangency arg (edges only)
-    obj1_qual = PositionConstraint.UNQUALIFIED
-    if isinstance(object_1, tuple):
-        object_one, obj1_qual = object_1
+    if isinstance(tangency, tuple):
+        object_one, obj1_qual = tangency
     else:
-        object_one, obj1_qual = object_1, None
+        object_one, obj1_qual = tangency, PositionConstraint.UNQUALIFIED
 
     # ---------------------------
     # Build fixed center (gp_Pnt2d)
@@ -640,10 +590,10 @@ def _make_tan_cen_arcs(
 
 
 def _make_tan_on_rad_arcs(
-    object_1: tuple[Edge, PositionConstraint] | Vertex | VectorLike,
+    tangency: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+    *,
     center_on: Edge,
     radius: float,
-    *,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
@@ -662,10 +612,10 @@ def _make_tan_on_rad_arcs(
     """
 
     # --- unpack optional qualifier on the tangency arg (edges only) ---
-    if isinstance(object_1, tuple):
-        object_one, obj1_qual = object_1
+    if isinstance(tangency, tuple):
+        object_one, obj1_qual = tangency
     else:
-        object_one, obj1_qual = object_1, PositionConstraint.UNQUALIFIED
+        object_one, obj1_qual = tangency, PositionConstraint.UNQUALIFIED
 
     # --- build tangency input (point/edge) ---
     q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(object_one, obj1_qual)

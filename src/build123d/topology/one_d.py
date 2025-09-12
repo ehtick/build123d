@@ -1775,8 +1775,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         ):
             return _make_2tan_rad_arcs(
                 *tangencies,
-                radius,
-                sagitta_constraint,
+                radius=radius,
+                sagitta_constraint=sagitta_constraint,
                 edge_factory=cls,
             )
         if (
@@ -1786,20 +1786,25 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             and center is None
         ):
             return _make_2tan_on_arcs(
-                *tangencies, center_on, sagitta_constraint, edge_factory=cls
+                *tangencies,
+                center_on=center_on,
+                sagitta_constraint=sagitta_constraint,
+                edge_factory=cls,
             )
         if tan_count == 3 and radius is None and center is None and center_on is None:
-            return _make_3tan_arcs(*tangencies, sagitta_constraint, edge_factory=cls)
+            return _make_3tan_arcs(
+                *tangencies, sagitta_constraint=sagitta_constraint, edge_factory=cls
+            )
         if (
             tan_count == 1
             and center is not None
             and radius is None
             and center_on is None
         ):
-            return _make_tan_cen_arcs(*tangencies, center, edge_factory=cls)
+            return _make_tan_cen_arcs(*tangencies, center=center, edge_factory=cls)
         if tan_count == 1 and center_on is not None and radius is not None:
             return _make_tan_on_rad_arcs(
-                *tangencies, center_on, radius, edge_factory=cls
+                *tangencies, center_on=center_on, radius=radius, edge_factory=cls
             )
 
         raise ValueError("Unsupported or ambiguous combination of constraints.")
