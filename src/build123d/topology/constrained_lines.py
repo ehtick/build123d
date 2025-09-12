@@ -229,7 +229,7 @@ def _qstr(q) -> str:
 
 
 def _make_2tan_rad_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 2
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 2
     radius: float,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
@@ -322,7 +322,7 @@ def _make_2tan_rad_arcs(
 
 
 def _make_2tan_on_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 2
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 2
     center_on: Edge,
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
@@ -424,7 +424,7 @@ def _make_2tan_on_arcs(
 
 
 def _make_3tan_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,  # 3
+    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 3
     sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
@@ -507,7 +507,7 @@ def _make_3tan_arcs(
 
 
 def _make_tan_cen_arcs(
-    tangency: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+    tangency: tuple[Edge, PositionConstraint] | Edge | Vector,
     *,
     center: VectorLike | Vertex,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
@@ -590,7 +590,7 @@ def _make_tan_cen_arcs(
 
 
 def _make_tan_on_rad_arcs(
-    tangency: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+    tangency: tuple[Edge, PositionConstraint] | Edge | Vector,
     *,
     center_on: Edge,
     radius: float,

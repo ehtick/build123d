@@ -1738,10 +1738,22 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         if kwargs:
             raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
 
-        # --- validate inputs ---
-        tangencies = [
+        tangencies_raw = [
             t for t in (tangency_one, tangency_two, tangency_three) if t is not None
         ]
+        tangencies = []
+        for tangency_raw in tangencies_raw:
+            if (
+                isinstance(tangency_raw, tuple)
+                and not isinstance(tangency_raw[0], Edge)
+            ) or not isinstance(tangency_raw, Edge):
+                try:
+                    tangency = Vector(tangency_raw)
+                except:
+                    raise TypeError("Invalid tangency")
+            else:
+                tangency = tangency_raw
+            tangencies.append(tangency)
 
         # Sort the tangency inputs so points are always last
         tangent_tuples = [t if isinstance(t, tuple) else (t, None) for t in tangencies]
@@ -1753,14 +1765,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         tan_count = len(tangencies)
         if not (1 <= tan_count <= 3):
             raise TypeError("Provide 1 to 3 tangency targets.")
-        if sum(
-            x is not None for x in (radius, center, center_on)
-        ) > 1 and tan_count not in [1, 2]:
-            raise TypeError("Ambiguous constraint combination.")
-
-        # Disallow qualifiers on points/vertices (enforce at runtime)
-        if any(isinstance(t, tuple) and not isinstance(t[0], Edge) for t in tangencies):
-            raise TypeError("Only Edge targets may be qualified.")
 
         # Radius sanity
         if radius is not None and radius <= 0:
