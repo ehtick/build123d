@@ -254,8 +254,8 @@ class FontStyle(Enum):
         return f"<{self.__class__.__name__}.{self.name}>"
 
 
-class LengthConstraint(Enum):
-    """Length Constraint for sagitta selection"""
+class Sagitta(Enum):
+    """Sagitta selection"""
 
     SHORT = 0
     LONG = -1
@@ -320,8 +320,8 @@ class PageSize(Enum):
         return f"<{self.__class__.__name__}.{self.name}>"
 
 
-class PositionConstraint(Enum):
-    """Position Constraint for edge selection"""
+class Tangency(Enum):
+    """Tangency constraint for solvers edge selection"""
 
     UNQUALIFIED = GccEnt_unqualified
     ENCLOSING = GccEnt_enclosing

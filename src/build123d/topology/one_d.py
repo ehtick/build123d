@@ -198,8 +198,8 @@ from build123d.build_enums import (
     GeomType,
     Keep,
     Kind,
-    LengthConstraint,
-    PositionConstraint,
+    Sagitta,
+    Tangency,
     PositionMode,
     Side,
 )
@@ -1588,11 +1588,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
         *,
         radius: float,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+        sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
         """
         Create all planar circular arcs of a given radius that are tangent/contacting
@@ -1602,7 +1602,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
             radius (float): arc radius
-            sagitta_constraint (LengthConstraint, optional): returned arc selector
+            sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
 
@@ -1614,11 +1614,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
         *,
         center_on: Edge,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+        sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
         """
         Create all planar circular arcs whose circle is tangent to two objects and whose
@@ -1629,7 +1629,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
             center_on (Edge): center must lie on this edge
-            sagitta_constraint (LengthConstraint, optional): returned arc selector
+            sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
 
@@ -1641,11 +1641,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
-        tangency_three: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_three: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
         *,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+        sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
         """
         Create planar circular arc(s) on XY tangent to three provided objects.
@@ -1655,7 +1655,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
             tangency_three (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
-            sagitta_constraint (LengthConstraint, optional): returned arc selector
+            sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
 
@@ -1667,7 +1667,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
         *,
         center: VectorLike,
     ) -> ShapeList[Edge]:
@@ -1689,7 +1689,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
         *,
         radius: float,
         center_on: Edge,
@@ -1706,7 +1706,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 Geometric entity to be contacted/touched by the circle(s)
             radius (float): arc radius
             center_on (Edge): center must lie on this edge
-            sagitta_constraint (LengthConstraint, optional): returned arc selector
+            sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
 
@@ -1718,7 +1718,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     def make_constrained_arcs(
         cls,
         *args,
-        sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+        sagitta: Sagitta = Sagitta.SHORT,
         **kwargs,
     ) -> ShapeList[Edge]:
 
@@ -1738,22 +1738,22 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         if kwargs:
             raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
 
-        tangencies_raw = [
+        tangency_args = [
             t for t in (tangency_one, tangency_two, tangency_three) if t is not None
         ]
         tangencies = []
-        for tangency_raw in tangencies_raw:
-            if (
-                isinstance(tangency_raw, tuple)
-                and not isinstance(tangency_raw[0], Edge)
-            ) or not isinstance(tangency_raw, Edge):
-                try:
-                    tangency = Vector(tangency_raw)
-                except:
-                    raise TypeError("Invalid tangency")
-            else:
-                tangency = tangency_raw
-            tangencies.append(tangency)
+        for tangency_arg in tangency_args:
+            if isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
+                tangencies.append(tangency_arg)
+                continue
+            # if not Edges or constrained Edges convert to Vectors
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
 
         # Sort the tangency inputs so points are always last
         tangent_tuples = [t if isinstance(t, tuple) else (t, None) for t in tangencies]
@@ -1780,7 +1780,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return _make_2tan_rad_arcs(
                 *tangencies,
                 radius=radius,
-                sagitta_constraint=sagitta_constraint,
+                sagitta=sagitta,
                 edge_factory=cls,
             )
         if (
@@ -1792,13 +1792,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return _make_2tan_on_arcs(
                 *tangencies,
                 center_on=center_on,
-                sagitta_constraint=sagitta_constraint,
+                sagitta=sagitta,
                 edge_factory=cls,
             )
         if tan_count == 3 and radius is None and center is None and center_on is None:
-            return _make_3tan_arcs(
-                *tangencies, sagitta_constraint=sagitta_constraint, edge_factory=cls
-            )
+            return _make_3tan_arcs(*tangencies, sagitta=sagitta, edge_factory=cls)
         if (
             tan_count == 1
             and center is not None

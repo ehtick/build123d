@@ -70,7 +70,7 @@ from OCP.gp import (
 )
 from OCP.TopoDS import TopoDS_Edge
 
-from build123d.build_enums import LengthConstraint, PositionConstraint
+from build123d.build_enums import Sagitta, Tangency
 from build123d.geometry import TOLERANCE, Vector, VectorLike
 from .zero_d import Vertex
 from .shape_core import ShapeList
@@ -113,7 +113,7 @@ def _forward_delta(u1: float, u2: float, first: float, period: float) -> float:
 # Core helpers
 # ---------------------------
 def _edge_to_qualified_2d(
-    edge: TopoDS_Edge, position_constaint: PositionConstraint
+    edge: TopoDS_Edge, position_constaint: Tangency
 ) -> tuple[Geom2dGcc_QualifiedCurve, Geom2d_Curve, float, float]:
     """Convert a TopoDS_Edge into 2d curve & extract properties"""
 
@@ -153,9 +153,7 @@ def _param_in_trim(u: float, first: float, last: float, h2d: Geom2d_Curve) -> bo
     return (u >= first - TOLERANCE) and (u <= last + TOLERANCE)
 
 
-def _as_gcc_arg(
-    obj: Edge | Vertex | VectorLike, constaint: PositionConstraint
-) -> tuple[
+def _as_gcc_arg(obj: Edge | Vertex | VectorLike, constaint: Tangency) -> tuple[
     Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint,
     Geom2d_Curve | None,
     float | None,
@@ -229,9 +227,9 @@ def _qstr(q) -> str:
 
 
 def _make_2tan_rad_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 2
+    *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     radius: float,
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    sagitta: Sagitta = Sagitta.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> list[Edge]:
     """
@@ -259,8 +257,7 @@ def _make_2tan_rad_arcs(
 
     # Unpack optional per-edge qualifiers (default UNQUALIFIED)
     tangent_tuples = [
-        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
-        for t in tangencies
+        t if isinstance(t, tuple) else (t, Tangency.UNQUALIFIED) for t in tangencies
     ]
 
     # Build inputs for GCC
@@ -310,21 +307,21 @@ def _make_2tan_rad_arcs(
         # )
 
         # Build BOTH sagitta arcs and select by LengthConstraint
-        if sagitta_constraint == LengthConstraint.BOTH:
+        if sagitta == Sagitta.BOTH:
             solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
         else:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
             arcs = sorted(
                 arcs, key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e))
             )
-            solutions.append(arcs[sagitta_constraint.value])
+            solutions.append(arcs[sagitta.value])
     return ShapeList([edge_factory(e) for e in solutions])
 
 
 def _make_2tan_on_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 2
+    *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     center_on: Edge,
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    sagitta: Sagitta = Sagitta.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
@@ -338,8 +335,7 @@ def _make_2tan_on_arcs(
 
     # Unpack optional per-edge qualifiers (default UNQUALIFIED)
     tangent_tuples = [
-        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
-        for t in tangencies
+        t if isinstance(t, tuple) else (t, Tangency.UNQUALIFIED) for t in tangencies
     ]
 
     # Build inputs for GCC
@@ -351,7 +347,7 @@ def _make_2tan_on_arcs(
 
     # Build center locus ("On") input
     _, h_on2d, e_first[2], e_last[2], adapt_on = _edge_to_qualified_2d(
-        center_on.wrapped, PositionConstraint.UNQUALIFIED
+        center_on.wrapped, Tangency.UNQUALIFIED
     )
     is_edge[2] = True
 
@@ -409,7 +405,7 @@ def _make_2tan_on_arcs(
             continue
 
         # Build sagitta arc(s) and select by LengthConstraint
-        if sagitta_constraint == LengthConstraint.BOTH:
+        if sagitta == Sagitta.BOTH:
             solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
         else:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
@@ -418,14 +414,14 @@ def _make_2tan_on_arcs(
             arcs = sorted(
                 arcs, key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e))
             )
-            solutions.append(arcs[sagitta_constraint.value])
+            solutions.append(arcs[sagitta.value])
 
     return ShapeList([edge_factory(e) for e in solutions])
 
 
 def _make_3tan_arcs(
-    *tangencies: tuple[Edge, PositionConstraint] | Edge | Vector,  # 3
-    sagitta_constraint: LengthConstraint = LengthConstraint.SHORT,
+    *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 3
+    sagitta: Sagitta = Sagitta.SHORT,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
 ) -> ShapeList[Edge]:
     """
@@ -433,14 +429,13 @@ def _make_3tan_arcs(
 
     The circle is determined by the three tangency constraints; the returned arc(s)
     are trimmed between the two tangency points corresponding to `tangencies[0]` and
-    `tangencies[1]`. Use `sagitta_constraint` to select the shorter/longer (or both) arc.
+    `tangencies[1]`. Use `sagitta` to select the shorter/longer (or both) arc.
     Inputs must be representable on Plane.XY.
     """
 
     # Unpack optional per-edge qualifiers (default UNQUALIFIED)
     tangent_tuples = [
-        t if isinstance(t, tuple) else (t, PositionConstraint.UNQUALIFIED)
-        for t in tangencies
+        t if isinstance(t, tuple) else (t, Tangency.UNQUALIFIED) for t in tangencies
     ]
 
     # Build inputs for GCC
@@ -491,7 +486,7 @@ def _make_3tan_arcs(
             continue
 
         # Build arc(s) between u_circ1 and u_circ2 per LengthConstraint
-        if sagitta_constraint == LengthConstraint.BOTH:
+        if sagitta == Sagitta.BOTH:
             out_topos.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
         else:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
@@ -501,13 +496,13 @@ def _make_3tan_arcs(
                 arcs,
                 key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e)),
             )
-            out_topos.append(arcs[sagitta_constraint.value])
+            out_topos.append(arcs[sagitta.value])
 
     return ShapeList([edge_factory(e) for e in out_topos])
 
 
 def _make_tan_cen_arcs(
-    tangency: tuple[Edge, PositionConstraint] | Edge | Vector,
+    tangency: tuple[Edge, Tangency] | Edge | Vector,
     *,
     center: VectorLike | Vertex,
     edge_factory: Callable[[TopoDS_Edge], TWrap],
@@ -529,7 +524,7 @@ def _make_tan_cen_arcs(
     if isinstance(tangency, tuple):
         object_one, obj1_qual = tangency
     else:
-        object_one, obj1_qual = tangency, PositionConstraint.UNQUALIFIED
+        object_one, obj1_qual = tangency, Tangency.UNQUALIFIED
 
     # ---------------------------
     # Build fixed center (gp_Pnt2d)
@@ -590,7 +585,7 @@ def _make_tan_cen_arcs(
 
 
 def _make_tan_on_rad_arcs(
-    tangency: tuple[Edge, PositionConstraint] | Edge | Vector,
+    tangency: tuple[Edge, Tangency] | Edge | Vector,
     *,
     center_on: Edge,
     radius: float,
@@ -615,7 +610,7 @@ def _make_tan_on_rad_arcs(
     if isinstance(tangency, tuple):
         object_one, obj1_qual = tangency
     else:
-        object_one, obj1_qual = tangency, PositionConstraint.UNQUALIFIED
+        object_one, obj1_qual = tangency, Tangency.UNQUALIFIED
 
     # --- build tangency input (point/edge) ---
     q_o1, h_e1, e1_first, e1_last, is_edge1 = _as_gcc_arg(object_one, obj1_qual)
@@ -627,7 +622,7 @@ def _make_tan_on_rad_arcs(
 
     # Project the center locus Edge to 2D (XY)
     _, h_on2d, on_first, on_last, adapt_on = _edge_to_qualified_2d(
-        on_obj.wrapped, PositionConstraint.UNQUALIFIED
+        on_obj.wrapped, Tangency.UNQUALIFIED
     )
     gcc = Geom2dGcc_Circ2dTanOnRad(q_o1, adapt_on, radius, TOLERANCE)
 
