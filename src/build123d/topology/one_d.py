@@ -1741,7 +1741,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         tangency_args = [
             t for t in (tangency_one, tangency_two, tangency_three) if t is not None
         ]
-        tangencies = []
+        tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
         for tangency_arg in tangency_args:
             if isinstance(tangency_arg, Edge):
                 tangencies.append(tangency_arg)
@@ -1749,18 +1749,18 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
                 tangencies.append(tangency_arg)
                 continue
-            # if not Edges or constrained Edges convert to Vectors
+            if isinstance(tangency_arg, Vertex):
+                tangencies.append(Vector(tangency_arg) + tangency_arg.position)
+                continue
+
+            # if not Edges, constrained Edges or Vertex convert to Vectors
             try:
                 tangencies.append(Vector(tangency_arg))
             except Exception as exc:
                 raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
 
-        # Sort the tangency inputs so points are always last
-        tangent_tuples = [t if isinstance(t, tuple) else (t, None) for t in tangencies]
-        tangent_tuples = sorted(
-            tangent_tuples, key=lambda t: not issubclass(type(t[0]), Edge)
-        )
-        tangencies = [t[0] if t[1] is None else t for t in tangent_tuples]
+        # # Sort the tangency inputs so points are always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, Vector))
 
         tan_count = len(tangencies)
         if not (1 <= tan_count <= 3):

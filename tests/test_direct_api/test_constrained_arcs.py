@@ -114,6 +114,14 @@ def test_tan2_rad_arcs_3():
     assert len(tan2_rad_edges) == 2
 
 
+def test_tan2_rad_arcs_4():
+    """edge & 1 points & radius"""
+    # the point should be automatically moved after the edge
+    e1 = Line((0, 0), (1, 0))
+    tan2_rad_edges = Edge.make_constrained_arcs((0, 0.5), e1, radius=0.5)
+    assert len(tan2_rad_edges) == 1
+
+
 def test_tan2_center_on_1():
     """2 tangents & center on"""
     c1 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)

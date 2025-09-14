@@ -37,11 +37,12 @@ from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
 from OCP.GCPnts import GCPnts_AbscissaPoint
-from OCP.Geom import Geom_Plane
+from OCP.Geom import Geom_Curve, Geom_Plane
 from OCP.Geom2d import (
     Geom2d_CartesianPoint,
     Geom2d_Circle,
     Geom2d_Curve,
+    Geom2d_Point,
     Geom2d_TrimmedCurve,
 )
 from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
@@ -73,7 +74,7 @@ from OCP.TopoDS import TopoDS_Edge
 from build123d.build_enums import Sagitta, Tangency
 from build123d.geometry import TOLERANCE, Vector, VectorLike
 from .zero_d import Vertex
-from .shape_core import ShapeList
+from .shape_core import ShapeList, downcast
 
 if TYPE_CHECKING:
     from build123d.topology.one_d import Edge
@@ -114,7 +115,7 @@ def _forward_delta(u1: float, u2: float, first: float, period: float) -> float:
 # ---------------------------
 def _edge_to_qualified_2d(
     edge: TopoDS_Edge, position_constaint: Tangency
-) -> tuple[Geom2dGcc_QualifiedCurve, Geom2d_Curve, float, float]:
+) -> tuple[Geom2dGcc_QualifiedCurve, Geom2d_Curve, float, float, Geom2dAdaptor_Curve]:
     """Convert a TopoDS_Edge into 2d curve & extract properties"""
 
     # 1) Underlying curve + range (also retrieve location to be safe)
@@ -128,7 +129,7 @@ def _edge_to_qualified_2d(
     # 2) Apply location if the edge is positioned by a TopLoc_Location
     if not loc.IsIdentity():
         trsf = loc.Transformation()
-        hcurve3d = hcurve3d.Transformed(trsf)
+        hcurve3d = tcast(Geom_Curve, hcurve3d.Transformed(trsf))
 
     # 3) Convert to 2D on Plane.XY (Z-up frame at origin)
     hcurve2d = GeomAPI.To2d_s(hcurve3d, _pln_xy)  # -> Handle_Geom2d_Curve
@@ -147,13 +148,17 @@ def _edge_from_circle(h2d_circle: Geom2d_Circle, u1: float, u2: float) -> TopoDS
     return BRepBuilderAPI_MakeEdge(arc2d, _surf_xy).Edge()
 
 
-def _param_in_trim(u: float, first: float, last: float, h2d: Geom2d_Curve) -> bool:
+def _param_in_trim(
+    u: float | None, first: float | None, last: float | None, h2d: Geom2d_Curve | None
+) -> bool:
     """Normalize (if periodic) then test [first, last] with tolerance."""
+    if u is None or first is None or last is None or h2d is None:  # for typing
+        raise TypeError("Invalid parameters to _param_in_trim")
     u = _norm_on_period(u, first, h2d.Period()) if h2d.IsPeriodic() else u
     return (u >= first - TOLERANCE) and (u <= last + TOLERANCE)
 
 
-def _as_gcc_arg(obj: Edge | Vertex | VectorLike, constaint: Tangency) -> tuple[
+def _as_gcc_arg(obj: Edge | Vector, constaint: Tangency) -> tuple[
     Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint,
     Geom2d_Curve | None,
     float | None,
@@ -166,16 +171,18 @@ def _as_gcc_arg(obj: Edge | Vertex | VectorLike, constaint: Tangency) -> tuple[
     - Edge -> (QualifiedCurve, h2d, first, last, True)
     - Vertex/VectorLike -> (CartesianPoint, None, None, None, False)
     """
+    if obj.wrapped is None:
+        raise TypeError("Can't create a qualified curve from empty edge")
+
     if isinstance(obj.wrapped, TopoDS_Edge):
         return _edge_to_qualified_2d(obj.wrapped, constaint)[0:4] + (True,)
 
-    loc_xyz = obj.position if isinstance(obj, Vertex) else Vector()
     try:
         base = Vector(obj)
     except (TypeError, ValueError) as exc:
         raise ValueError("Expected Edge | Vertex | VectorLike") from exc
 
-    gp_pnt = gp_Pnt2d(base.X + loc_xyz.X, base.Y + loc_xyz.Y)
+    gp_pnt = gp_Pnt2d(base.X, base.Y)
     return Geom2d_CartesianPoint(gp_pnt), None, None, None, False
 
 
@@ -230,8 +237,8 @@ def _make_2tan_rad_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     radius: float,
     sagitta: Sagitta = Sagitta.SHORT,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
-) -> list[Edge]:
+    edge_factory: Callable[[TopoDS_Edge], Edge],
+) -> ShapeList[Edge]:
     """
     Create all planar circular arcs of a given radius that are tangent/contacting
     the two provided objects on the XY plane.
@@ -261,11 +268,9 @@ def _make_2tan_rad_arcs(
     ]
 
     # Build inputs for GCC
-    q_o, h_e, e_first, e_last, is_edge = [[None] * 2 for _ in range(5)]
-    for i in range(len(tangent_tuples)):
-        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
-            *tangent_tuples[i]
-        )
+    results = [_as_gcc_arg(*t) for t in tangent_tuples]
+    q_o: tuple[Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve]
+    q_o, h_e, e_first, e_last, is_edge = map(tuple, zip(*results))
 
     gcc = Geom2dGcc_Circ2d2TanRad(*q_o, radius, TOLERANCE)
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
@@ -280,7 +285,7 @@ def _make_2tan_rad_arcs(
     # ---------------------------
     # Solutions
     # ---------------------------
-    solutions: list[Edge] = []
+    solutions: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
         circ = gcc.ThisSolution(i)  # gp_Circ2d
 
@@ -322,7 +327,7 @@ def _make_2tan_on_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     center_on: Edge,
     sagitta: Sagitta = Sagitta.SHORT,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
+    edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
     Create all planar circular arcs whose circle is tangent to two objects and whose
@@ -335,29 +340,29 @@ def _make_2tan_on_arcs(
 
     # Unpack optional per-edge qualifiers (default UNQUALIFIED)
     tangent_tuples = [
-        t if isinstance(t, tuple) else (t, Tangency.UNQUALIFIED) for t in tangencies
+        t if isinstance(t, tuple) else (t, Tangency.UNQUALIFIED)
+        for t in list(tangencies) + [center_on]
     ]
 
     # Build inputs for GCC
-    q_o, h_e, e_first, e_last, is_edge = [[None] * 3 for _ in range(5)]
-    for i in range(len(tangent_tuples)):
-        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
-            *tangent_tuples[i]
-        )
-
-    # Build center locus ("On") input
-    _, h_on2d, e_first[2], e_last[2], adapt_on = _edge_to_qualified_2d(
-        center_on.wrapped, Tangency.UNQUALIFIED
-    )
-    is_edge[2] = True
+    results = [_as_gcc_arg(*t) for t in tangent_tuples]
+    q_o: tuple[
+        Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve
+    ]
+    q_o, h_e, e_first, e_last, is_edge = map(tuple, zip(*results))
+    adapt_on = Geom2dAdaptor_Curve(h_e[2], e_first[2], e_last[2])
 
     # Provide initial middle guess parameters for all of the edges
-    guesses = [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+    guesses: tuple[float, float, float] = tuple(
+        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+    )
 
     if sum(is_edge) > 1:
-        gcc = Geom2dGcc_Circ2d2TanOn(*q_o[0:2], adapt_on, TOLERANCE, *guesses)
+        gcc = Geom2dGcc_Circ2d2TanOn(q_o[0], q_o[1], adapt_on, TOLERANCE, *guesses)
     else:
-        gcc = Geom2dGcc_Circ2d2TanOn(*q_o[0:2], adapt_on, TOLERANCE)
+        assert isinstance(q_o[0], Geom2d_Point)
+        assert isinstance(q_o[1], Geom2d_Point)
+        gcc = Geom2dGcc_Circ2d2TanOn(q_o[0], q_o[1], adapt_on, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find a tangent arc with center_on constraint")
@@ -391,7 +396,7 @@ def _make_2tan_on_arcs(
         center2d = circ.Location()  # gp_Pnt2d
 
         # Project center onto the (trimmed) 2D locus
-        proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_on2d)
+        proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_e[2])
         if proj.NbPoints() == 0:
             continue  # no projection -> reject
 
@@ -401,7 +406,7 @@ def _make_2tan_on_arcs(
             continue
 
         # Respect the trimmed interval (handles periodic curves too)
-        if not _param_in_trim(u_on, e_first[2], e_last[2], h_on2d):
+        if not _param_in_trim(u_on, e_first[2], e_last[2], h_e[2]):
             continue
 
         # Build sagitta arc(s) and select by LengthConstraint
@@ -422,7 +427,7 @@ def _make_2tan_on_arcs(
 def _make_3tan_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 3
     sagitta: Sagitta = Sagitta.SHORT,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
+    edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
     Create planar circular arc(s) on XY tangent to three provided objects.
@@ -439,14 +444,16 @@ def _make_3tan_arcs(
     ]
 
     # Build inputs for GCC
-    q_o, h_e, e_first, e_last, is_edge = [[None] * 3 for _ in range(5)]
-    for i in range(len(tangent_tuples)):
-        q_o[i], h_e[i], e_first[i], e_last[i], is_edge[i] = _as_gcc_arg(
-            *tangent_tuples[i]
-        )
+    results = [_as_gcc_arg(*t) for t in tangent_tuples]
+    q_o: tuple[
+        Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve
+    ]
+    q_o, h_e, e_first, e_last, is_edge = map(tuple, zip(*results))
 
     # Provide initial middle guess parameters for all of the edges
-    guesses = [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+    guesses: tuple[float, float, float] = tuple(
+        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+    )
 
     # Generate all valid circles tangent to the 3 inputs
     gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
@@ -505,7 +512,7 @@ def _make_tan_cen_arcs(
     tangency: tuple[Edge, Tangency] | Edge | Vector,
     *,
     center: VectorLike | Vertex,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
+    edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
     Create planar circle(s) on XY whose center is fixed and that are tangent/contacting
@@ -530,7 +537,7 @@ def _make_tan_cen_arcs(
     # Build fixed center (gp_Pnt2d)
     # ---------------------------
     if isinstance(center, Vertex):
-        loc_xyz = center.position
+        loc_xyz = center.position if center.position is not None else Vector(0, 0)
         base = Vector(center)
         c2d = gp_Pnt2d(base.X + loc_xyz.X, base.Y + loc_xyz.Y)
     else:
@@ -560,6 +567,7 @@ def _make_tan_cen_arcs(
         solutions_topo.append(_edge_from_circle(h2d, 0.0, per))
 
     else:
+        assert isinstance(q_o1, Geom2dGcc_QualifiedCurve)
         # Case B: tangency target is a curve/edge (qualified curve)
         gcc = Geom2dGcc_Circ2dTanCen(q_o1, Geom2d_CartesianPoint(c2d), TOLERANCE)
         if not gcc.IsDone() or gcc.NbSolutions() == 0:
@@ -589,7 +597,7 @@ def _make_tan_on_rad_arcs(
     *,
     center_on: Edge,
     radius: float,
-    edge_factory: Callable[[TopoDS_Edge], TWrap],
+    edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
     Create planar circle(s) on XY that:
