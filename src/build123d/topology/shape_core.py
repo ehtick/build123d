@@ -472,10 +472,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return reduce(lambda loc, n: loc * n.location, self.path, Location())
 
     @property
-    def location(self) -> Location | None:
+    def location(self) -> Location:
         """Get this Shape's Location"""
         if self.wrapped is None:
-            return None
+            raise ValueError("Can't find the location of an empty shape")
         return Location(self.wrapped.Location())
 
     @location.setter
@@ -529,10 +529,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return matrix
 
     @property
-    def orientation(self) -> Vector | None:
+    def orientation(self) -> Vector:
         """Get the orientation component of this Shape's Location"""
         if self.location is None:
-            return None
+            raise ValueError("Can't find the orientation of an empty shape")
         return self.location.orientation
 
     @orientation.setter
@@ -544,10 +544,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
             self.location = loc
 
     @property
-    def position(self) -> Vector | None:
+    def position(self) -> Vector:
         """Get the position component of this Shape's Location"""
         if self.wrapped is None or self.location is None:
-            return None
+            raise ValueError("Can't find the position of an empty shape")
         return self.location.position
 
     @position.setter

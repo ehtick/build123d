@@ -448,7 +448,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
 
     # ---- Instance Methods ----
 
-    def __add__(self, other: None | Shape | Iterable[Shape]) -> Compound:
+    def __add__(self, other: None | Shape | Iterable[Shape]) -> Compound | Wire:
         """Combine other to self `+` operator
 
         Note that if all of the objects are connected Edges/Wires the result
@@ -456,8 +456,15 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
         """
         if self._dim == 1:
             curve = Curve() if self.wrapped is None else Curve(self.wrapped)
-            self.copy_attributes_to(curve, ["wrapped", "_NodeMixin__children"])
-            return curve + other
+            sum1d: Edge | Wire | ShapeList[Edge] = curve + other
+            if isinstance(sum1d, ShapeList):
+                result: Curve | Wire = Curve(sum1d)
+            elif isinstance(sum1d, Edge):
+                result = Curve([sum1d])
+            else:  # Wire
+                result = sum1d
+            self.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
+            return result
 
         summands: ShapeList[Shape]
         if other is None:

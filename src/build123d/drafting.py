@@ -52,7 +52,7 @@ from build123d.objects_curve import Line, TangentArc
 from build123d.objects_sketch import BaseSketchObject, Polygon, Text
 from build123d.operations_generic import fillet, mirror, sweep
 from build123d.operations_sketch import make_face, trace
-from build123d.topology import Compound, Curve, Edge, Sketch, Vertex, Wire
+from build123d.topology import Compound, Curve, Edge, ShapeList, Sketch, Vertex, Wire
 
 
 class ArrowHead(BaseSketchObject):
@@ -709,7 +709,7 @@ class TechnicalDrawing(BaseSketchObject):
         # Text Box Frame
         bf_pnt1 = frame_wire.edges().sort_by(Axis.Y)[0] @ 0.5
         bf_pnt2 = frame_wire.edges().sort_by(Axis.X)[-1] @ 0.75
-        box_frame_curve = Wire.make_polygon(
+        box_frame_curve: Edge | Wire | ShapeList[Edge] = Wire.make_polygon(
             [bf_pnt1, (bf_pnt1.X, bf_pnt2.Y), bf_pnt2], close=False
         )
         bf_pnt3 = box_frame_curve.edges().sort_by(Axis.X)[0] @ (1 / 3)
