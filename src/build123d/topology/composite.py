@@ -458,13 +458,13 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
             curve = Curve() if self.wrapped is None else Curve(self.wrapped)
             sum1d: Edge | Wire | ShapeList[Edge] = curve + other
             if isinstance(sum1d, ShapeList):
-                result: Curve | Wire = Curve(sum1d)
+                result1d: Curve | Wire = Curve(sum1d)
             elif isinstance(sum1d, Edge):
-                result = Curve([sum1d])
+                result1d = Curve([sum1d])
             else:  # Wire
-                result = sum1d
-            self.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
-            return result
+                result1d = sum1d
+            self.copy_attributes_to(result1d, ["wrapped", "_NodeMixin__children"])
+            return result1d
 
         summands: ShapeList[Shape]
         if other is None:
