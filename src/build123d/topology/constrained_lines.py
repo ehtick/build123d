@@ -89,12 +89,9 @@ _surf_xy = Geom_Plane(_pln_xy)
 # ---------------------------
 # Normalization utilities
 # ---------------------------
-def _norm_on_period(u: float, first: float, per: float) -> float:
+def _norm_on_period(u: float, first: float, period: float) -> float:
     """Map parameter u into [first, first+per)."""
-    if per <= 0.0:
-        return u
-    k = floor((u - first) / per)
-    return u - k * per
+    return (u - first) % period + first
 
 
 def _forward_delta(u1: float, u2: float, first: float, period: float) -> float:
@@ -195,24 +192,24 @@ def _two_arc_edges_from_params(
     Uses centralized normalization utilities.
     """
     h2d_circle = Geom2d_Circle(circ)
-    per = h2d_circle.Period()  # usually 2*pi
+    period = h2d_circle.Period()  # usually 2*pi
 
     # Minor (forward) span
-    d = _forward_delta(u1, u2, 0.0, per)  # anchor at 0 for circle convenience
-    u1n = _norm_on_period(u1, 0.0, per)
-    u2n = _norm_on_period(u2, 0.0, per)
+    d = _forward_delta(u1, u2, 0.0, period)  # anchor at 0 for circle convenience
+    u1n = _norm_on_period(u1, 0.0, period)
+    u2n = _norm_on_period(u2, 0.0, period)
 
     # Guard degeneracy
-    if d <= TOLERANCE or abs(per - d) <= TOLERANCE:
+    if d <= TOLERANCE or abs(period - d) <= TOLERANCE:
         return ShapeList()
 
     minor = _edge_from_circle(h2d_circle, u1n, u1n + d)
-    major = _edge_from_circle(h2d_circle, u2n, u2n + (per - d))
+    major = _edge_from_circle(h2d_circle, u2n, u2n + (period - d))
     return [minor, major]
 
 
-def _qstr(q) -> str:
-    # Works with OCP's GccEnt enum values
+def _qstr(q) -> str:  # pragma: no cover
+    """Debugging facility that works with OCP's GccEnt enum values"""
     try:
         from OCP.GccEnt import GccEnt_enclosed, GccEnt_enclosing, GccEnt_outside
 
@@ -353,9 +350,11 @@ def _make_2tan_on_arcs(
     adapt_on = Geom2dAdaptor_Curve(h_e[2], e_first[2], e_last[2])
 
     # Provide initial middle guess parameters for all of the edges
-    guesses: tuple[float, float, float] = tuple(
-        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
-    )
+    guesses: list[float] = [
+        (e_last[i] - e_first[i]) / 2 + e_first[i]
+        for i in range(len(tangent_tuples))
+        if is_edge[i]
+    ]
 
     if sum(is_edge) > 1:
         gcc = Geom2dGcc_Circ2d2TanOn(q_o[0], q_o[1], adapt_on, TOLERANCE, *guesses)
@@ -452,7 +451,7 @@ def _make_3tan_arcs(
 
     # Provide initial middle guess parameters for all of the edges
     guesses: tuple[float, float, float] = tuple(
-        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(len(is_edge))]
+        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(3)]
     )
 
     # Generate all valid circles tangent to the 3 inputs

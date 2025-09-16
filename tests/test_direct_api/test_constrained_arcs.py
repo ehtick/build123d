@@ -122,6 +122,13 @@ def test_tan2_rad_arcs_4():
     assert len(tan2_rad_edges) == 1
 
 
+def test_tan2_rad_arcs_5():
+    """no solution"""
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs((0, 0), (10, 0), radius=2)
+    assert "Unable to find a tangent arc" in str(excinfo.value)
+
+
 def test_tan2_center_on_1():
     """2 tangents & center on"""
     c1 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)
@@ -133,6 +140,35 @@ def test_tan2_center_on_1():
         center_on=c3_center_on,
     )
     assert len(tan2_on_edge) == 1
+
+
+def test_tan2_center_on_2():
+    """2 tangents & center on"""
+    tan2_on_edge = Edge.make_constrained_arcs(
+        (0, 3), (5, 0), center_on=Line((0, -5), (0, 5))
+    )
+    assert len(tan2_on_edge) == 1
+
+
+def test_tan2_center_on_3():
+    """2 tangents & center on"""
+    tan2_on_edge = Edge.make_constrained_arcs(
+        Line((-5, 3), (5, 3)), (5, 0), center_on=Line((0, -5), (0, 5))
+    )
+    assert len(tan2_on_edge) == 1
+
+
+def test_tan2_center_on_4():
+    """2 tangents & center on"""
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs(
+            Line((-5, 3), (5, 3)),
+            Line((-5, 0), (5, 0)),
+            center_on=Line((-5, -1), (5, -1)),
+        )
+    assert "Unable to find a tangent arc with center_on constraint" in str(
+        excinfo.value
+    )
 
 
 def test_tan_center_on_1():
