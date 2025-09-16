@@ -527,18 +527,22 @@ class Vector:
 
     @overload
     def intersect(self, location: Location) -> Vector | None:
-        """Find intersection of location and vector"""
+        """Find intersection of vector and location"""
 
     @overload
     def intersect(self, axis: Axis) -> Vector | None:
-        """Find intersection of axis and vector"""
+        """Find intersection of vector and axis"""
 
     @overload
     def intersect(self, plane: Plane) -> Vector | None:
-        """Find intersection of plane and vector"""
+        """Find intersection of vector and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of vector and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric objects and vector"""
+        """Find intersection of vector and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -906,11 +910,11 @@ class Axis(metaclass=AxisMeta):
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and axis"""
+        """Find intersection of axis and vector"""
 
     @overload
     def intersect(self, location: Location) -> Vector | Location | None:
-        """Find intersection of location and axis"""
+        """Find intersection of axis and location"""
 
     @overload
     def intersect(self, axis: Axis) -> Vector | Axis | None:
@@ -918,10 +922,14 @@ class Axis(metaclass=AxisMeta):
 
     @overload
     def intersect(self, plane: Plane) -> Vector | Axis | None:
-        """Find intersection of plane and axis"""
+        """Find intersection of axis and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of axis and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and axis"""
+        """Find intersection of axis and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -1929,7 +1937,7 @@ class Location:
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and location"""
+        """Find intersection of location and vector"""
 
     @overload
     def intersect(self, location: Location) -> Vector | Location | None:
@@ -1937,14 +1945,18 @@ class Location:
 
     @overload
     def intersect(self, axis: Axis) -> Vector | Location | None:
-        """Find intersection of axis and location"""
+        """Find intersection of location and axis"""
 
     @overload
     def intersect(self, plane: Plane) -> Vector | Location | None:
-        """Find intersection of plane and location"""
+        """Find intersection of location and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of location and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and location"""
+        """Find intersection of location and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -3131,15 +3143,15 @@ class Plane(metaclass=PlaneMeta):
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and plane"""
+        """Find intersection of plane and vector"""
 
     @overload
     def intersect(self, location: Location) -> Vector | Location | None:
-        """Find intersection of location and plane"""
+        """Find intersection of plane and location"""
 
     @overload
     def intersect(self, axis: Axis) -> Vector | Axis | None:
-        """Find intersection of axis and plane"""
+        """Find intersection of plane and axis"""
 
     @overload
     def intersect(self, plane: Plane) -> Axis | Plane | None:
@@ -3150,7 +3162,7 @@ class Plane(metaclass=PlaneMeta):
         """Find intersection of plane and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and shape"""
+        """Find intersection of plane and geometric object or shape"""
 
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 

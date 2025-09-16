@@ -169,41 +169,41 @@ class Vertex(Shape[TopoDS_Vertex]):
         raise NotImplementedError("Vertices can't be created by extrusion")
 
     def intersect(
-            self, *to_intersect: Shape | Vector | Location | Axis | Plane
-        ) -> None | ShapeList[Vertex]:
-            """Intersection of the arguments and this shape
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> ShapeList[Vertex] | None:
+        """Intersection of vertex and geometric objects or shapes.
 
-            Args:
-                to_intersect (sequence of Union[Shape, Axis, Plane]): Shape(s) to
-                    intersect with
+        Args:
+            to_intersect (sequence of [Shape | Vector | Location | Axis | Plane]): 
+                Objects(s) to intersect with
 
-            Returns:
-                ShapeList[Shape]: Resulting object may be of a ShapeList of multiple 
-                non-Compound object created
-            """
-            points_sets: list[set] = []
-            for obj in to_intersect:
-                # Treat as Vector, otherwise call intersection from Shape
-                match obj:
-                    case Vertex():
-                        result = Vector(self).intersect(Vector(obj))
-                    case Vector() | Location() | Axis() | Plane():
-                        result = obj.intersect(Vector(self))
-                    case _ if issubclass(type(obj), Shape):
-                        result = obj.intersect(self)
-                    case _:
-                        raise ValueError(f"Unknown object type: {type(obj)}")
+        Returns:
+            ShapeList[Vertex] | None: Vertex intersection in a ShapeList or None
+        """
+        points_sets: list[set] = []
+        result: Shape | ShapeList[Shape] | Vector | None
+        for obj in to_intersect:
+            # Treat as Vector, otherwise call intersection from Shape
+            match obj:
+                case Vertex():
+                    result = Vector(self).intersect(Vector(obj))
+                case Vector() | Location() | Axis() | Plane():
+                    result = obj.intersect(Vector(self))
+                case _ if issubclass(type(obj), Shape):
+                    result = obj.intersect(self)
+                case _:
+                    raise ValueError(f"Unknown object type: {type(obj)}")
 
-                if isinstance(result, Vector):
-                    points_sets.append(set([result]))
-                else:
-                    points_sets.append(set())
-
-            common_points = set.intersection(*points_sets)
-            if common_points:
-                return ShapeList([Vertex(p) for p in common_points])
+            if isinstance(result, Vector):
+                points_sets.append(set([result]))
             else:
-                return None
+                points_sets.append(set())
+
+        common_points = set.intersection(*points_sets)
+        if common_points:
+            return ShapeList([Vertex(p) for p in common_points])
+
+        return None
 
     # ---- Instance Methods ----
 
