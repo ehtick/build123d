@@ -35,21 +35,46 @@ from build123d.objects_curve import (
     IntersectingLine,
     ThreePointArc,
 )
+from build123d.operations_generic import mirror
 from build123d.topology import Edge, Solid, Vertex, Wire, topo_explore_common_vertex
-from build123d.geometry import Axis, Vector, TOLERANCE
+from build123d.geometry import Axis, Plane, Vector, TOLERANCE
 from build123d.build_enums import Tangency, Sagitta, LengthMode
-from OCP.BRep import BRep_Tool
-from OCP.GeomAbs import GeomAbs_C1
-from OCP.LocalAnalysis import LocalAnalysis_CurveContinuity
+from build123d.topology.constrained_lines import (
+    _as_gcc_arg,
+    _param_in_trim,
+    _edge_to_qualified_2d,
+    _two_arc_edges_from_params,
+)
+from OCP.gp import gp_Ax2d, gp_Dir2d, gp_Circ2d, gp_Pnt2d
 
-radius = 0.5
-e1 = Line((-2, 0), (2, 0))
-# e2 = (1, 1)
-e2 = Line((0, -2), (0, 2))
-e1 = CenterArc((0, 0), 1, 0, 90)
-e2 = Line((1, 0), (2, 0))
-e1.color = "Grey"
-e2.color = "Red"
+
+def test_edge_to_qualified_2d():
+    e = Line((0, 0), (1, 0))
+    e.position += (1, 1, 1)
+    qc, curve_2d, first, last, adaptor = _edge_to_qualified_2d(
+        e.wrapped, Tangency.UNQUALIFIED
+    )
+    assert first < last
+
+
+def test_two_arc_edges_from_params():
+    circle = gp_Circ2d(gp_Ax2d(gp_Pnt2d(0, 0), gp_Dir2d(1.0, 0.0)), 1)
+    arcs = _two_arc_edges_from_params(circle, 0, TOLERANCE / 10)
+    assert len(arcs) == 0
+
+
+def test_param_in_trim():
+    with pytest.raises(TypeError) as excinfo:
+        _param_in_trim(None, 0.0, 1.0, None)
+    assert "Invalid parameters to _param_in_trim" in str(excinfo.value)
+
+
+def test_as_gcc_arg():
+    e = Line((0, 0), (1, 0))
+    e.wrapped = None
+    with pytest.raises(TypeError) as excinfo:
+        _as_gcc_arg(e, Tangency.UNQUALIFIED)
+    assert "Can't create a qualified curve from empty edge" in str(excinfo.value)
 
 
 def test_constrained_arcs_arg_processing():
@@ -185,6 +210,10 @@ def test_pnt_center_1():
     assert len(pnt_center) == 1
     assert pnt_center[0].is_closed
 
+    pnt_center = Edge.make_constrained_arcs((-2.5, 1.5), center=Vertex(-2, 1))
+    assert len(pnt_center) == 1
+    assert pnt_center[0].is_closed
+
 
 def test_tan_rad_center_on_1():
     """tangent, radius, center on"""
@@ -209,6 +238,36 @@ def test_tan3_1():
     )
     assert len(tan3) == 1
     assert not tan3[0].is_closed
+
+    tan3b = Edge.make_constrained_arcs(c5, c6, c7, sagitta=Sagitta.BOTH)
+    assert len(tan3b) == 2
+
+
+def test_tan3_2():
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs(
+            Line((0, 0), (0, 1)),
+            Line((0, 0), (1, 0)),
+            Line((0, 0), (0, -1)),
+        )
+    assert "Unable to find a circle tangent to all three objects" in str(excinfo.value)
+
+
+def test_tan3_3():
+    l1 = Line((0, 0), (10, 0))
+    l2 = Line((0, 2), (10, 2))
+    l3 = Line((0, 5), (10, 5))
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs(l1, l2, l3)
+    assert "Unable to find a circle tangent to all three objects" in str(excinfo.value)
+
+
+def test_tan3_4():
+    l1 = Line((-1, 0), (-1, 2))
+    l2 = Line((1, 0), (1, 2))
+    l3 = Line((-1, 0), (-0.75, 0))
+    tan3 = Edge.make_constrained_arcs(l1, l2, l3)
+    assert len(tan3) == 0
 
 
 def test_eggplant():

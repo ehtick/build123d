@@ -29,7 +29,7 @@ license:
 
 from __future__ import annotations
 
-from math import floor
+from math import floor, pi
 from typing import TYPE_CHECKING, Callable, TypeVar
 from typing import cast as tcast
 
@@ -69,6 +69,7 @@ from OCP.gp import (
     gp_Pnt,
     gp_Pnt2d,
 )
+from OCP.Standard import Standard_ConstructionError
 from OCP.TopoDS import TopoDS_Edge
 
 from build123d.build_enums import Sagitta, Tangency
@@ -77,7 +78,7 @@ from .zero_d import Vertex
 from .shape_core import ShapeList, downcast
 
 if TYPE_CHECKING:
-    from build123d.topology.one_d import Edge
+    from build123d.topology.one_d import Edge  # pragma: no cover
 
 TWrap = TypeVar("TWrap")  # whatever the factory returns (Edge or a subclass)
 
@@ -119,9 +120,6 @@ def _edge_to_qualified_2d(
     loc = edge.Location()
     hcurve3d = BRep_Tool.Curve_s(edge, float(), float())
     first, last = BRep_Tool.Range_s(edge)
-
-    if hcurve3d is None:
-        raise ValueError("Edge has no underlying 3D curve.")
 
     # 2) Apply location if the edge is positioned by a TopLoc_Location
     if not loc.IsIdentity():
@@ -166,7 +164,7 @@ def _as_gcc_arg(obj: Edge | Vector, constaint: Tangency) -> tuple[
     Normalize input to a GCC argument.
     Returns: (q_obj, h2d, first, last, is_edge)
     - Edge -> (QualifiedCurve, h2d, first, last, True)
-    - Vertex/VectorLike -> (CartesianPoint, None, None, None, False)
+    - Vector -> (CartesianPoint, None, None, None, False)
     """
     if obj.wrapped is None:
         raise TypeError("Can't create a qualified curve from empty edge")
@@ -174,12 +172,7 @@ def _as_gcc_arg(obj: Edge | Vector, constaint: Tangency) -> tuple[
     if isinstance(obj.wrapped, TopoDS_Edge):
         return _edge_to_qualified_2d(obj.wrapped, constaint)[0:4] + (True,)
 
-    try:
-        base = Vector(obj)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Expected Edge | Vertex | VectorLike") from exc
-
-    gp_pnt = gp_Pnt2d(base.X, base.Y)
+    gp_pnt = gp_Pnt2d(obj.X, obj.Y)
     return Geom2d_CartesianPoint(gp_pnt), None, None, None, False
 
 
@@ -284,7 +277,7 @@ def _make_2tan_rad_arcs(
     # ---------------------------
     solutions: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
-        circ = gcc.ThisSolution(i)  # gp_Circ2d
+        circ: gp_Circ2d = gcc.ThisSolution(i)
 
         # Tangency on curve 1
         p1 = gp_Pnt2d()
@@ -377,7 +370,7 @@ def _make_2tan_on_arcs(
     # ---------------------------
     solutions: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
-        circ = gcc.ThisSolution(i)  # gp_Circ2d
+        circ: gp_Circ2d = gcc.ThisSolution(i)
 
         # Tangency on curve 1
         p1 = gp_Pnt2d()
@@ -455,10 +448,13 @@ def _make_3tan_arcs(
     )
 
     # Generate all valid circles tangent to the 3 inputs
-    gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
-
+    msg = "Unable to find a circle tangent to all three objects"
+    try:
+        gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
+    except Standard_ConstructionError as con_err:
+        raise RuntimeError(msg) from con_err
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
-        raise RuntimeError("Unable to find a circle tangent to all three objects")
+        raise RuntimeError(msg)
 
     def _ok(i: int, u: float) -> bool:
         """Does the given parameter value lie within the edge range?"""
@@ -471,7 +467,13 @@ def _make_3tan_arcs(
     # ---------------------------
     out_topos: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
-        circ = gcc.ThisSolution(i)  # gp_Circ2d
+        circ: gp_Circ2d = gcc.ThisSolution(i)
+
+        # Look at all of the solutions
+        # h2d_circle = Geom2d_Circle(circ)
+        # arc2d = Geom2d_TrimmedCurve(h2d_circle, 0, 2 * pi, True)
+        # out_topos.append(BRepBuilderAPI_MakeEdge(arc2d, _surf_xy).Edge())
+        # continue
 
         # Tangency on curve 1 (arc endpoint A)
         p1 = gp_Pnt2d()
@@ -642,7 +644,7 @@ def _make_tan_on_rad_arcs(
     # --- enumerate solutions; emit full circles (2π trims) ---
     out_topos: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
-        circ = gcc.ThisSolution(i)  # gp_Circ2d
+        circ: gp_Circ2d = gcc.ThisSolution(i)
 
         # Validate tangency lies on trimmed span when the target is an Edge
         p = gp_Pnt2d()
