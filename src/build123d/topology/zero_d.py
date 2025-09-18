@@ -174,7 +174,7 @@ class Vertex(Shape[TopoDS_Vertex]):
         """Intersection of vertex and geometric objects or shapes.
 
         Args:
-            to_intersect (sequence of [Shape | Vector | Location | Axis | Plane]): 
+            to_intersect (sequence of [Shape | Vector | Location | Axis | Plane]):
                 Objects(s) to intersect with
 
         Returns:
@@ -196,14 +196,15 @@ class Vertex(Shape[TopoDS_Vertex]):
 
             if isinstance(result, Vector):
                 points_sets.append(set([result]))
+            elif isinstance(result, Vertex):
+                points_sets.append(set([Vector(result)]))
+            elif isinstance(result, list):
+                points_sets.append(set(Vector(r) for r in result))
             else:
                 points_sets.append(set())
 
         common_points = set.intersection(*points_sets)
-        if common_points:
-            return ShapeList([Vertex(p) for p in common_points])
-
-        return None
+        return ShapeList([Vertex(p) for p in common_points]) if common_points else None
 
     # ---- Instance Methods ----
 
