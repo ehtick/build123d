@@ -32,7 +32,7 @@ def run_test(obj, target, expected):
         e_type = ShapeList if isinstance(expected, list) else expected
         assert isinstance(result, e_type), f"Expected {e_type}, but got {result}"
         if e_type == ShapeList:
-            assert len(result) >= len(expected), f"Expected {len(expected)} objects, but got {len(result)}"
+            assert len(result) == len(expected), f"Expected {len(expected)} objects, but got {len(result)}"
 
             actual_counts = Counter(type(obj) for obj in result)
             expected_counts = Counter(expected)
@@ -67,6 +67,7 @@ pl1 = Plane.YZ
 pl2 = Plane.XY
 pl3 = Plane.XY.offset(5)
 pl4 = Plane((0, 5, 0))
+pl5 = Plane.YZ.offset(1)
 vl1 = Vector(2, 0, 0)
 vl2 = Vector(2, 0, 5)
 lc1 = Location((2, 0, 0))
@@ -151,6 +152,74 @@ def test_shape_0d(obj, target, expected):
     run_test(obj, target, expected)
 
 
+ed1 = Line((0, 0), (5, 0)).edge()
+ed2 = Line((0, -1), (5, 1)).edge()
+ed3 = Line((0, 0, 5), (5, 0, 5)).edge()
+ed4 = CenterArc((3, 1), 2, 0, 360).edge()
+ed5 = CenterArc((3, 1), 5, 0, 360).edge()
+
+ed6 = Edge.make_line((0, -1), (2, 1))
+ed7 = Edge.make_line((0, 1), (2, -1))
+ed8 = Edge.make_line((0, 0), (2, 0))
+
+wi1 = Wire() + [Line((0, 0), (1, 0)), RadiusArc((1, 0), (3, 1.5), 2)]
+wi2 = wi1 + Line((3, 1.5), (3, -1))
+wi3 = Wire() + [Line((0, 0), (1, 0)), RadiusArc((1, 0), (3, 0), 2), Line((3, 0), (5, 0))]
+wi4 = Wire() + [Line((0, 1), (2, -1)) , Line((2, -1), (3, -1))]
+wi5 = wi4 + Line((3, -1), (4, 1))
+wi6 = Wire() + [Line((0, 1, 1), (2, -1, 1)), Line((2, -1, 1), (4, 1, 1))]
+
+shape_1d_matrix = [
+    Case(ed1, vl2, None, "non-coincident", None),
+    Case(ed1, vl1, [Vertex], "coincident", None),
+
+    Case(ed1, lc2, None, "non-coincident", None),
+    Case(ed1, lc1, [Vertex], "coincident", None),
+
+    Case(ed3, ax1, None, "parallel/skew", None),
+    Case(ed2, ax1, [Vertex], "intersecting", None),
+    Case(ed1, ax1, [Edge], "collinear", None),
+    Case(ed4, ax1, [Vertex, Vertex], "multi intersect", None),
+
+    Case(ed1, pl3, None, "parallel/skew", None),
+    Case(ed1, pl1, [Vertex], "intersecting", None),
+    Case(ed1, pl2, [Edge], "collinear", None),
+    Case(ed5, pl1, [Vertex, Vertex], "multi intersect", None),
+
+    Case(ed1, vt2, None, "non-coincident", None),
+    Case(ed1, vt1, [Vertex], "coincident", None),
+
+    Case(ed3, ed1, None, "parallel/skew", None),
+    Case(ed2, ed1, [Vertex], "intersecting", None),
+    Case(ed1, ed1, [Edge], "collinear", None),
+    Case(ed4, ed1, [Vertex, Vertex], "multi intersect", None),
+
+    Case(ed6, [ed7, ed8], [Vertex], "multi to_intersect, intersect", None),
+    Case(ed6, [ed7, pl5], [Vertex], "multi to_intersect, intersect", None),
+    Case(ed6, [ed7, Vector(1, 0)], [Vertex], "multi to_intersect, intersect", None),
+
+    Case(wi6, ax1, None, "parallel/skew", None),
+    Case(wi4, ax1, [Vertex], "intersecting", None),
+    Case(wi1, ax1, [Edge], "collinear", None),
+    Case(wi5, ax1, [Vertex, Vertex], "multi intersect", None),
+    Case(wi2, ax1, [Vertex, Edge], "intersect + collinear", None),
+    Case(wi3, ax1, [Edge, Edge], "2 collinear", None),
+
+    Case(wi6, ed1, None, "parallel/skew", None),
+    Case(wi4, ed1, [Vertex], "intersecting", None),
+    Case(wi1, ed1, [Edge], "collinear", None),
+    Case(wi5, ed1, [Vertex, Vertex], "multi intersect", None),
+    Case(wi2, ed1, [Vertex, Edge], "intersect + collinear", None),
+    Case(wi3, ed1, [Edge, Edge], "2 collinear", None),
+
+    Case(wi5, [ed1, Vector(1, 0)], [Vertex], "multi to_intersect, multi intersect", None),
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(shape_1d_matrix))
+def test_shape_1d(obj, target, expected):
+    run_test(obj, target, expected)
+
+
 # FreeCAD issue example
 c1 = CenterArc((0, 0), 10, 0, 360).edge()
 c2 = CenterArc((19, 0), 10, 0, 360).edge()
@@ -178,7 +247,6 @@ freecad_matrix = [
     Case(c2, vert, [Vertex], "circle, vert, intersect", None),
 ]
 
-@pytest.mark.xfail
 @pytest.mark.parametrize("obj, target, expected", make_params(freecad_matrix))
 def test_freecad(obj, target, expected):
     run_test(obj, target, expected)
@@ -198,7 +266,7 @@ issues_matrix = [
     Case(t, t, [Face, Face], "issue #1015", "Returns Compound"),
     Case(l, s, [Edge], "issue #945", "Edge.intersect only takes 1D"),
     Case(a, b, [Edge], "issue #918", "Returns empty Compound"),
-    Case(e1, w1, [Vertex, Vertex], "issue #697", "Returns None"),
+    Case(e1, w1, [Vertex, Vertex], "issue #697"),
     Case(e1, f1, [Edge], "issue #697", "Edge.intersect only takes 1D"),
 ]
 
