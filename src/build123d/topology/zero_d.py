@@ -59,6 +59,7 @@ import warnings
 from typing import overload, TYPE_CHECKING
 
 from collections.abc import Iterable
+from typing_extensions import Self
 
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Tool
@@ -67,7 +68,6 @@ from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Shape, TopoDS_Vertex, TopoDS_Edge
 from OCP.gp import gp_Pnt
 from build123d.geometry import Matrix, Vector, VectorLike, Location, Axis, Plane
-from typing_extensions import Self
 
 from .shape_core import Shape, ShapeList, downcast, shapetype
 
@@ -180,31 +180,32 @@ class Vertex(Shape[TopoDS_Vertex]):
         Returns:
             ShapeList[Vertex] | None: Vertex intersection in a ShapeList or None
         """
-        points_sets: list[set] = []
+        common = Vector(self)
         result: Shape | ShapeList[Shape] | Vector | None
         for obj in to_intersect:
             # Treat as Vector, otherwise call intersection from Shape
             match obj:
                 case Vertex():
-                    result = Vector(self).intersect(Vector(obj))
+                    result = common.intersect(Vector(obj))
                 case Vector() | Location() | Axis() | Plane():
-                    result = obj.intersect(Vector(self))
+                    result = obj.intersect(common)
                 case _ if issubclass(type(obj), Shape):
                     result = obj.intersect(self)
                 case _:
-                    raise ValueError(f"Unknown object type: {type(obj)}")
+                    raise ValueError(f"Unsupported type to_intersect:: {type(obj)}")
 
-            if isinstance(result, Vector):
-                points_sets.append(set([result]))
-            elif isinstance(result, Vertex):
-                points_sets.append(set([Vector(result)]))
-            elif isinstance(result, list):
-                points_sets.append(set(Vector(r) for r in result))
+            if isinstance(result, Vector) and result == common:
+                pass
+            elif (
+                isinstance(result, list)
+                and len(result) == 1
+                and Vector(result[0]) == common
+            ):
+                pass
             else:
-                points_sets.append(set())
+                return None
 
-        common_points = set.intersection(*points_sets)
-        return ShapeList([Vertex(p) for p in common_points]) if common_points else None
+        return ShapeList([self])
 
     # ---- Instance Methods ----
 
