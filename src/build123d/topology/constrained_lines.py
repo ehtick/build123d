@@ -69,7 +69,7 @@ from OCP.gp import (
     gp_Pnt,
     gp_Pnt2d,
 )
-from OCP.Standard import Standard_ConstructionError
+from OCP.Standard import Standard_ConstructionError, Standard_Failure
 from OCP.TopoDS import TopoDS_Edge
 
 from build123d.build_enums import Sagitta, Tangency
@@ -451,7 +451,7 @@ def _make_3tan_arcs(
     msg = "Unable to find a circle tangent to all three objects"
     try:
         gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
-    except Standard_ConstructionError as con_err:
+    except (Standard_ConstructionError, Standard_Failure) as con_err:
         raise RuntimeError(msg) from con_err
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError(msg)
