@@ -273,3 +273,27 @@ issues_matrix = [
 @pytest.mark.parametrize("obj, target, expected", make_params(issues_matrix))
 def test_issues(obj, target, expected):
     run_test(obj, target, expected)
+
+
+# Exceptions
+exception_matrix = [
+    Case(vt1, Color(), None, "Unsupported type", None),
+    Case(ed1, Color(), None, "Unsupported type", None),
+]
+
+@pytest.mark.skip
+def make_exception_params(matrix):
+    params = []
+    for case in matrix:
+        obj_type = type(case.object).__name__
+        tar_type = type(case.target).__name__
+        i = len(params)
+        uid = f"{i} {obj_type}, {tar_type}, {case.name}"
+        params.append(pytest.param(case.object, case.target, case.expected, id=uid))
+
+    return params
+
+@pytest.mark.parametrize("obj, target, expected", make_exception_params(exception_matrix))
+def test_exceptions(obj, target, expected):
+    with pytest.raises(Exception):
+        obj.intersect(target)
