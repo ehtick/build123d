@@ -1588,8 +1588,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
         *,
         radius: float,
         sagitta: Sagitta = Sagitta.SHORT,
@@ -1598,8 +1598,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         Create all planar circular arcs of a given radius that are tangent/contacting
         the two provided objects on the XY plane.
         Args:
-            tangency_one (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
-            tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
             radius (float): arc radius
             sagitta (LengthConstraint, optional): returned arc selector
@@ -1614,10 +1614,10 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
         *,
-        center_on: Edge,
+        center_on: Axis | Edge,
         sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
         """
@@ -1625,10 +1625,10 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         CENTER lies on a given locus (line/circle/curve) on the XY plane.
 
         Args:
-            tangency_one (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
-            tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
+            tangency_one, tangency_two
+                (tuple[Axus | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
-            center_on (Edge): center must lie on this edge
+            center_on (Axis | Edge): center must lie on this object
             sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
@@ -1641,9 +1641,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
-        tangency_two: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
-        tangency_three: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_three: (
+            tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
+        ),
         *,
         sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
@@ -1651,9 +1653,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         Create planar circular arc(s) on XY tangent to three provided objects.
 
         Args:
-            tangency_one (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
-            tangency_two (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
-            tangency_three (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
+            tangency_one, tangency_two, tangency_three
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
                 Geometric entities to be contacted/touched by the circle(s)
             sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
@@ -1667,7 +1668,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
         *,
         center: VectorLike,
     ) -> ShapeList[Edge]:
@@ -1677,7 +1678,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         a single object.
 
         Args:
-            tangency_one (tuple[Edge, PositionConstraint] | Edge | Vertex | VectorLike):
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
                 Geometric entity to be contacted/touched by the circle(s)
             center (VectorLike): center position
 
@@ -1689,7 +1691,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_arcs(
         cls,
-        tangency_one: tuple[Edge, Tangency] | Edge | Vertex | VectorLike,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
         *,
         radius: float,
         center_on: Edge,
@@ -1702,10 +1704,11 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         - have their CENTER constrained to lie on a given locus curve.
 
         Args:
-            tangency_one (tuple[Edge, PositionConstraint] | Vertex | VectorLike):
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
                 Geometric entity to be contacted/touched by the circle(s)
             radius (float): arc radius
-            center_on (Edge): center must lie on this edge
+            center_on (Axis | Edge): center must lie on this object
             sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
                 LengthConstraint.SHORT.
@@ -1743,17 +1746,24 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         ]
         tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
         for tangency_arg in tangency_args:
-            if isinstance(tangency_arg, Edge):
+            if isinstance(tangency_arg, Axis):
+                tangencies.append(Edge(tangency_arg))
+                continue
+            elif isinstance(tangency_arg, Edge):
                 tangencies.append(tangency_arg)
                 continue
-            if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
-                tangencies.append(tangency_arg)
-                continue
+            if isinstance(tangency_arg, tuple):
+                if isinstance(tangency_arg[0], Axis):
+                    tangencies.append(tuple(Edge(tangency_arg[0], tangency_arg[1])))
+                    continue
+                elif isinstance(tangency_arg[0], Edge):
+                    tangencies.append(tangency_arg)
+                    continue
             if isinstance(tangency_arg, Vertex):
                 tangencies.append(Vector(tangency_arg) + tangency_arg.position)
                 continue
 
-            # if not Edges, constrained Edges or Vertex convert to Vectors
+            # if not Axes, Edges, constrained Edges or Vertex convert to Vectors
             try:
                 tangencies.append(Vector(tangency_arg))
             except Exception as exc:
@@ -1769,6 +1779,9 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         # Radius sanity
         if radius is not None and radius <= 0:
             raise ValueError("radius must be > 0.0")
+
+        if center_on is not None and isinstance(center_on, Axis):
+            center_on = Edge(center_on)
 
         # --- decide problem kind ---
         if (
