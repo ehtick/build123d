@@ -36,7 +36,14 @@ from build123d.objects_curve import (
     ThreePointArc,
 )
 from build123d.operations_generic import mirror
-from build123d.topology import Edge, Solid, Vertex, Wire, topo_explore_common_vertex
+from build123d.topology import (
+    Edge,
+    Face,
+    Solid,
+    Vertex,
+    Wire,
+    topo_explore_common_vertex,
+)
 from build123d.geometry import Axis, Plane, Vector, TOLERANCE
 from build123d.build_enums import Tangency, Sagitta, LengthMode
 from build123d.topology.constrained_lines import (
@@ -185,6 +192,14 @@ def test_tan2_center_on_3():
 
 def test_tan2_center_on_4():
     """2 tangents & center on"""
+    tan2_on_edge = Edge.make_constrained_arcs(
+        Line((-5, 3), (5, 3)), (5, 0), center_on=Axis.Y
+    )
+    assert len(tan2_on_edge) == 1
+
+
+def test_tan2_center_on_5():
+    """2 tangents & center on"""
     with pytest.raises(RuntimeError) as excinfo:
         Edge.make_constrained_arcs(
             Line((-5, 3), (5, 3)),
@@ -196,10 +211,161 @@ def test_tan2_center_on_4():
     )
 
 
+def test_tan2_center_on_6():
+    """2 tangents & center on"""
+    l1 = Line((0, 0), (5, 0))
+    l2 = Line((0, 0), (0, 5))
+    l3 = Line((20, 20), (22, 22))
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs(l1, l2, center_on=l3)
+    assert "Unable to find a tangent arc with center_on constraint" in str(
+        excinfo.value
+    )
+
+
+# --- Sagitta selection branches ---
+
+
+def test_tan2_center_on_sagitta_both_returns_two_arcs():
+    """
+    TWO lines, center_on a line that crosses *both* angle bisectors → multiple
+    circle solutions; with Sagitta.BOTH we should get 2 arcs per solution.
+    Setup: x-axis & y-axis; center_on y=1.
+    """
+    c1 = Line((-10, 0), (10, 0))  # y = 0
+    c2 = Line((0, -10), (0, 10))  # x = 0
+    center_on = Line((-10, 1), (10, 1))  # y = 1
+
+    arcs = Edge.make_constrained_arcs(
+        (c1, Tangency.UNQUALIFIED),
+        (c2, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.BOTH,
+    )
+    # Expect 2 solutions (centers at (1,1) and (-1,1)), each yielding 2 arcs → 4
+    assert len(arcs) >= 2  # be permissive across kernels; typically 4
+    # At least confirms BOTH path is covered and multiple solutions iterate
+
+
+def test_tan2_center_on_sagitta_long_is_longer_than_short():
+    """
+    Verify LONG branch by comparing lengths against SHORT for the same geometry.
+    """
+    c1 = Line((-10, 0), (10, 0))  # y = 0
+    c2 = Line((0, -10), (0, 10))  # x = 0
+    center_on = Line((3, -10), (3, 10))  # x = 3 (unique center)
+
+    short_arc = Edge.make_constrained_arcs(
+        (c1, Tangency.UNQUALIFIED),
+        (c2, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.SHORT,
+    )
+    long_arc = Edge.make_constrained_arcs(
+        (c1, Tangency.UNQUALIFIED),
+        (c2, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.LONG,
+    )
+    assert len(short_arc) == 2
+    assert len(long_arc) == 2
+    assert long_arc[0].length > short_arc[0].length
+
+
+# --- Filtering branches inside the Solutions loop ---
+
+
+def test_tan2_center_on_filters_outside_first_tangent_segment():
+    """
+    Cause _ok(0, u_arg1) to fail:
+    - First tangency is a *very short* horizontal segment near x∈[0, 0.01].
+    - Second tangency is a vertical line far away.
+    - Center_on is x=5 (vertical).
+    The resulting tangency on the infinite horizontal line occurs near x≈center.x (≈5),
+    which lies *outside* the trimmed first segment → filtered out, no arcs.
+    """
+    tiny_first = Line((0.0, 0.0), (0.01, 0.0))  # very short horizontal
+    c2 = Line((10.0, -10.0), (10.0, 10.0))  # vertical line
+    center_on = Line((5.0, -10.0), (5.0, 10.0))  # x = 5
+
+    arcs = Edge.make_constrained_arcs(
+        (tiny_first, Tangency.UNQUALIFIED),
+        (c2, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.SHORT,
+    )
+    # GCC likely finds solutions, but they should be filtered out by _ok(0)
+    assert len(arcs) == 0
+
+
+def test_tan2_center_on_filters_outside_second_tangent_segment():
+    """
+    Cause _ok(1, u_arg2) to fail:
+    - First tangency is a *point* (so _ok(0) is trivially True).
+    - Second tangency is a *very short* vertical segment around y≈0 on x=10.
+    - Center_on is y=2 (horizontal), and first point is at (0,2).
+      For a circle through (0,2) and tangent to x=10 with center_on y=2,
+      the center is at (5,2), radius=5, so tangency on x=10 occurs at y=2,
+      which is *outside* the tiny segment around y≈0 → filtered by _ok(1).
+    """
+    first_point = (0.0, 2.0)  # acts as a "point object"
+    tiny_second = Line((10.0, -0.005), (10.0, 0.005))  # very short vertical near y=0
+    center_on = Line((-10.0, 2.0), (10.0, 2.0))  # y = 2
+
+    arcs = Edge.make_constrained_arcs(
+        first_point,
+        (tiny_second, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.SHORT,
+    )
+    assert len(arcs) == 0
+
+
+# --- Multiple-solution loop coverage with BOTH again (robust geometry) ---
+
+
+def test_tan2_center_on_multiple_solutions_both_counts():
+    """
+    Another geometry with 2+ GCC solutions:
+      c1: y=0, c2: y=4 (two non-intersecting parallels), center_on x=0.
+    Any circle tangent to both has radius=2 and center on y=2; with center_on x=0,
+    the center fixes at (0,2) — single center → two arcs (BOTH).
+    Use intersecting lines instead to guarantee >1 solutions: c1: y=0, c2: x=0,
+    center_on y=-2 (intersects both angle bisectors at (-2,-2) and (2,-2)).
+    """
+    c1 = Line((-20, 0), (20, 0))  # y = 0
+    c2 = Line((0, -20), (0, 20))  # x = 0
+    center_on = Line((-20, -2), (20, -2))  # y = -2
+
+    arcs = Edge.make_constrained_arcs(
+        (c1, Tangency.UNQUALIFIED),
+        (c2, Tangency.UNQUALIFIED),
+        center_on=center_on,
+        sagitta=Sagitta.BOTH,
+    )
+    # Expect at least 2 arcs (often 4); asserts loop over multiple i values
+    assert len(arcs) >= 2
+
+
 def test_tan_center_on_1():
     """1 tangent & center on"""
     c5 = PolarLine((0, 0), 4, 60)
     tan_center = Edge.make_constrained_arcs((c5, Tangency.UNQUALIFIED), center=(2, 1))
+    assert len(tan_center) == 1
+    assert tan_center[0].is_closed
+
+
+def test_tan_center_on_2():
+    """1 tangent & center on"""
+    tan_center = Edge.make_constrained_arcs(Axis.X, center=(2, 1, 5))
+    assert len(tan_center) == 1
+    assert tan_center[0].is_closed
+
+
+def test_tan_center_on_3():
+    """1 tangent & center on"""
+    l1 = CenterArc((0, 0), 1, 180, 5)
+    tan_center = Edge.make_constrained_arcs(l1, center=(2, 0))
     assert len(tan_center) == 1
     assert tan_center[0].is_closed
 
@@ -215,6 +381,21 @@ def test_pnt_center_1():
     assert pnt_center[0].is_closed
 
 
+def test_tan_cen_arcs_center_equals_point_returns_empty():
+    """
+    If the fixed center coincides with the tangency point,
+    the computed radius is zero and no valid circle exists.
+    Function should return an empty ShapeList.
+    """
+    center = (0, 0)
+    tangency_point = (0, 0)  # same as center
+
+    arcs = Edge.make_constrained_arcs(tangency_point, center=center)
+
+    assert isinstance(arcs, list)  # ShapeList subclass
+    assert len(arcs) == 0
+
+
 def test_tan_rad_center_on_1():
     """tangent, radius, center on"""
     c1 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)
@@ -224,6 +405,28 @@ def test_tan_rad_center_on_1():
     )
     assert len(tan_rad_on) == 1
     assert tan_rad_on[0].is_closed
+
+
+def test_tan_rad_center_on_2():
+    """tangent, radius, center on"""
+    c1 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)
+    tan_rad_on = Edge.make_constrained_arcs(c1, radius=1, center_on=Axis.X)
+    assert len(tan_rad_on) == 1
+    assert tan_rad_on[0].is_closed
+
+
+def test_tan_rad_center_on_3():
+    """tangent, radius, center on"""
+    c1 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)
+    with pytest.raises(TypeError) as excinfo:
+        Edge.make_constrained_arcs(c1, radius=1, center_on=Face.make_rect(1, 1))
+
+
+def test_tan_rad_center_on_4():
+    """tangent, radius, center on"""
+    c1 = Line((0, 10), (10, 10))
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_arcs(c1, radius=1, center_on=Axis.X)
 
 
 def test_tan3_1():

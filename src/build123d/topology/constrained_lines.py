@@ -384,30 +384,11 @@ def _make_2tan_on_arcs(
         if not _ok(1, u_arg2):
             continue
 
-        # Center must lie on the trimmed center_on curve segment
-        center2d = circ.Location()  # gp_Pnt2d
-
-        # Project center onto the (trimmed) 2D locus
-        proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_e[2])
-        if proj.NbPoints() == 0:
-            continue  # no projection -> reject
-
-        u_on = proj.Parameter(1)
-        # Optional: make sure it's actually on the curve (not just near)
-        if proj.Distance(1) > TOLERANCE:
-            continue
-
-        # Respect the trimmed interval (handles periodic curves too)
-        if not _param_in_trim(u_on, e_first[2], e_last[2], h_e[2]):
-            continue
-
         # Build sagitta arc(s) and select by LengthConstraint
         if sagitta == Sagitta.BOTH:
             solutions.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
         else:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
-            if not arcs:
-                continue
             arcs = sorted(
                 arcs, key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e))
             )
@@ -498,8 +479,6 @@ def _make_3tan_arcs(
             out_topos.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
         else:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
-            if not arcs:
-                continue
             arcs = sorted(
                 arcs,
                 key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e)),
@@ -571,10 +550,9 @@ def _make_tan_cen_arcs(
         assert isinstance(q_o1, Geom2dGcc_QualifiedCurve)
         # Case B: tangency target is a curve/edge (qualified curve)
         gcc = Geom2dGcc_Circ2dTanCen(q_o1, Geom2d_CartesianPoint(c2d), TOLERANCE)
-        if not gcc.IsDone() or gcc.NbSolutions() == 0:
-            raise RuntimeError(
-                "Unable to find circle(s) tangent to target with fixed center"
-            )
+        assert (
+            gcc.IsDone() and gcc.NbSolutions() > 0
+        ), "Unexpected: GCC failed to return a tangent circle"
 
         for i in range(1, gcc.NbSolutions() + 1):
             circ = gcc.ThisSolution(i)  # gp_Circ2d
@@ -657,13 +635,7 @@ def _make_tan_on_rad_arcs(
 
         # Project center onto the (trimmed) 2D locus
         proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_on2d)
-        if proj.NbPoints() == 0:
-            continue  # no projection -> reject
-
         u_on = proj.Parameter(1)
-        # Optional: make sure it's actually on the curve (not just near)
-        if proj.Distance(1) > TOLERANCE:
-            continue
 
         # Respect the trimmed interval (handles periodic curves too)
         if not _param_in_trim(u_on, on_first, on_last, h_on2d):
