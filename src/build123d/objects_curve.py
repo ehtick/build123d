@@ -29,6 +29,7 @@ license:
 from __future__ import annotations
 
 import copy as copy_module
+import warnings
 from collections.abc import Iterable
 from itertools import product
 from math import copysign, cos, radians, sin, sqrt
@@ -1237,6 +1238,12 @@ class PointArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
+    warnings.warn(
+        "The 'PointArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -1315,6 +1322,12 @@ class PointArcTangentArc(BaseEdgeObject):
         ValueError: Point is already tangent to arc
         RuntimeError: No tangent arc found
     """
+
+    warnings.warn(
+        "The 'PointArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 
@@ -1459,6 +1472,11 @@ class ArcArcTangentLine(BaseEdgeObject):
             Defaults to Keep.INSIDE
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
+    warnings.warn(
+        "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 
@@ -1559,6 +1577,12 @@ class ArcArcTangentArc(BaseEdgeObject):
             chord), else the long sagitta crossing the center. Defaults to True
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
+
+    warnings.warn(
+        "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 
