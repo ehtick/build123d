@@ -56,13 +56,11 @@ import numpy as np
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
-from math import radians, inf, pi, cos, copysign, ceil, floor, isclose
+from math import ceil, copysign, cos, floor, inf, isclose, pi, radians
+from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 from typing import cast as tcast
-from typing import Literal, overload, TYPE_CHECKING
-from typing_extensions import Self
-from scipy.optimize import minimize_scalar
-from scipy.spatial import ConvexHull
 
+import numpy as np
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve, BRepAdaptor_Curve
@@ -75,6 +73,7 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_DisconnectedWire,
     BRepBuilderAPI_EmptyWire,
     BRepBuilderAPI_MakeEdge,
+    BRepBuilderAPI_MakeEdge2d,
     BRepBuilderAPI_MakeFace,
     BRepBuilderAPI_MakePolygon,
     BRepBuilderAPI_MakeWire,
@@ -91,29 +90,45 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
+from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
 from OCP.GCPnts import GCPnts_AbscissaPoint
-from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
     Geom_ConicalSurface,
     Geom_CylindricalSurface,
+    Geom_Line,
     Geom_Plane,
     Geom_Surface,
     Geom_TrimmedCurve,
-    Geom_Line,
 )
-from OCP.Geom2d import Geom2d_Curve, Geom2d_Line, Geom2d_TrimmedCurve
+from OCP.Geom2d import (
+    Geom2d_CartesianPoint,
+    Geom2d_Circle,
+    Geom2d_Curve,
+    Geom2d_Line,
+    Geom2d_Point,
+    Geom2d_TrimmedCurve,
+)
+from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
 from OCP.Geom2dAPI import Geom2dAPI_InterCurveCurve
-from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_C1, GeomAbs_G2, GeomAbs_C2
+from OCP.Geom2dGcc import Geom2dGcc_Circ2d2TanRad, Geom2dGcc_QualifiedCurve
+from OCP.GeomAbs import (
+    GeomAbs_C0,
+    GeomAbs_C1,
+    GeomAbs_C2,
+    GeomAbs_G1,
+    GeomAbs_G2,
+    GeomAbs_JoinType,
+)
+from OCP.GeomAdaptor import GeomAdaptor_Curve
 from OCP.GeomAPI import (
+    GeomAPI,
     GeomAPI_IntCS,
     GeomAPI_Interpolate,
     GeomAPI_PointsToBSpline,
     GeomAPI_ProjectPointOnCurve,
 )
-from OCP.GeomAbs import GeomAbs_JoinType
-from OCP.GeomAdaptor import GeomAdaptor_Curve
 from OCP.GeomConvert import GeomConvert_CompCurveToBSplineCurve
 from OCP.GeomFill import (
     GeomFill_CorrectedFrenet,
@@ -121,30 +136,40 @@ from OCP.GeomFill import (
     GeomFill_TrihedronLaw,
 )
 from OCP.GeomProjLib import GeomProjLib
+from OCP.gp import (
+    gp_Ax1,
+    gp_Ax2,
+    gp_Ax3,
+    gp_Circ,
+    gp_Circ2d,
+    gp_Dir,
+    gp_Dir2d,
+    gp_Elips,
+    gp_Pln,
+    gp_Pnt,
+    gp_Pnt2d,
+    gp_Trsf,
+    gp_Vec,
+)
+from OCP.GProp import GProp_GProps
 from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCP.ShapeFix import ShapeFix_Shape, ShapeFix_Wireframe
 from OCP.Standard import (
+    Standard_ConstructionError,
     Standard_Failure,
     Standard_NoSuchObject,
-    Standard_ConstructionError,
 )
+from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TColStd import (
     TColStd_Array1OfReal,
     TColStd_HArray1OfBoolean,
     TColStd_HArray1OfReal,
 )
-from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TopAbs import TopAbs_Orientation, TopAbs_ShapeEnum
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopTools import (
-    TopTools_HSequenceOfShape,
-    TopTools_IndexedDataMapOfShapeListOfShape,
-    TopTools_IndexedMapOfShape,
-    TopTools_ListOfShape,
-)
 from OCP.TopoDS import (
     TopoDS,
     TopoDS_Compound,
@@ -155,34 +180,33 @@ from OCP.TopoDS import (
     TopoDS_Vertex,
     TopoDS_Wire,
 )
-from OCP.gp import (
-    gp_Ax1,
-    gp_Ax2,
-    gp_Ax3,
-    gp_Circ,
-    gp_Dir,
-    gp_Dir2d,
-    gp_Elips,
-    gp_Pnt,
-    gp_Pnt2d,
-    gp_Trsf,
-    gp_Vec,
+from OCP.TopTools import (
+    TopTools_HSequenceOfShape,
+    TopTools_IndexedDataMapOfShapeListOfShape,
+    TopTools_IndexedMapOfShape,
+    TopTools_ListOfShape,
 )
+from scipy.optimize import minimize_scalar
+from scipy.spatial import ConvexHull
+from typing_extensions import Self
+
 from build123d.build_enums import (
     AngularDirection,
-    ContinuityLevel,
     CenterOf,
+    ContinuityLevel,
     FrameMethod,
     GeomType,
     Keep,
     Kind,
+    Sagitta,
+    Tangency,
     PositionMode,
     Side,
 )
 from build123d.geometry import (
     DEG2RAD,
-    TOLERANCE,
     TOL_DIGITS,
+    TOLERANCE,
     Axis,
     Color,
     Location,
@@ -205,17 +229,23 @@ from .shape_core import (
 )
 from .utils import (
     _extrude_topods_shape,
-    isclose_b,
     _make_topods_face_from_wires,
     _topods_bool_op,
+    isclose_b,
 )
-from .zero_d import topo_explore_common_vertex, Vertex
-
+from .zero_d import Vertex, topo_explore_common_vertex
+from .constrained_lines import (
+    _make_2tan_rad_arcs,
+    _make_2tan_on_arcs,
+    _make_3tan_arcs,
+    _make_tan_cen_arcs,
+    _make_tan_on_rad_arcs,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .two_d import Face, Shell  # pylint: disable=R0801
+    from .composite import Compound, Curve, Part, Sketch  # pylint: disable=R0801
     from .three_d import Solid  # pylint: disable=R0801
-    from .composite import Compound, Curve, Sketch, Part  # pylint: disable=R0801
+    from .two_d import Face, Shell  # pylint: disable=R0801
 
 
 class Mixin1D(Shape):
@@ -1687,6 +1717,246 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             circle_geom = GC_MakeArcOfCircle(circle_gp, start, end, ccw).Value()
             return_value = cls(BRepBuilderAPI_MakeEdge(circle_geom).Edge())
         return return_value
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs of a given radius that are tangent/contacting
+        the two provided objects on the XY plane.
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center_on: Axis | Edge,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs whose circle is tangent to two objects and whose
+        CENTER lies on a given locus (line/circle/curve) on the XY plane.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axus | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            center_on (Axis | Edge): center must lie on this object
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_three: (
+            tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
+        ),
+        *,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create planar circular arc(s) on XY tangent to three provided objects.
+
+        Args:
+            tangency_one, tangency_two, tangency_three
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center: VectorLike,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY whose center is fixed and that are tangent/contacting
+        a single object.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            center (VectorLike): center position
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        center_on: Edge,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY that:
+        - are tangent/contacting a single object, and
+        - have a fixed radius, and
+        - have their CENTER constrained to lie on a given locus curve.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            center_on (Axis | Edge): center must lie on this object
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        *args,
+        sagitta: Sagitta = Sagitta.SHORT,
+        **kwargs,
+    ) -> ShapeList[Edge]:
+
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+        tangency_three = args[2] if len(args) > 2 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+        tangency_three = kwargs.pop("tangency_three", tangency_three)
+
+        radius = kwargs.pop("radius", None)
+        center = kwargs.pop("center", None)
+        center_on = kwargs.pop("center_on", None)
+
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        tangency_args = [
+            t for t in (tangency_one, tangency_two, tangency_three) if t is not None
+        ]
+        tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
+        for tangency_arg in tangency_args:
+            if isinstance(tangency_arg, Axis):
+                tangencies.append(Edge(tangency_arg))
+                continue
+            elif isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple):
+                if isinstance(tangency_arg[0], Axis):
+                    tangencies.append(tuple(Edge(tangency_arg[0], tangency_arg[1])))
+                    continue
+                elif isinstance(tangency_arg[0], Edge):
+                    tangencies.append(tangency_arg)
+                    continue
+            if isinstance(tangency_arg, Vertex):
+                tangencies.append(Vector(tangency_arg) + tangency_arg.position)
+                continue
+
+            # if not Axes, Edges, constrained Edges or Vertex convert to Vectors
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
+
+        # # Sort the tangency inputs so points are always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, Vector))
+
+        tan_count = len(tangencies)
+        if not (1 <= tan_count <= 3):
+            raise TypeError("Provide 1 to 3 tangency targets.")
+
+        # Radius sanity
+        if radius is not None and radius <= 0:
+            raise ValueError("radius must be > 0.0")
+
+        if center_on is not None and isinstance(center_on, Axis):
+            center_on = Edge(center_on)
+
+        # --- decide problem kind ---
+        if (
+            tan_count == 2
+            and radius is not None
+            and center is None
+            and center_on is None
+        ):
+            return _make_2tan_rad_arcs(
+                *tangencies,
+                radius=radius,
+                sagitta=sagitta,
+                edge_factory=cls,
+            )
+        if (
+            tan_count == 2
+            and center_on is not None
+            and radius is None
+            and center is None
+        ):
+            return _make_2tan_on_arcs(
+                *tangencies,
+                center_on=center_on,
+                sagitta=sagitta,
+                edge_factory=cls,
+            )
+        if tan_count == 3 and radius is None and center is None and center_on is None:
+            return _make_3tan_arcs(*tangencies, sagitta=sagitta, edge_factory=cls)
+        if (
+            tan_count == 1
+            and center is not None
+            and radius is None
+            and center_on is None
+        ):
+            return _make_tan_cen_arcs(*tangencies, center=center, edge_factory=cls)
+        if tan_count == 1 and center_on is not None and radius is not None:
+            return _make_tan_on_rad_arcs(
+                *tangencies, center_on=center_on, radius=radius, edge_factory=cls
+            )
+
+        raise ValueError("Unsupported or ambiguous combination of constraints.")
 
     @classmethod
     def make_ellipse(
