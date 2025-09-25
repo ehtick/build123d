@@ -531,7 +531,7 @@ class Mixin1D(Shape):
 
         A curvature comb is a set of short line segments (“teeth”) erected
         perpendicular to the curve that visualize the signed curvature κ(u).
-        Tooth length is proportional to |κ| and the direction encodes the sign
+        Tooth length is proportional to \|κ\| and the direction encodes the sign
         (left normal for κ>0, right normal for κ<0). This is useful for inspecting
         fairness and continuity (C0/C1/C2) of edges and wires.
 
@@ -554,7 +554,7 @@ class Mixin1D(Shape):
             - On straight segments, κ = 0 so no teeth are drawn.
             - At inflection points κ→0 and the tooth flips direction.
             - At C0 corners the tangent is discontinuous; nearby teeth may jump.
-            C1 yields continuous direction; C2 yields continuous magnitude as well.
+              C1 yields continuous direction; C2 yields continuous magnitude as well.
 
         Example:
             >>> comb = my_wire.curvature_comb(count=200, max_tooth_size=2.0)
@@ -961,16 +961,16 @@ class Mixin1D(Shape):
         The meaning of the returned parameter depends on the type of self:
 
         - **Edge**: Returns the native OCCT curve parameter corresponding to the
-        given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
-        edges, OCCT may return a value **outside** the edge's nominal parameter
-        range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
-        the period). If you require a value folded into the edge's range, apply a
-        modulo with the parameter span.
+          given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
+          edges, OCCT may return a value **outside** the edge's nominal parameter
+          range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
+          the period). If you require a value folded into the edge's range, apply a
+          modulo with the parameter span.
 
         - **Wire**: Returns a *composite* parameter encoding both the edge index
-        and the position within that edge: the **integer part** is the zero-based
-        count of fully traversed edges, and the **fractional part** is the
-        normalized position in `[0.0, 1.0]` along the current edge.
+          and the position within that edge: the **integer part** is the zero-based
+          count of fully traversed edges, and the **fractional part** is the
+          normalized position in `[0.0, 1.0]` along the current edge.
 
         Args:
             position (float): Normalized arc-length position along the shape,
