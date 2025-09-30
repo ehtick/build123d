@@ -649,7 +649,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 continue
 
             top_list = ShapeList(top if isinstance(top, list) else [top])
-            bottom_list = ShapeList(bottom if isinstance(top, list) else [bottom])
+            bottom_list = ShapeList(bottom if isinstance(bottom, list) else [bottom])
 
             if len(top_list) != len(bottom_list):  # exit early unequal length
                 continue

@@ -531,9 +531,12 @@ class TestShape(unittest.TestCase):
     def test_empty_shape(self):
         empty = Solid()
         box = Solid.make_box(1, 1, 1)
-        self.assertIsNone(empty.location)
-        self.assertIsNone(empty.position)
-        self.assertIsNone(empty.orientation)
+        with self.assertRaises(ValueError):
+            empty.location
+        with self.assertRaises(ValueError):
+            empty.position
+        with self.assertRaises(ValueError):
+            empty.orientation
         self.assertFalse(empty.is_manifold)
         with self.assertRaises(ValueError):
             empty.geom_type
