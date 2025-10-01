@@ -30,12 +30,12 @@ license:
 from __future__ import annotations
 
 from math import atan2, cos, sin
-from typing import TYPE_CHECKING, Callable, TypeVar
+from typing import overload, TYPE_CHECKING, Callable, TypeVar
 from typing import cast as tcast
 
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeVertex
 from OCP.GCPnts import GCPnts_AbscissaPoint
 from OCP.Geom import Geom_Curve, Geom_Plane
 from OCP.Geom2d import (
@@ -71,7 +71,7 @@ from OCP.gp import (
 )
 from OCP.IntAna2d import IntAna2d_AnaIntersection
 from OCP.Standard import Standard_ConstructionError, Standard_Failure
-from OCP.TopoDS import TopoDS_Edge
+from OCP.TopoDS import TopoDS_Edge, TopoDS_Vertex
 
 from build123d.build_enums import Sagitta, Tangency
 from build123d.geometry import Axis, TOLERANCE, Vector, VectorLike
@@ -154,6 +154,18 @@ def _param_in_trim(
     return (u >= first - TOLERANCE) and (u <= last + TOLERANCE)
 
 
+@overload
+def _as_gcc_arg(
+    obj: Edge, constaint: Tangency
+) -> tuple[
+    Geom2dGcc_QualifiedCurve, Geom2d_Curve | None, float | None, float | None, bool
+]: ...
+@overload
+def _as_gcc_arg(
+    obj: Vector, constaint: Tangency
+) -> tuple[Geom2d_CartesianPoint, None, None, None, bool]: ...
+
+
 def _as_gcc_arg(obj: Edge | Vector, constaint: Tangency) -> tuple[
     Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint,
     Geom2d_Curve | None,
@@ -221,9 +233,10 @@ def _edge_from_line(
     TopoDS_Edge
         Finite line segment between the two points.
     """
-    mk_edge = BRepBuilderAPI_MakeEdge(
-        Vertex(p1.X(), p1.Y()).wrapped, Vertex(p2.X(), p2.Y()).wrapped
-    )
+    v1 = BRepBuilderAPI_MakeVertex(gp_Pnt(p1.X(), p1.Y(), 0)).Vertex()
+    v2 = BRepBuilderAPI_MakeVertex(gp_Pnt(p2.X(), p2.Y(), 0)).Vertex()
+
+    mk_edge = BRepBuilderAPI_MakeEdge(v1, v2)
     if not mk_edge.IsDone():
         raise RuntimeError("Failed to build edge from line contacts")
     return mk_edge.Edge()
@@ -689,8 +702,8 @@ def _make_tan_on_rad_arcs(
 
 
 def _make_2tan_lines(
-    curve1: Edge,
-    curve2: Edge | Vector,
+    tangency1: tuple[Edge, Tangency] | Edge,
+    tangency2: tuple[Edge, Tangency] | Edge | Vector,
     *,
     edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
@@ -707,19 +720,27 @@ def _make_2tan_lines(
     ShapeList[Edge]
         Finite tangent line(s).
     """
-    q1, _, _, _, _ = _as_gcc_arg(curve1, Tangency.UNQUALIFIED)
+    if isinstance(tangency1, tuple):
+        object_one, obj1_qual = tangency1
+    else:
+        object_one, obj1_qual = tangency1, Tangency.UNQUALIFIED
+    q1, _, _, _, _ = _as_gcc_arg(object_one, obj1_qual)
 
-    if isinstance(curve2, Vector):
-        pnt_2d = gp_Pnt2d(curve2.X, curve2.Y)
+    if isinstance(tangency2, Vector):
+        pnt_2d = gp_Pnt2d(tangency2.X, tangency2.Y)
         gcc = Geom2dGcc_Lin2d2Tan(q1, pnt_2d, TOLERANCE)
     else:
-        q2, _, _, _, _ = _as_gcc_arg(curve2, Tangency.UNQUALIFIED)
+        if isinstance(tangency2, tuple):
+            object_two, obj2_qual = tangency2
+        else:
+            object_two, obj2_qual = tangency2, Tangency.UNQUALIFIED
+        q2, _, _, _, _ = _as_gcc_arg(object_two, obj2_qual)
         gcc = Geom2dGcc_Lin2d2Tan(q1, q2, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError("Unable to find common tangent line(s)")
 
-    out_edges: list[Edge] = []
+    out_edges: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
         # Two tangency points
         p1, p2 = gp_Pnt2d(), gp_Pnt2d()
@@ -732,9 +753,9 @@ def _make_2tan_lines(
 
 
 def _make_tan_oriented_lines(
-    curve: Edge,
+    tangency: tuple[Edge, Tangency] | Edge,
     reference: Axis,
-    angle: float | None = None,  # radians; absolute angle offset from `reference`
+    angle: float,  # radians; absolute angle offset from `reference`
     *,
     edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
@@ -744,7 +765,11 @@ def _make_tan_oriented_lines(
     - the tangency point on the curve, and
     - the intersection with the reference line.
     """
-    q_curve, _, _, _, _ = _as_gcc_arg(curve, Tangency.UNQUALIFIED)
+    if isinstance(tangency, tuple):
+        object_one, obj1_qual = tangency
+    else:
+        object_one, obj1_qual = tangency, Tangency.UNQUALIFIED
+    q_curve, _, _, _, _ = _as_gcc_arg(object_one, obj1_qual)
 
     # reference axis direction (2D angle in radians)
     ref_dir = reference.direction

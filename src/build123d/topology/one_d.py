@@ -1871,7 +1871,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
     @classmethod
     def make_constrained_lines(
         cls,
-        tangency_one: Edge,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge,
         tangency_two: Axis,
         *,
         angle: float | None = None,
@@ -1913,6 +1913,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         angle = kwargs.pop("angle", None)
         direction = kwargs.pop("direction", None)
 
+        is_ref = angle is not None or direction is not None
         # Handle unexpected kwargs
         if kwargs:
             raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
@@ -1921,10 +1922,13 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         if len(tangency_args) != 2:
             raise TypeError("Provide exactly 2 tangency targets.")
 
-        tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
-        for tangency_arg in tangency_args:
+        tangencies: list[tuple[Edge, Tangency] | Axis | Edge | Vector] = []
+        for i, tangency_arg in enumerate(tangency_args):
             if isinstance(tangency_arg, Axis):
-                tangencies.append(tangency_arg)
+                if i == 1 and is_ref:
+                    tangencies.append(tangency_arg)
+                else:
+                    tangencies.append(Edge(tangency_arg))
                 continue
             elif isinstance(tangency_arg, Edge):
                 tangencies.append(tangency_arg)
@@ -1942,11 +1946,14 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             except Exception as exc:
                 raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
 
-        # Sort so Vector (point) is always last
+        # Sort so Vector (point) | Axis is always last
         tangencies = sorted(tangencies, key=lambda x: isinstance(x, (Axis, Vector)))
 
         # --- decide problem kind ---
         if isinstance(tangencies[1], Axis):
+            assert isinstance(
+                tangencies[0], Edge
+            ), "Internal error - 1st tangency must be Edge"
             if angle is not None:
                 ang_rad = radians(angle)
             elif direction is not None:
@@ -1957,6 +1964,10 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 tangencies[0], tangencies[1], ang_rad, edge_factory=cls
             )
         else:
+            assert not isinstance(
+                tangencies[0], (Axis, Vector)
+            ), "Internal error - 1st tangency can't be an Axis | Vector"
+
             return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
 
     @classmethod
