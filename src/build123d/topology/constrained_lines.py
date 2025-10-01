@@ -29,7 +29,7 @@ license:
 
 from __future__ import annotations
 
-from math import cos, sin
+from math import atan2, cos, sin
 from typing import TYPE_CHECKING, Callable, TypeVar
 from typing import cast as tcast
 
@@ -746,7 +746,14 @@ def _make_tan_oriented_lines(
     """
     q_curve, _, _, _, _ = _as_gcc_arg(curve, Tangency.UNQUALIFIED)
 
-    dir2d = gp_Dir2d(cos(angle), sin(angle))
+    # reference axis direction (2D angle in radians)
+    ref_dir = reference.direction
+    theta_ref = atan2(ref_dir.Y, ref_dir.X)
+
+    # total absolute angle
+    theta_abs = theta_ref + angle
+
+    dir2d = gp_Dir2d(cos(theta_abs), sin(theta_abs))
 
     # Reference axis as gp_Lin2d
     ref_lin = _gp_lin2d_from_axis(reference)

@@ -1851,9 +1851,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         cls,
         tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge,
         tangency_two: Vector,
-        *,
-        angle: float | None = None,
-        direction: Vector | None = None,
     ) -> ShapeList[Edge]:
         """
         Create all planar line(s) on the XY plane tangent to one curve and passing
@@ -1865,10 +1862,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
                 Geometric entity to be contacted/touched by the line(s).
             tangency_two (Vector):
                 Fixed point through which the line(s) must pass.
-            angle : float, optional
-                Line orientation in degrees (measured CCW from the X-axis).
-            direction : Vector, optional
-                Direction vector for the line (only X and Y components are used).
 
         Returns:
             ShapeList[Edge]: tangent lines
@@ -1889,15 +1882,13 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         through a fixed point.
 
         Args:
-            tangency_one
-                Fixed point through which the line(s) must pass.
-            tangency_two (Vector):
-                (tuple[Axis | Edge, Tangency] | Axis | Edge):
-                Geometric entity to be contacted/touched by the line(s).
+            tangency_one (Edge): edge that line will be tangent to
+            tangency_two (Axis): axis that angle will be measured against
             angle : float, optional
                 Line orientation in degrees (measured CCW from the X-axis).
             direction : Vector, optional
                 Direction vector for the line (only X and Y components are used).
+            Note: one of angle or direction must be provided
 
         Returns:
             ShapeList[Edge]: tangent lines
