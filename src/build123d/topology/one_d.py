@@ -56,7 +56,7 @@ import itertools
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
-from math import ceil, copysign, cos, floor, inf, isclose, pi, radians
+from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
 from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 from typing import cast as tcast
 
@@ -240,6 +240,8 @@ from .constrained_lines import (
     _make_3tan_arcs,
     _make_tan_cen_arcs,
     _make_tan_on_rad_arcs,
+    _make_tan_oriented_lines,
+    _make_2tan_lines,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -1823,6 +1825,148 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             )
 
         raise ValueError("Unsupported or ambiguous combination of constraints.")
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to two provided curves.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, Tangency] | Axis | Edge):
+                Geometric entities to be contacted/touched by the line(s).
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge,
+        tangency_two: Vector,
+        *,
+        angle: float | None = None,
+        direction: Vector | None = None,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, Tangency] | Axis | Edge):
+                Geometric entity to be contacted/touched by the line(s).
+            tangency_two (Vector):
+                Fixed point through which the line(s) must pass.
+            angle : float, optional
+                Line orientation in degrees (measured CCW from the X-axis).
+            direction : Vector, optional
+                Direction vector for the line (only X and Y components are used).
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: Edge,
+        tangency_two: Axis,
+        *,
+        angle: float | None = None,
+        direction: Vector | None = None,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one
+                Fixed point through which the line(s) must pass.
+            tangency_two (Vector):
+                (tuple[Axis | Edge, Tangency] | Axis | Edge):
+                Geometric entity to be contacted/touched by the line(s).
+            angle : float, optional
+                Line orientation in degrees (measured CCW from the X-axis).
+            direction : Vector, optional
+                Direction vector for the line (only X and Y components are used).
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @classmethod
+    def make_constrained_lines(cls, *args, **kwargs) -> ShapeList[Edge]:
+        """
+        Create planar line(s) on XY subject to tangency/contact constraints.
+
+        Supported cases
+        ---------------
+        1. Tangent to two curves
+        2. Tangent to one curve and passing through a given point
+        """
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+
+        angle = kwargs.pop("angle", None)
+        direction = kwargs.pop("direction", None)
+
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        tangency_args = [t for t in (tangency_one, tangency_two) if t is not None]
+        if len(tangency_args) != 2:
+            raise TypeError("Provide exactly 2 tangency targets.")
+
+        tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
+        for tangency_arg in tangency_args:
+            if isinstance(tangency_arg, Axis):
+                tangencies.append(tangency_arg)
+                continue
+            elif isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple):
+                if isinstance(tangency_arg[0], Axis):
+                    tangencies.append((Edge(tangency_arg[0]), tangency_arg[1]))
+                    continue
+                elif isinstance(tangency_arg[0], Edge):
+                    tangencies.append(tangency_arg)
+                    continue
+            # Fallback: treat as a point
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
+
+        # Sort so Vector (point) is always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, (Axis, Vector)))
+
+        # --- decide problem kind ---
+        if isinstance(tangencies[1], Axis):
+            if angle is not None:
+                ang_rad = radians(angle)
+            elif direction is not None:
+                ang_rad = atan2(direction.Y, direction.X)
+            else:
+                raise ValueError("Specify exactly one of 'angle' or 'direction'")
+            return _make_tan_oriented_lines(
+                tangencies[0], tangencies[1], ang_rad, edge_factory=cls
+            )
+        else:
+            return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
 
     @classmethod
     def make_ellipse(

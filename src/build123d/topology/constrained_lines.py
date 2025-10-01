@@ -29,7 +29,7 @@ license:
 
 from __future__ import annotations
 
-from math import floor, pi
+from math import cos, sin
 from typing import TYPE_CHECKING, Callable, TypeVar
 from typing import cast as tcast
 
@@ -49,33 +49,34 @@ from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
 from OCP.Geom2dAPI import Geom2dAPI_ProjectPointOnCurve
 from OCP.Geom2dGcc import (
     Geom2dGcc_Circ2d2TanOn,
-    Geom2dGcc_Circ2d2TanOnGeo,
     Geom2dGcc_Circ2d2TanRad,
     Geom2dGcc_Circ2d3Tan,
     Geom2dGcc_Circ2dTanCen,
     Geom2dGcc_Circ2dTanOnRad,
-    Geom2dGcc_Circ2dTanOnRadGeo,
+    Geom2dGcc_Lin2dTanObl,
+    Geom2dGcc_Lin2d2Tan,
     Geom2dGcc_QualifiedCurve,
 )
-from OCP.GeomAbs import GeomAbs_CurveType
-from OCP.GeomAPI import GeomAPI, GeomAPI_ProjectPointOnCurve
+from OCP.GeomAPI import GeomAPI
 from OCP.gp import (
     gp_Ax2d,
     gp_Ax3,
     gp_Circ2d,
     gp_Dir,
     gp_Dir2d,
+    gp_Lin2d,
     gp_Pln,
     gp_Pnt,
     gp_Pnt2d,
 )
+from OCP.IntAna2d import IntAna2d_AnaIntersection
 from OCP.Standard import Standard_ConstructionError, Standard_Failure
 from OCP.TopoDS import TopoDS_Edge
 
 from build123d.build_enums import Sagitta, Tangency
-from build123d.geometry import TOLERANCE, Vector, VectorLike
+from build123d.geometry import Axis, TOLERANCE, Vector, VectorLike
 from .zero_d import Vertex
-from .shape_core import ShapeList, downcast
+from .shape_core import ShapeList
 
 if TYPE_CHECKING:
     from build123d.topology.one_d import Edge  # pragma: no cover
@@ -199,6 +200,40 @@ def _two_arc_edges_from_params(
     minor = _edge_from_circle(h2d_circle, u1n, u1n + d)
     major = _edge_from_circle(h2d_circle, u2n, u2n + (period - d))
     return [minor, major]
+
+
+def _edge_from_line(
+    p1: gp_Pnt2d,
+    p2: gp_Pnt2d,
+) -> TopoDS_Edge:
+    """
+    Build a finite Edge from two 2D contact points.
+
+    Parameters
+    ----------
+    p1, p2 : gp_Pnt2d
+        Endpoints of the line segment (in 2D).
+    edge_factory : type[Edge], optional
+        Factory for building the Edge subtype (defaults to Edge).
+
+    Returns
+    -------
+    TopoDS_Edge
+        Finite line segment between the two points.
+    """
+    mk_edge = BRepBuilderAPI_MakeEdge(
+        Vertex(p1.X(), p1.Y()).wrapped, Vertex(p2.X(), p2.Y()).wrapped
+    )
+    if not mk_edge.IsDone():
+        raise RuntimeError("Failed to build edge from line contacts")
+    return mk_edge.Edge()
+
+
+def _gp_lin2d_from_axis(ax: Axis) -> gp_Lin2d:
+    """Build a 2D reference line from an Axis (XY plane)."""
+    p = gp_Pnt2d(ax.position.X, ax.position.Y)
+    d = gp_Dir2d(ax.direction.X, ax.direction.Y)
+    return gp_Lin2d(gp_Ax2d(p, d))
 
 
 def _qstr(q) -> str:  # pragma: no cover
@@ -646,3 +681,95 @@ def _make_tan_on_rad_arcs(
         out_topos.append(_edge_from_circle(h2d, 0.0, per))
 
     return ShapeList([edge_factory(e) for e in out_topos])
+
+
+# -----------------------------------------------------------------------------
+# Line solvers (siblings of constrained arcs)
+# -----------------------------------------------------------------------------
+
+
+def _make_2tan_lines(
+    curve1: Edge,
+    curve2: Edge | Vector,
+    *,
+    edge_factory: Callable[[TopoDS_Edge], Edge],
+) -> ShapeList[Edge]:
+    """
+    Construct line(s) tangent to two curves.
+
+    Parameters
+    ----------
+    curve1, curve2 : Edge
+        Target curves.
+
+    Returns
+    -------
+    ShapeList[Edge]
+        Finite tangent line(s).
+    """
+    q1, _, _, _, _ = _as_gcc_arg(curve1, Tangency.UNQUALIFIED)
+
+    if isinstance(curve2, Vector):
+        pnt_2d = gp_Pnt2d(curve2.X, curve2.Y)
+        gcc = Geom2dGcc_Lin2d2Tan(q1, pnt_2d, TOLERANCE)
+    else:
+        q2, _, _, _, _ = _as_gcc_arg(curve2, Tangency.UNQUALIFIED)
+        gcc = Geom2dGcc_Lin2d2Tan(q1, q2, TOLERANCE)
+
+    if not gcc.IsDone() or gcc.NbSolutions() == 0:
+        raise RuntimeError("Unable to find common tangent line(s)")
+
+    out_edges: list[Edge] = []
+    for i in range(1, gcc.NbSolutions() + 1):
+        # Two tangency points
+        p1, p2 = gp_Pnt2d(), gp_Pnt2d()
+        gcc.Tangency1(i, p1)
+        gcc.Tangency2(i, p2)
+        contacts = [p1, p2]
+
+        out_edges.append(_edge_from_line(*contacts))
+    return ShapeList([edge_factory(e) for e in out_edges])
+
+
+def _make_tan_oriented_lines(
+    curve: Edge,
+    reference: Axis,
+    angle: float | None = None,  # radians; absolute angle offset from `reference`
+    *,
+    edge_factory: Callable[[TopoDS_Edge], Edge],
+) -> ShapeList[Edge]:
+    """
+    Construct line(s) tangent to a curve and forming a given angle with a
+    reference line (Axis) per Geom2dGcc_Lin2dTanObl. Trimmed between:
+    - the tangency point on the curve, and
+    - the intersection with the reference line.
+    """
+    q_curve, _, _, _, _ = _as_gcc_arg(curve, Tangency.UNQUALIFIED)
+
+    dir2d = gp_Dir2d(cos(angle), sin(angle))
+
+    # Reference axis as gp_Lin2d
+    ref_lin = _gp_lin2d_from_axis(reference)
+
+    gcc = Geom2dGcc_Lin2dTanObl(q_curve, ref_lin, TOLERANCE, angle)
+    if not gcc.IsDone() or gcc.NbSolutions() == 0:
+        raise RuntimeError("Unable to find tangent line for given orientation")
+
+    out: list[TopoDS_Edge] = []
+    for i in range(1, gcc.NbSolutions() + 1):
+        # Tangency on the curve
+        p_tan = gp_Pnt2d()
+        gcc.Tangency1(i, p_tan)
+
+        tan_line = gp_Lin2d(p_tan, dir2d)
+
+        # Intersect with reference axis
+        # Note: Intersection2 doesn't seem reliable
+        inter = IntAna2d_AnaIntersection(tan_line, ref_lin)
+        if not inter.IsDone() or inter.NbPoints() == 0:
+            continue
+        p_isect = inter.Point(1).Value()
+
+        out.append(_edge_from_line(p_tan, p_isect))
+
+    return ShapeList([edge_factory(e) for e in out])
