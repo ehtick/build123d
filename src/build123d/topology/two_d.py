@@ -105,6 +105,7 @@ from OCP.TopExp import TopExp
 from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Shell, TopoDS_Solid
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from typing_extensions import Self
+from ocp_gordon import interpolate_curve_network
 
 from build123d.build_enums import (
     CenterOf,
@@ -863,6 +864,38 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         if obj.wrapped is None:
             raise ValueError("Can't extrude empty object")
         return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
+
+    @classmethod
+    def gordon_surface(
+        cls,
+        profiles: Iterable[Edge],
+        guides: Iterable[Edge],
+        tolerance: float = 3e-4,
+    ) -> Face:
+        """
+        Creates a Gordon surface from a network of profile and guide curves.
+
+        Args:
+            profiles (Iterable[Edge]): Edges representing profile curves.
+            guides (Iterable[Edge]): Edges representing guide curves.
+            tolerance (float, optional): Tolerance for surface creation and
+                intersection calculations.
+
+        Returns:
+            Face: the interpolated Gordon surface
+        """
+        ocp_profiles = [BRep_Tool.Curve_s(edge.wrapped, 0, 1) for edge in profiles]
+        ocp_guides = [BRep_Tool.Curve_s(edge.wrapped, 0, 1) for edge in guides]
+
+        gordon_bspline_surface = interpolate_curve_network(
+            ocp_profiles, ocp_guides, tolerance=tolerance
+        )
+
+        return cls(
+            BRepBuilderAPI_MakeFace(
+                gordon_bspline_surface, Precision.Confusion_s()
+            ).Face()
+        )
 
     @classmethod
     def make_bezier_surface(
