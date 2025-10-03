@@ -434,6 +434,22 @@ class TestFace(unittest.TestCase):
             u=1.0, v=1.0, expected_point=profiles[-1].position_at(1.0)
         )
 
+        temp_curve = profiles[0]
+        with self.assertRaises(ValueError):
+            profiles[0] = Edge()
+            tolerance = 3e-4
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
+
+        profiles[0] = temp_curve
+        with self.assertRaises(ValueError):
+            guides[0] = Edge()
+            tolerance = 3e-4
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
+
     def test_make_surface(self):
         corners = [Vector(x, y) for x in [-50.5, 50.5] for y in [-24.5, 24.5]]
         net_exterior = Wire(
