@@ -435,17 +435,15 @@ class TestFace(unittest.TestCase):
         )
 
         temp_curve = profiles[0]
+        profiles[0] = Edge()
         with self.assertRaises(ValueError):
-            profiles[0] = Edge()
-            tolerance = 3e-4
             gordon_surface = Face.make_gordon_surface(
                 profiles, guides, tolerance=tolerance
             )
 
         profiles[0] = temp_curve
+        guides[0] = Edge()
         with self.assertRaises(ValueError):
-            guides[0] = Edge()
-            tolerance = 3e-4
             gordon_surface = Face.make_gordon_surface(
                 profiles, guides, tolerance=tolerance
             )
