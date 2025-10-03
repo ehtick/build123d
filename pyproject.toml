@@ -44,7 +44,7 @@ dependencies = [
     "ipython >= 8.0.0, < 10",
     "lib3mf >= 2.4.1",
     "ocpsvg >= 0.5, < 0.6",
-    "ocp_gordon >= 0.1.10",
+    "ocp_gordon >= 0.1.12",
     "trianglesolver",
     "sympy",
     "scipy",
