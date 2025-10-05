@@ -64,7 +64,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Builder, BRep_Tool
-from OCP.BRepAdaptor import BRepAdaptor_Surface
+from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgo import BRepAlgo
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 from OCP.BRepBuilderAPI import (
@@ -81,8 +81,13 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling, BRepOffsetAPI_MakePipeS
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeRevol
 from OCP.BRepTools import BRepTools, BRepTools_ReShape
 from OCP.gce import gce_MakeLin
-from OCP.Geom import Geom_BezierSurface, Geom_RectangularTrimmedSurface, Geom_Surface
-from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_G2
+from OCP.Geom import (
+    Geom_BezierSurface,
+    Geom_RectangularTrimmedSurface,
+    Geom_Surface,
+    Geom_TrimmedCurve,
+)
+from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_G2, GeomAbs_CurveType
 from OCP.GeomAPI import (
     GeomAPI_ExtremaCurveCurve,
     GeomAPI_PointsToBSplineSurface,
@@ -940,7 +945,18 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         def to_geom_curve(edge: Edge):
             if edge.wrapped is None:
                 raise ValueError("input edge cannot be empty")
-            return BRep_Tool.Curve_s(edge.wrapped, 0, 1)
+
+            adaptor = BRepAdaptor_Curve(edge.wrapped)
+            curve = BRep_Tool.Curve_s(edge.wrapped, 0, 1)
+            if not (
+                (adaptor.IsPeriodic() and adaptor.IsClosed())
+                or adaptor.GetType() == GeomAbs_CurveType.GeomAbs_BSplineCurve
+                or adaptor.GetType() == GeomAbs_CurveType.GeomAbs_BezierCurve
+            ):
+                curve = Geom_TrimmedCurve(
+                    curve, adaptor.FirstParameter(), adaptor.LastParameter()
+                )
+            return curve
 
         ocp_profiles = [to_geom_curve(edge) for edge in profiles]
         ocp_guides = [to_geom_curve(edge) for edge in guides]
