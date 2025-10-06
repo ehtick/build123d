@@ -792,6 +792,8 @@ class Mixin1D(Shape):
                     case Edge() as obj, Plane() as plane:
                         # Find any edge / plane intersection points & edges
                         # Find point intersections
+                        if obj.wrapped is None:
+                            continue
                         geom_line = BRep_Tool.Curve_s(
                             obj.wrapped, obj.param_at(0), obj.param_at(1)
                         )
@@ -818,10 +820,13 @@ class Mixin1D(Shape):
                 vts = common_set.vertices()
                 eds = common_set.edges()
                 if vts and eds:
-                    filtered_vts = ShapeList([
-                        v for v in vts
-                        if all(v.distance_to(e) > TOLERANCE for e in eds)
-                    ])
+                    filtered_vts = ShapeList(
+                        [
+                            v
+                            for v in vts
+                            if all(v.distance_to(e) > TOLERANCE for e in eds)
+                        ]
+                    )
                     common_set = filtered_vts + eds
             else:
                 return None
