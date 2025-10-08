@@ -15,6 +15,7 @@ Cheat Sheet
 
         .. grid-item-card:: 1D - BuildLine
 
+            | :class:`~objects_curve.Airfoil`
             | :class:`~objects_curve.ArcArcTangentArc`
             | :class:`~objects_curve.ArcArcTangentLine`
             | :class:`~objects_curve.Bezier`

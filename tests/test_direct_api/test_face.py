@@ -359,6 +359,185 @@ class TestFace(unittest.TestCase):
         self.assertAlmostEqual(loc.position, (0.0, 1.0, 1.5), 5)
         self.assertAlmostEqual(loc.orientation, (0, -90, 0), 5)
 
+    def test_make_gordon_surface(self):
+        def create_test_curves(
+            num_profiles: int = 3,
+            num_guides: int = 4,
+            u_range: float = 1.0,
+            v_range: float = 1.0,
+        ):
+            profiles: list[Edge] = []
+            guides: list[Edge] = []
+
+            intersection_points = [
+                [(0.0, 0.0, 0.0) for _ in range(num_guides)]
+                for _ in range(num_profiles)
+            ]
+
+            for i in range(num_profiles):
+                for j in range(num_guides):
+                    u = i * u_range / (num_profiles - 1)
+                    v = j * v_range / (num_guides - 1)
+                    z = 0.2 * math.sin(u * math.pi) * math.cos(v * math.pi)
+                    intersection_points[i][j] = (u, v, z)
+
+            for i in range(num_profiles):
+                points = [intersection_points[i][j] for j in range(num_guides)]
+                profiles.append(Spline(points))
+
+            for j in range(num_guides):
+                points = [intersection_points[i][j] for i in range(num_profiles)]
+                guides.append(Spline(points))
+
+            return profiles, guides
+
+        profiles, guides = create_test_curves()
+
+        tolerance = 3e-4
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+
+        self.assertIsInstance(
+            gordon_surface, Face, "The returned object should be a Face."
+        )
+
+        def point_at_uv_against_expected(u: float, v: float, expected_point: Vector):
+            point_at_uv = gordon_surface.position_at(u, v)
+            self.assertAlmostEqual(
+                point_at_uv.X,
+                expected_point.X,
+                delta=tolerance,
+                msg=f"X coordinate mismatch at ({u},{v})",
+            )
+            self.assertAlmostEqual(
+                point_at_uv.Y,
+                expected_point.Y,
+                delta=tolerance,
+                msg=f"Y coordinate mismatch at ({u},{v})",
+            )
+            self.assertAlmostEqual(
+                point_at_uv.Z,
+                expected_point.Z,
+                delta=tolerance,
+                msg=f"Z coordinate mismatch at ({u},{v})",
+            )
+
+        point_at_uv_against_expected(
+            u=0.0, v=0.0, expected_point=guides[0].position_at(0.0)
+        )
+        point_at_uv_against_expected(
+            u=1.0, v=0.0, expected_point=profiles[0].position_at(1.0)
+        )
+        point_at_uv_against_expected(
+            u=0.0, v=1.0, expected_point=guides[0].position_at(1.0)
+        )
+        point_at_uv_against_expected(
+            u=1.0, v=1.0, expected_point=profiles[-1].position_at(1.0)
+        )
+
+        temp_curve = profiles[0]
+        profiles[0] = Edge()
+        with self.assertRaises(ValueError):
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
+
+        profiles[0] = temp_curve
+        guides[0] = Edge()
+        with self.assertRaises(ValueError):
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
+
+    def test_make_gordon_surface_edge_types(self):
+        tolerance = 3e-4
+
+        def point_at_uv_against_expected(u: float, v: float, expected_point: Vector):
+            point_at_uv = gordon_surface.position_at(u, v)
+            self.assertAlmostEqual(
+                point_at_uv.X,
+                expected_point.X,
+                delta=tolerance,
+                msg=f"X coordinate mismatch at ({u},{v})",
+            )
+            self.assertAlmostEqual(
+                point_at_uv.Y,
+                expected_point.Y,
+                delta=tolerance,
+                msg=f"Y coordinate mismatch at ({u},{v})",
+            )
+            self.assertAlmostEqual(
+                point_at_uv.Z,
+                expected_point.Z,
+                delta=tolerance,
+                msg=f"Z coordinate mismatch at ({u},{v})",
+            )
+
+        points = [
+            Vector(0, 0, 0),
+            Vector(10, 0, 0),
+            Vector(12, 20, 1),
+            Vector(4, 22, -1),
+        ]
+
+        profiles = [Line(points[0], points[1]), Line(points[3], points[2])]
+        guides = [Line(points[0], points[3]), Line(points[1], points[2])]
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+        point_at_uv_against_expected(
+            u=0.5,
+            v=0.5,
+            expected_point=(points[0] + points[1] + points[2] + points[3]) / 4,
+        )
+
+        profiles = [
+            ThreePointArc(
+                points[0], (points[0] + points[1]) / 2 + Vector(0, 0, 2), points[1]
+            ),
+            ThreePointArc(
+                points[3], (points[3] + points[2]) / 2 + Vector(0, 0, 3), points[2]
+            ),
+        ]
+        guides = [
+            Line(profiles[0] @ 0, profiles[1] @ 0),
+            Line(profiles[0] @ 1, profiles[1] @ 1),
+        ]
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+        point_at_uv_against_expected(u=0.0, v=0.5, expected_point=guides[0] @ 0.5)
+        point_at_uv_against_expected(u=1.0, v=0.5, expected_point=guides[1] @ 0.5)
+
+        profiles = [
+            Edge.make_bezier(
+                points[0],
+                points[0] + Vector(1, 0, 1),
+                points[1] - Vector(1, 0, 1),
+                points[1],
+            ),
+            Edge.make_bezier(
+                points[3],
+                points[3] + Vector(1, 0, 1),
+                points[2] - Vector(1, 0, 1),
+                points[2],
+            ),
+        ]
+        guides = [
+            Line(profiles[0] @ 0, profiles[1] @ 0),
+            Line(profiles[0] @ 1, profiles[1] @ 1),
+        ]
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+        point_at_uv_against_expected(u=0.0, v=0.5, expected_point=guides[0] @ 0.5)
+        point_at_uv_against_expected(u=1.0, v=0.5, expected_point=guides[1] @ 0.5)
+
+        profiles = [
+            Edge.make_ellipse(10, 6),
+            Edge.make_ellipse(8, 7).translate((1, 2, 10)),
+        ]
+        guides = [
+            Line(profiles[0] @ 0, profiles[1] @ 0),
+            Line(profiles[0] @ 0.5, profiles[1] @ 0.5),
+        ]
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+        point_at_uv_against_expected(u=0.0, v=0.5, expected_point=guides[0] @ 0.5)
+        point_at_uv_against_expected(u=1.0, v=0.5, expected_point=guides[0] @ 0.5)
+
     def test_make_surface(self):
         corners = [Vector(x, y) for x in [-50.5, 50.5] for y in [-24.5, 24.5]]
         net_exterior = Wire(

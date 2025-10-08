@@ -1326,7 +1326,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
 
     def intersect(
-        self, *to_intersect: Shape | Axis | Plane
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
     ) -> None | Self | ShapeList[Self]:
         """Intersection of the arguments and this shape
 

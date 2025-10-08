@@ -81,6 +81,7 @@ __all__ = [
     "BuildSketch",
     # 1D Curve Objects
     "BaseLineObject",
+    "Airfoil",
     "Bezier",
     "BlendCurve",
     "CenterArc",

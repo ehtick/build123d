@@ -52,7 +52,7 @@ license:
 from __future__ import annotations
 
 import copy
-import itertools
+import numpy as np
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
@@ -695,6 +695,145 @@ class Mixin1D(Shape):
         umax = curve.LastParameter() if self.is_forward else curve.FirstParameter()
 
         return Vector(curve.Value(umax))
+
+    def intersect(
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> None | ShapeList[Vertex | Edge]:
+        """Intersect Edge with Shape or geometry object
+
+        Args:
+            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
+
+        Returns:
+            ShapeList[Vertex | Edge] | None: ShapeList of vertices and/or edges
+        """
+
+        def to_vector(objs: Iterable) -> ShapeList:
+            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+
+        def to_vertex(objs: Iterable) -> ShapeList:
+            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+
+        common_set: ShapeList[Vertex | Edge] = ShapeList(self.edges())
+        target: ShapeList | Shape | Plane
+        for other in to_intersect:
+            # Conform target type
+            # Vertices need to be Vector for set()
+            match other:
+                case Axis():
+                    target = ShapeList([Edge(other)])
+                case Plane():
+                    target = other
+                case Vector():
+                    target = Vertex(other)
+                case Location():
+                    target = Vertex(other.position)
+                case Edge():
+                    target = ShapeList([other])
+                case Wire():
+                    target = ShapeList(other.edges())
+                case _ if issubclass(type(other), Shape):
+                    target = other
+                case _:
+                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
+
+            # Find common matches
+            common: list[Vector | Edge] = []
+            result: ShapeList | Shape | None
+            for obj in common_set:
+                match (obj, target):
+                    case obj, Shape() as target:
+                        # Find Shape with Edge/Wire
+                        if isinstance(target, Vertex):
+                            result = Shape.intersect(obj, target)
+                        else:
+                            result = target.intersect(obj)
+
+                        if result:
+                            if not isinstance(result, list):
+                                result = ShapeList([result])
+                            common.extend(to_vector(result))
+
+                    case Vertex() as obj, target:
+                        if not isinstance(target, ShapeList):
+                            target = ShapeList([target])
+
+                        for tar in target:
+                            if isinstance(tar, Edge):
+                                result = Shape.intersect(obj, tar)
+                            else:
+                                result = obj.intersect(tar)
+
+                            if result:
+                                if not isinstance(result, list):
+                                    result = ShapeList([result])
+                                common.extend(to_vector(result))
+
+                    case Edge() as obj, ShapeList() as targets:
+                        # Find any edge / edge intersection points
+                        for tar in targets:
+                            # Find crossing points
+                            try:
+                                intersection_points = obj.find_intersection_points(tar)
+                                common.extend(intersection_points)
+                            except ValueError:
+                                pass
+
+                            # Find common end points
+                            obj_end_points = set(Vector(v) for v in obj.vertices())
+                            tar_end_points = set(Vector(v) for v in tar.vertices())
+                            points = set.intersection(obj_end_points, tar_end_points)
+                            common.extend(points)
+
+                        # Find Edge/Edge overlaps
+                        result = obj._bool_op(
+                            (obj,), targets, BRepAlgoAPI_Common()
+                        ).edges()
+                        common.extend(result if isinstance(result, list) else [result])
+
+                    case Edge() as obj, Plane() as plane:
+                        # Find any edge / plane intersection points & edges
+                        # Find point intersections
+                        if obj.wrapped is None:
+                            continue
+                        geom_line = BRep_Tool.Curve_s(
+                            obj.wrapped, obj.param_at(0), obj.param_at(1)
+                        )
+                        geom_plane = Geom_Plane(plane.local_coord_system)
+                        intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
+                        plane_intersection_points: list[Vector] = []
+                        if intersection_calculator.IsDone():
+                            plane_intersection_points = [
+                                Vector(intersection_calculator.Point(i + 1))
+                                for i in range(intersection_calculator.NbPoints())
+                            ]
+                        common.extend(plane_intersection_points)
+
+                        # Find edge intersections
+                        if all(
+                            plane.contains(v)
+                            for v in obj.positions(i / 7 for i in range(8))
+                        ):  # is a 2D edge
+                            common.append(obj)
+
+            if common:
+                common_set = to_vertex(set(common))
+                # Remove Vertex intersections coincident to Edge intersections
+                vts = common_set.vertices()
+                eds = common_set.edges()
+                if vts and eds:
+                    filtered_vts = ShapeList(
+                        [
+                            v
+                            for v in vts
+                            if all(v.distance_to(e) > TOLERANCE for e in eds)
+                        ]
+                    )
+                    common_set = filtered_vts + eds
+            else:
+                return None
+
+        return ShapeList(common_set)
 
     def location_at(
         self,
@@ -2565,90 +2704,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         if self.wrapped is None:
             raise ValueError("Can't find adaptor for empty edge")
         return BRepAdaptor_Curve(self.wrapped)
-
-    def intersect(
-        self, *to_intersect: Edge | Axis | Plane
-    ) -> None | Vertex | Edge | ShapeList[Vertex | Edge]:
-        """intersect Edge with Edge or Axis
-
-        Args:
-            other (Edge |  Axis): other object
-
-        Returns:
-            Shape |  None: Compound of vertices and/or edges
-        """
-        edges: list[Edge] = []
-        planes: list[Plane] = []
-        edges_common_to_planes: list[Edge] = []
-
-        for obj in to_intersect:
-            match obj:
-                case Axis():
-                    edges.append(Edge(obj))
-                case Edge():
-                    edges.append(obj)
-                case Plane():
-                    planes.append(obj)
-                case _:
-                    raise ValueError(f"Unknown object type: {type(obj)}")
-
-        # Find any edge / edge intersection points
-        points_sets: list[set[Vector]] = []
-        # Find crossing points
-        for edge_pair in combinations([self] + edges, 2):
-            intersection_points = edge_pair[0].find_intersection_points(edge_pair[1])
-            points_sets.append(set(intersection_points))
-
-        # Find common end points
-        self_end_points = set(Vector(v) for v in self.vertices())
-        edge_end_points = set(Vector(v) for edge in edges for v in edge.vertices())
-        common_end_points = set.intersection(self_end_points, edge_end_points)
-
-        # Find any edge / plane intersection points & edges
-        for edge, plane in itertools.product([self] + edges, planes):
-            if edge.wrapped is None:
-                continue
-            # Find point intersections
-            geom_line = BRep_Tool.Curve_s(
-                edge.wrapped, edge.param_at(0), edge.param_at(1)
-            )
-            geom_plane = Geom_Plane(plane.local_coord_system)
-            intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
-            plane_intersection_points: list[Vector] = []
-            if intersection_calculator.IsDone():
-                plane_intersection_points = [
-                    Vector(intersection_calculator.Point(i + 1))
-                    for i in range(intersection_calculator.NbPoints())
-                ]
-            points_sets.append(set(plane_intersection_points))
-
-            # Find edge intersections
-            if all(
-                plane.contains(v) for v in edge.positions(i / 7 for i in range(8))
-            ):  # is a 2D edge
-                edges_common_to_planes.append(edge)
-
-        edges.extend(edges_common_to_planes)
-
-        # Find the intersection of all sets
-        common_points = set.intersection(*points_sets)
-        common_vertices = [
-            Vertex(pnt) for pnt in common_points.union(common_end_points)
-        ]
-
-        # Find Edge/Edge overlaps
-        common_edges: list[Edge] = []
-        if edges:
-            common_edges = self._bool_op((self,), edges, BRepAlgoAPI_Common()).edges()
-
-        if common_vertices or common_edges:
-            # If there is just one vertex or edge return it
-            if len(common_vertices) == 1 and len(common_edges) == 0:
-                return common_vertices[0]
-            if len(common_vertices) == 0 and len(common_edges) == 1:
-                return common_edges[0]
-            return ShapeList(common_vertices + common_edges)
-        return None
 
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
