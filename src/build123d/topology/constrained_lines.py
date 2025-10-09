@@ -29,7 +29,7 @@ license:
 
 from __future__ import annotations
 
-from math import atan2, cos, sin
+from math import atan2, cos, isnan, sin
 from typing import overload, TYPE_CHECKING, Callable, TypeVar
 from typing import cast as tcast
 
@@ -42,11 +42,12 @@ from OCP.Geom2d import (
     Geom2d_CartesianPoint,
     Geom2d_Circle,
     Geom2d_Curve,
+    Geom2d_Line,
     Geom2d_Point,
     Geom2d_TrimmedCurve,
 )
 from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
-from OCP.Geom2dAPI import Geom2dAPI_ProjectPointOnCurve
+from OCP.Geom2dAPI import Geom2dAPI_ProjectPointOnCurve, Geom2dAPI_InterCurveCurve
 from OCP.Geom2dGcc import (
     Geom2dGcc_Circ2d2TanOn,
     Geom2dGcc_Circ2d2TanRad,
@@ -724,7 +725,7 @@ def _make_2tan_lines(
         object_one, obj1_qual = tangency1
     else:
         object_one, obj1_qual = tangency1, Tangency.UNQUALIFIED
-    q1, _, _, _, _ = _as_gcc_arg(object_one, obj1_qual)
+    q1, c1, _, _, _ = _as_gcc_arg(object_one, obj1_qual)
 
     if isinstance(tangency2, Vector):
         pnt_2d = gp_Pnt2d(tangency2.X, tangency2.Y)
@@ -734,7 +735,7 @@ def _make_2tan_lines(
             object_two, obj2_qual = tangency2
         else:
             object_two, obj2_qual = tangency2, Tangency.UNQUALIFIED
-        q2, _, _, _, _ = _as_gcc_arg(object_two, obj2_qual)
+        q2, c2, _, _, _ = _as_gcc_arg(object_two, obj2_qual)
         gcc = Geom2dGcc_Lin2d2Tan(q1, q2, TOLERANCE)
 
     if not gcc.IsDone() or gcc.NbSolutions() == 0:
@@ -742,13 +743,25 @@ def _make_2tan_lines(
 
     out_edges: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
-        # Two tangency points
-        p1, p2 = gp_Pnt2d(), gp_Pnt2d()
-        gcc.Tangency1(i, p1)
-        gcc.Tangency2(i, p2)
-        contacts = [p1, p2]
+        lin2d = Geom2d_Line(gcc.ThisSolution(i))
 
-        out_edges.append(_edge_from_line(*contacts))
+        # Two tangency points - Note Tangency1/Tangency2 can use different
+        # indices for the same line
+        inter_cc = Geom2dAPI_InterCurveCurve(lin2d, c1)
+        pt1 = inter_cc.Point(1)  # There will always be one tangent intersection
+
+        if isinstance(tangency2, Vector):
+            pt2 = gp_Pnt2d(tangency2.X, tangency2.Y)
+        else:
+            inter_cc = Geom2dAPI_InterCurveCurve(lin2d, c2)
+            pt2 = inter_cc.Point(1)
+
+        # Skip degenerate lines
+        separation = pt1.Distance(pt2)
+        if isnan(separation) or separation < TOLERANCE:
+            continue
+
+        out_edges.append(_edge_from_line(pt1, pt2))
     return ShapeList([edge_factory(e) for e in out_edges])
 
 
@@ -769,6 +782,10 @@ def _make_tan_oriented_lines(
         object_one, obj1_qual = tangency
     else:
         object_one, obj1_qual = tangency, Tangency.UNQUALIFIED
+
+    if abs(abs(reference.direction.Z) - 1) < TOLERANCE:
+        raise ValueError("reference Axis can't be perpendicular to Plane.XY")
+
     q_curve, _, _, _, _ = _as_gcc_arg(object_one, obj1_qual)
 
     # reference axis direction (2D angle in radians)
@@ -783,9 +800,8 @@ def _make_tan_oriented_lines(
     # Reference axis as gp_Lin2d
     ref_lin = _gp_lin2d_from_axis(reference)
 
+    # Note that is seems impossible for Geom2dGcc_Lin2dTanObl to provide no solutions
     gcc = Geom2dGcc_Lin2dTanObl(q_curve, ref_lin, TOLERANCE, angle)
-    if not gcc.IsDone() or gcc.NbSolutions() == 0:
-        raise RuntimeError("Unable to find tangent line for given orientation")
 
     out: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
@@ -801,6 +817,11 @@ def _make_tan_oriented_lines(
         if not inter.IsDone() or inter.NbPoints() == 0:
             continue
         p_isect = inter.Point(1).Value()
+
+        # Skip degenerate lines
+        separation = p_tan.Distance(p_isect)
+        if isnan(separation) or separation < TOLERANCE:
+            continue
 
         out.append(_edge_from_line(p_tan, p_isect))
 
