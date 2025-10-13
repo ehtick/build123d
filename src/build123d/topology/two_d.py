@@ -974,9 +974,6 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         def to_geom_curve(shape: VectorLike | Edge):
             if isinstance(shape, (Vector, tuple, Sequence)):
                 _shape = Vector(shape)
-                if _shape.wrapped is None:
-                    raise ValueError("input VectorLike cannot be empty")
-
                 single_point_curve = create_zero_length_bspline_curve(
                     gp_Pnt(_shape.wrapped.XYZ())
                 )
