@@ -31,9 +31,11 @@ import os
 import platform
 import random
 import unittest
+from unittest.mock import PropertyMock, patch
 
-from unittest.mock import patch, PropertyMock
 from OCP.Geom import Geom_RectangularTrimmedSurface
+from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
+
 from build123d.build_common import Locations, PolarLocations
 from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType
 from build123d.build_line import BuildLine
@@ -57,7 +59,6 @@ from build123d.operations_generic import fillet, offset
 from build123d.operations_part import extrude
 from build123d.operations_sketch import make_face
 from build123d.topology import Edge, Face, Shell, Solid, Wire
-from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
 
 
 class TestFace(unittest.TestCase):
@@ -448,7 +449,7 @@ class TestFace(unittest.TestCase):
                 profiles, guides, tolerance=tolerance
             )
 
-    def test_make_gordon_surface_edge_types(self):
+    def test_make_gordon_surface_input_types(self):
         tolerance = 3e-4
 
         def point_at_uv_against_expected(u: float, v: float, expected_point: Vector):
@@ -537,6 +538,52 @@ class TestFace(unittest.TestCase):
         gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
         point_at_uv_against_expected(u=0.0, v=0.5, expected_point=guides[0] @ 0.5)
         point_at_uv_against_expected(u=1.0, v=0.5, expected_point=guides[0] @ 0.5)
+
+        profiles = [
+            points[0],
+            ThreePointArc(
+                points[1], (points[1] + points[3]) / 2 + Vector(0, 0, 2), points[3]
+            ),
+            points[2],
+        ]
+        guides = [
+            Spline(
+                points[0],
+                profiles[1] @ 0,
+                points[2],
+            ),
+            Spline(
+                points[0],
+                profiles[1] @ 1,
+                points[2],
+            ),
+        ]
+        gordon_surface = Face.make_gordon_surface(profiles, guides, tolerance=tolerance)
+        point_at_uv_against_expected(u=0.0, v=1.0, expected_point=guides[0] @ 1)
+        point_at_uv_against_expected(u=1.0, v=1.0, expected_point=guides[1] @ 1)
+        point_at_uv_against_expected(u=1.0, v=0.0, expected_point=points[0])
+
+        profiles = [
+            Line(points[0], points[1]),
+            (points[0] + points[2]) / 2,
+            Line(points[3], points[2]),
+        ]
+        guides = [
+            Spline(
+                profiles[0] @ 0,
+                profiles[1],
+                profiles[2] @ 0,
+            ),
+            Spline(
+                profiles[0] @ 1,
+                profiles[1],
+                profiles[2] @ 1,
+            ),
+        ]
+        with self.assertRaises(ValueError):
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
 
     def test_make_surface(self):
         corners = [Vector(x, y) for x in [-50.5, 50.5] for y in [-24.5, 24.5]]

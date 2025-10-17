@@ -83,11 +83,12 @@ from OCP.BRepTools import BRepTools, BRepTools_ReShape
 from OCP.gce import gce_MakeLin
 from OCP.Geom import (
     Geom_BezierSurface,
+    Geom_BSplineCurve,
     Geom_RectangularTrimmedSurface,
     Geom_Surface,
     Geom_TrimmedCurve,
 )
-from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_G2, GeomAbs_CurveType
+from OCP.GeomAbs import GeomAbs_C0, GeomAbs_CurveType, GeomAbs_G1, GeomAbs_G2
 from OCP.GeomAPI import (
     GeomAPI_ExtremaCurveCurve,
     GeomAPI_PointsToBSplineSurface,
@@ -104,13 +105,17 @@ from OCP.Standard import (
     Standard_NoSuchObject,
 )
 from OCP.StdFail import StdFail_NotDone
-from OCP.TColgp import TColgp_HArray2OfPnt
-from OCP.TColStd import TColStd_HArray2OfReal
+from OCP.TColgp import TColgp_Array1OfPnt, TColgp_HArray2OfPnt
+from OCP.TColStd import (
+    TColStd_Array1OfInteger,
+    TColStd_Array1OfReal,
+    TColStd_HArray2OfReal,
+)
 from OCP.TopExp import TopExp
 from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Shell, TopoDS_Solid
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
-from typing_extensions import Self
 from ocp_gordon import interpolate_curve_network
+from typing_extensions import Self
 
 from build123d.build_enums import (
     CenterOf,
@@ -922,32 +927,65 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
     @classmethod
     def make_gordon_surface(
         cls,
-        profiles: Iterable[Edge],
-        guides: Iterable[Edge],
+        profiles: Iterable[VectorLike | Edge],
+        guides: Iterable[VectorLike | Edge],
         tolerance: float = 3e-4,
     ) -> Face:
         """
-        Creates a Gordon surface from a network of profile and guide curves.
+        Constructs a Gordon surface from a network of profile and guide curves.
+
+        Requirements:
+        1. Profiles and guides may be defined as points or curves.
+        2. Only the first or last profile or guide may be a point.
+        3. At least one profile and one guide must be a non-point curve.
+        4. Each profile must intersect with every guide.
+        5. Both ends of every profile must lie on a guide.
+        6. Both ends of every guide must lie on a profile.
 
         Args:
-            profiles (Iterable[Edge]): Edges representing profile curves.
-            guides (Iterable[Edge]): Edges representing guide curves.
-            tolerance (float, optional): Tolerance for surface creation and
+            profiles (Iterable[VectorLike | Edge]): Profiles defined as points or edges.
+            guides (Iterable[VectorLike | Edge]): Guides defined as points or edges.
+            tolerance (float, optional): Tolerance used for surface construction and
                 intersection calculations.
 
         Raises:
-            ValueError: Input edge cannot be empty
+            ValueError: input Edge cannot be empty.
 
         Returns:
             Face: the interpolated Gordon surface
         """
 
-        def to_geom_curve(edge: Edge):
-            if edge.wrapped is None:
-                raise ValueError("input edge cannot be empty")
+        def create_zero_length_bspline_curve(
+            point: gp_Pnt, degree: int = 1
+        ) -> Geom_BSplineCurve:
+            control_points = TColgp_Array1OfPnt(1, 2)
+            control_points.SetValue(1, point)
+            control_points.SetValue(2, point)
 
-            adaptor = BRepAdaptor_Curve(edge.wrapped)
-            curve = BRep_Tool.Curve_s(edge.wrapped, 0, 1)
+            knots = TColStd_Array1OfReal(1, 2)
+            knots.SetValue(1, 0.0)
+            knots.SetValue(2, 1.0)
+
+            multiplicities = TColStd_Array1OfInteger(1, 2)
+            multiplicities.SetValue(1, degree + 1)
+            multiplicities.SetValue(2, degree + 1)
+
+            curve = Geom_BSplineCurve(control_points, knots, multiplicities, degree)
+            return curve
+
+        def to_geom_curve(shape: VectorLike | Edge):
+            if isinstance(shape, (Vector, tuple, Sequence)):
+                _shape = Vector(shape)
+                single_point_curve = create_zero_length_bspline_curve(
+                    gp_Pnt(_shape.wrapped.XYZ())
+                )
+                return single_point_curve
+
+            if shape.wrapped is None:
+                raise ValueError("input Edge cannot be empty")
+
+            adaptor = BRepAdaptor_Curve(shape.wrapped)
+            curve = BRep_Tool.Curve_s(shape.wrapped, 0, 1)
             if not (
                 (adaptor.IsPeriodic() and adaptor.IsClosed())
                 or adaptor.GetType() == GeomAbs_CurveType.GeomAbs_BSplineCurve
@@ -958,8 +996,8 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 )
             return curve
 
-        ocp_profiles = [to_geom_curve(edge) for edge in profiles]
-        ocp_guides = [to_geom_curve(edge) for edge in guides]
+        ocp_profiles = [to_geom_curve(shape) for shape in profiles]
+        ocp_guides = [to_geom_curve(shape) for shape in guides]
 
         gordon_bspline_surface = interpolate_curve_network(
             ocp_profiles, ocp_guides, tolerance=tolerance
