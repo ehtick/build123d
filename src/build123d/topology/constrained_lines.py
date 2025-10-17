@@ -119,22 +119,16 @@ def _edge_to_qualified_2d(
     """Convert a TopoDS_Edge into 2d curve & extract properties"""
 
     # 1) Underlying curve + range (also retrieve location to be safe)
-    loc = edge.Location()
     hcurve3d = BRep_Tool.Curve_s(edge, float(), float())
     first, last = BRep_Tool.Range_s(edge)
 
-    # 2) Apply location if the edge is positioned by a TopLoc_Location
-    if not loc.IsIdentity():
-        trsf = loc.Transformation()
-        hcurve3d = tcast(Geom_Curve, hcurve3d.Transformed(trsf))
-
-    # 3) Convert to 2D on Plane.XY (Z-up frame at origin)
+    # 2) Convert to 2D on Plane.XY (Z-up frame at origin)
     hcurve2d = GeomAPI.To2d_s(hcurve3d, _pln_xy)  # -> Handle_Geom2d_Curve
 
-    # 4) Wrap in an adaptor using the same parametric range
+    # 3) Wrap in an adaptor using the same parametric range
     adapt2d = Geom2dAdaptor_Curve(hcurve2d, first, last)
 
-    # 5) Create the qualified curve (unqualified is fine here)
+    # 4) Create the qualified curve (unqualified is fine here)
     qcurve = Geom2dGcc_QualifiedCurve(adapt2d, position_constaint.value)
     return qcurve, hcurve2d, first, last, adapt2d
 

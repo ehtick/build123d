@@ -199,3 +199,69 @@ def test_invalid_oriented_tangent(unit_circle):
         unit_circle.translate((0, 1 + 1e-7)), Axis.X, 0, edge_factory=Edge
     )
     assert len(lines) == 0
+
+
+def test_make_constrained_lines0(unit_circle):
+    lines = Edge.make_constrained_lines(unit_circle, unit_circle.translate((3, 0, 0)))
+    assert len(lines) == 4
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+
+
+def test_make_constrained_lines1(unit_circle):
+    lines = Edge.make_constrained_lines(unit_circle, (3, 0))
+    assert len(lines) == 2
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+
+
+def test_make_constrained_lines3(unit_circle):
+    lines = Edge.make_constrained_lines(unit_circle, Axis.X, angle=30)
+    assert len(lines) == 2
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+        assert abs((ln @ 1).Y) < 1e-6
+
+
+def test_make_constrained_lines4(unit_circle):
+    lines = Edge.make_constrained_lines(unit_circle, Axis.Y, angle=30)
+    assert len(lines) == 2
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+        assert abs((ln @ 1).X) < 1e-6
+
+
+def test_make_constrained_lines5(unit_circle):
+    lines = Edge.make_constrained_lines(
+        (unit_circle, Tangency.ENCLOSING), Axis.Y, angle=30
+    )
+    assert len(lines) == 1
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+
+
+def test_make_constrained_lines6(unit_circle):
+    lines = Edge.make_constrained_lines(
+        (unit_circle, Tangency.ENCLOSING), Axis.Y, direction=(1, 1)
+    )
+    assert len(lines) == 1
+    for ln in lines:
+        assert unit_circle.distance_to(ln) < 1e-6
+
+
+def test_make_constrained_lines_raises(unit_circle):
+    with pytest.raises(TypeError) as excinfo:
+        Edge.make_constrained_lines(unit_circle, Axis.Z, ref_angle=1)
+    assert "Unexpected argument(s): ref_angle" in str(excinfo.value)
+
+    with pytest.raises(TypeError) as excinfo:
+        Edge.make_constrained_lines(unit_circle)
+    assert "Provide exactly 2 tangency targets." in str(excinfo.value)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        Edge.make_constrained_lines(Axis.X, Axis.Y)
+    assert "Unable to find common tangent line(s)" in str(excinfo.value)
+
+    with pytest.raises(TypeError) as excinfo:
+        Edge.make_constrained_lines(unit_circle, ("three", 0))
+    assert "Invalid tangency:" in str(excinfo.value)
