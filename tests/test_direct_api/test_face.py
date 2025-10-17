@@ -563,6 +563,28 @@ class TestFace(unittest.TestCase):
         point_at_uv_against_expected(u=1.0, v=1.0, expected_point=guides[1] @ 1)
         point_at_uv_against_expected(u=1.0, v=0.0, expected_point=points[0])
 
+        profiles = [
+            Line(points[0], points[1]),
+            (points[0] + points[2]) / 2,
+            Line(points[3], points[2]),
+        ]
+        guides = [
+            Spline(
+                profiles[0] @ 0,
+                profiles[1],
+                profiles[2] @ 0,
+            ),
+            Spline(
+                profiles[0] @ 1,
+                profiles[1],
+                profiles[2] @ 1,
+            ),
+        ]
+        with self.assertRaises(ValueError):
+            gordon_surface = Face.make_gordon_surface(
+                profiles, guides, tolerance=tolerance
+            )
+
     def test_make_surface(self):
         corners = [Vector(x, y) for x in [-50.5, 50.5] for y in [-24.5, 24.5]]
         net_exterior = Wire(

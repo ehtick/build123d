@@ -934,8 +934,13 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         """
         Constructs a Gordon surface from a network of profile and guide curves.
 
-        Profiles and guides may consist of points or curves, but at least one
-        profile and one guide must be a non-point curve.
+        Requirements:
+        1. Profiles and guides may be defined as points or curves.
+        2. Only the first or last profile or guide may be a point.
+        3. At least one profile and one guide must be a non-point curve.
+        4. Each profile must intersect with every guide.
+        5. Both ends of every profile must lie on a guide.
+        6. Both ends of every guide must lie on a profile.
 
         Args:
             profiles (Iterable[VectorLike | Edge]): Profiles defined as points or edges.
@@ -944,7 +949,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 intersection calculations.
 
         Raises:
-            ValueError: If the input profiles or guides are empty.
+            ValueError: input Edge cannot be empty.
 
         Returns:
             Face: the interpolated Gordon surface
@@ -953,9 +958,6 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         def create_zero_length_bspline_curve(
             point: gp_Pnt, degree: int = 1
         ) -> Geom_BSplineCurve:
-            """
-            Helper to create a simple linear B-spline curve.
-            """
             control_points = TColgp_Array1OfPnt(1, 2)
             control_points.SetValue(1, point)
             control_points.SetValue(2, point)
