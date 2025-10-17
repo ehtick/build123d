@@ -152,6 +152,7 @@ def test_shape_0d(obj, target, expected):
     run_test(obj, target, expected)
 
 
+# 1d Shapes
 ed1 = Line((0, 0), (5, 0)).edge()
 ed2 = Line((0, -1), (5, 1)).edge()
 ed3 = Line((0, 0, 5), (5, 0, 5)).edge()
@@ -217,6 +218,136 @@ shape_1d_matrix = [
 
 @pytest.mark.parametrize("obj, target, expected", make_params(shape_1d_matrix))
 def test_shape_1d(obj, target, expected):
+    run_test(obj, target, expected)
+
+
+# 2d Shapes
+fc1 = Rectangle(5, 5).face()
+fc2 = Pos(Z=5) * Rectangle(5, 5).face()
+fc3 = Rot(Y=90) * Rectangle(5, 5).face()
+fc4 = Rot(Z=45) * Rectangle(5, 5).face()
+fc5 = Pos(2.5, 2.5, 2.5) * Rot(0, 90) * Rectangle(5, 5).face()
+fc6 = Pos(2.5, 2.5) * Rot(0, 90, 45, Extrinsic.XYZ) * Rectangle(5, 5).face()
+fc7 = (Rot(90) * Cylinder(2, 4)).faces().filter_by(GeomType.CYLINDER)[0]
+
+fc11 = Rectangle(4, 4).face()
+fc22 = sweep(Rot(90) * CenterArc((0, 0), 2, 0, 180), Line((0, 2), (0, -2)))
+sh1 = Shell([Pos(-4) * fc11, fc22])
+sh2 = Pos(Z=1) * sh1
+sh3 = Shell([Pos(-4) * fc11, fc22, Pos(2, 0, -2) * Rot(0, 90) * fc11])
+sh4 = Shell([Pos(-4) * fc11, fc22, Pos(4) * fc11])
+sh5 = Pos(Z=1) * Shell([Pos(-2, 0, -2) * Rot(0, -90) * fc11, fc22, Pos(2, 0, -2) * Rot(0, 90) * fc11])
+
+shape_2d_matrix = [
+    Case(fc1, vl2, None, "non-coincident", None),
+    Case(fc1, vl1, [Vertex], "coincident", None),
+
+    Case(fc1, lc2, None, "non-coincident", None),
+    Case(fc1, lc1, [Vertex], "coincident", None),
+
+    Case(fc2, ax1, None, "parallel/skew", None),
+    Case(fc3, ax1, [Vertex], "intersecting", None),
+    Case(fc1, ax1, [Edge], "collinear", None),
+    # Case(fc7, ax1, [Vertex, Vertex], "multi intersect", None),
+
+    Case(fc1, pl3, None, "parallel/skew", None),
+    Case(fc1, pl1, [Edge], "intersecting", None),
+    Case(fc1, pl2, [Face], "collinear", None),
+    Case(fc7, pl1, [Edge, Edge], "multi intersect", None),
+
+    Case(fc1, vt2, None, "non-coincident", None),
+    Case(fc1, vt1, [Vertex], "coincident", None),
+
+    Case(fc1, ed3, None, "parallel/skew", None),
+    Case(Pos(1) * fc3, ed1, [Vertex], "intersecting", None),
+    Case(fc1, ed1, [Edge], "collinear", None),
+    Case(Pos(1.1) * fc3, ed4, [Vertex, Vertex], "multi intersect", None),
+
+    Case(fc1, wi6, None, "parallel/skew", None),
+    Case(Pos(1) * fc3, wi4, [Vertex], "intersecting", None),
+    Case(fc1, wi1, [Edge, Edge], "2 collinear", None),
+    Case(Rot(90) * fc4, wi5, [Vertex, Vertex], "multi intersect", None),
+    Case(Rot(90) * fc4, wi2, [Vertex, Edge], "intersect + collinear", None),
+
+    Case(fc1, fc2, None, "parallel/skew", None),
+    Case(fc1, fc3, [Edge], "intersecting", None),
+    Case(fc1, fc4, [Face], "coplanar", None),
+    Case(fc1, fc5, [Edge], "intersecting edge", None),
+    Case(fc1, fc6, [Vertex], "intersecting vertex", None),
+    Case(fc1, fc7, [Edge, Edge], "multi-intersecting", None),
+    Case(fc7, Pos(Y=2) * fc7, [Face], "cyl intersecting", None),
+
+    Case(sh2, fc1, None, "parallel/skew", None),
+    Case(Pos(Z=1) * sh3, fc1, [Edge], "intersecting", None),
+    Case(sh1, fc1, [Face, Edge], "coplanar + intersecting", None),
+    Case(sh4, fc1, [Face, Face], "2 coplanar", None),
+    Case(sh5, fc1, [Edge, Edge], "2 intersecting", None),
+
+    # Case(sh5, fc1, [Edge], "multi to_intersect, intersecting", None),
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(shape_2d_matrix))
+def test_shape_2d(obj, target, expected):
+    run_test(obj, target, expected)
+
+# 3d Shapes
+sl1 = Box(2, 2, 2).solid()
+sl2 = Pos(Z=5) * Box(2, 2, 2).solid()
+sl3 = Cylinder(2, 1).solid() - Cylinder(1.5, 1).solid()
+
+wi7 = Wire([l1 := sl3.faces().sort_by(Axis.Z)[-1].edge().trim(.3, .4),
+          l2 := l1.trim(2, 3),
+          RadiusArc(l1 @ 1, l2 @ 0, 1, short_sagitta=False)
+          ])
+
+shape_3d_matrix = [
+    Case(sl2, vl1, None, "non-coincident", None),
+    Case(Pos(2) * sl1, vl1, [Vertex], "contained", None),
+    Case(Pos(1, 1, -1) * sl1, vl1, [Vertex], "coincident", None),
+
+    Case(sl2, lc1, None, "non-coincident", None),
+    Case(Pos(2) * sl1, lc1, [Vertex], "contained", None),
+    Case(Pos(1, 1, -1) * sl1, lc1, [Vertex], "coincident", None),
+
+    Case(sl2, ax1, None, "non-coincident", None),
+    Case(sl1, ax1, [Edge], "intersecting", None),
+    Case(Pos(1, 1, 1) * sl1, ax2, [Edge], "coincident", None),
+
+    Case(sl1, pl3, None, "non-coincident", None),
+    Case(sl1, pl2, [Face], "intersecting", None),
+
+    Case(sl2, vt1, None, "non-coincident", None),
+    Case(Pos(2) * sl1, vt1, [Vertex], "contained", None),
+    Case(Pos(1, 1, -1) * sl1, vt1, [Vertex], "coincident", None),
+
+    Case(sl1, ed3, None, "non-coincident", None),
+    Case(sl1, ed1, [Edge], "intersecting", None),
+    Case(sl1, Pos(0, 1, 1) * ed1, [Edge], "edge collinear", "BRepAlgoAPI_Common and _Section both return edge"),
+    Case(sl1, Pos(1, 1, 1) * ed1, [Vertex], "corner coincident", None),
+    Case(Pos(2.1, 1) * sl1, ed4, [Edge, Edge], "multi-intersect", None),
+
+    Case(Pos(2, .5, -1) * sl1, wi6, None, "non-coincident", None),
+    Case(Pos(2, .5, 1) * sl1, wi6, [Edge, Edge], "multi-intersecting", None),
+    Case(sl3, wi7, [Edge, Edge], "multi-coincident, is_equal check", None),
+
+    Case(sl2, fc1, None, "non-coincident", None),
+    Case(sl1, fc1, [Face], "intersecting", None),
+    Case(Pos(3.5, 0, 1) * sl1, fc1, [Edge], "edge collinear", None),
+    Case(Pos(3.5, 3.5) * sl1, fc1, [Vertex], "corner coincident", None),
+    Case(Pos(.9) * sl1, fc7, [Face, Face], "multi-intersecting", None),
+
+    Case(sl2, sh1, None, "non-coincident", None),
+    Case(Pos(-2) * sl1, sh1, [Face, Face], "multi-intersecting", None),
+
+    Case(sl1, sl2, None, "non-coincident", None),
+    Case(sl1, Pos(1, 1, 1) * sl1, [Solid], "intersecting", None),
+    Case(sl1, Pos(2, 2, 1) * sl1, [Edge], "edge collinear", None),
+    Case(sl1, Pos(2, 2, 2) * sl1, [Vertex], "corner coincident", None),
+    Case(sl1, Pos(.45) * sl3, [Solid, Solid], "multi-intersect", None),
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(shape_3d_matrix))
+def test_shape_3d(obj, target, expected):
     run_test(obj, target, expected)
 
 
