@@ -4,19 +4,19 @@ name: tea_cup.py
 by:   Gumyr
 date: March 27th 2023
 
-desc: This example demonstrates the creation a tea cup, which serves as an example of 
+desc: This example demonstrates the creation a tea cup, which serves as an example of
       constructing complex, non-flat geometrical shapes programmatically.
 
       The tea cup model involves several CAD techniques, such as:
-      - Revolve Operations: There is 1 occurrence of a revolve operation. This is used 
-        to create the main body of the tea cup by revolving a profile around an axis, 
+      - Revolve Operations: There is 1 occurrence of a revolve operation. This is used
+        to create the main body of the tea cup by revolving a profile around an axis,
         a common technique for generating symmetrical objects like cups.
       - Sweep Operations: There are 2 occurrences of sweep operations. The handle are
         created by sweeping a profile along a path to generate non-planar surfaces.
       - Offset/Shell Operations: the bowl of the cup is hollowed out with the offset
-        operation leaving the top open. 
-      - Fillet Operations: There is 1 occurrence of a fillet operation which is used to 
-        round the edges for aesthetic improvement and to mimic real-world objects more 
+        operation leaving the top open.
+      - Fillet Operations: There is 1 occurrence of a fillet operation which is used to
+        round the edges for aesthetic improvement and to mimic real-world objects more
         closely.
 
 license:
