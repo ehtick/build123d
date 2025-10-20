@@ -358,6 +358,21 @@ class Mixin1D(Shape):
         """Unused - only here because Mixin1D is a subclass of Shape"""
         return NotImplemented
 
+    # ---- Static Methods ----
+
+    @staticmethod
+    def _to_param(edge_wire: Mixin1D, value: float | VectorLike, name: str) -> float:
+        """Convert a float or VectorLike into a curve parameter."""
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            point = Vector(value)
+        except TypeError as exc:
+            raise TypeError(
+                f"{name} must be a float or VectorLike, not {value!r}"
+            ) from exc
+        return edge_wire.param_at_point(point)
+
     # ---- Instance Methods ----
 
     def __add__(
@@ -2972,24 +2987,43 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         )
         return Wire([self])
 
-    def trim(self, start: float, end: float) -> Edge:
+    def trim(self, start: float | VectorLike, end: float | VectorLike) -> Edge:
+        """_summary_
+
+        Args:
+            start (float | VectorLike): _description_
+            end (float | VectorLike): _description_
+
+        Raises:
+            TypeError: _description_
+            ValueError: _description_
+
+        Returns:
+            Edge: _description_
+        """
         """trim
 
         Create a new edge by keeping only the section between start and end.
 
         Args:
-            start (float): 0.0 <= start < 1.0
-            end (float): 0.0 < end <= 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
+            end (float  | VectorLike): 0.0 < end <= 1.0 or point on edge
 
         Raises:
-            ValueError: start >= end
+            TypeError: invalid input, must be float or VectorLike
             ValueError: can't trim empty edge
 
         Returns:
             Edge: trimmed edge
         """
-        if start >= end:
-            raise ValueError(f"start ({start}) must be less than end ({end})")
+
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
+
+        # if start_u >= end_u:
+        #     raise ValueError(f"start ({start_u}) must be less than end ({end_u})")
 
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
@@ -3000,8 +3034,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_curve = BRep_Tool.Curve_s(
             self_copy.wrapped, self.param_at(0), self.param_at(1)
         )
-        parm_start = self.param_at(start)
-        parm_end = self.param_at(end)
+        parm_start = self.param_at(start_u)
+        parm_end = self.param_at(end_u)
         trimmed_curve = Geom_TrimmedCurve(
             new_curve,
             parm_start,
@@ -3010,14 +3044,14 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
 
-    def trim_to_length(self, start: float, length: float) -> Edge:
+    def trim_to_length(self, start: float | VectorLike, length: float) -> Edge:
         """trim_to_length
 
         Create a new edge starting at the given normalized parameter of a
         given length.
 
         Args:
-            start (float): 0.0 <= start < 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
             length (float): target length
 
         Raise:
@@ -3028,6 +3062,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         """
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
+
+        start_u = Mixin1D._to_param(self, start, "start")
 
         self_copy = copy.deepcopy(self)
         assert self_copy.wrapped is not None
@@ -3040,7 +3076,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         adaptor_curve = GeomAdaptor_Curve(new_curve)
 
         # Find the parameter corresponding to the desired length
-        parm_start = self.param_at(start)
+        parm_start = self.param_at(start_u)
         abscissa_point = GCPnts_AbscissaPoint(adaptor_curve, length, parm_start)
 
         # Get the parameter at the desired length
@@ -3550,7 +3586,6 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return Wire.make_polygon(corners_world, close=True)
 
     # ---- Static Methods ----
-
     @staticmethod
     def order_chamfer_edges(
         reference_edge: Edge | None, edges: tuple[Edge, Edge]
@@ -4066,29 +4101,31 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         )
         return self
 
-    def trim(self: Wire, start: float, end: float) -> Wire:
+    def trim(self: Wire, start: float | VectorLike, end: float | VectorLike) -> Wire:
         """Trim a wire between [start, end] normalized over total length.
 
         Args:
-            start (float): normalized start position (0.0 to <1.0)
-            end (float): normalized end position (>0.0 to 1.0)
+            start (float | VectorLike): normalized start position (0.0 to <1.0) or point
+            end (float | VectorLike): normalized end position (>0.0 to 1.0) or point
 
         Returns:
             Wire: trimmed Wire
         """
-        if start >= end:
-            raise ValueError("start must be less than end")
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
 
         # Extract the edges in order
         ordered_edges = self.edges().sort_by(self)
 
         # If this is really just an edge, skip the complexity of a Wire
         if len(ordered_edges) == 1:
-            return Wire([ordered_edges[0].trim(start, end)])
+            return Wire([ordered_edges[0].trim(start_u, end_u)])
 
         total_length = self.length
-        start_len = start * total_length
-        end_len = end * total_length
+        start_len = start_u * total_length
+        end_len = end_u * total_length
 
         trimmed_edges = []
         cur_length = 0.0
