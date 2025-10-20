@@ -64,9 +64,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Builder, BRep_Tool
-from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepAlgo import BRepAlgo
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Section
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeEdge,
     BRepBuilderAPI_MakeFace,
@@ -266,6 +265,122 @@ class Mixin2D(ABC, Shape):
             result.append((pnt, normal))
 
         return result
+
+    def intersect(
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> None | ShapeList[Vertex | Edge | Face]:
+        """Intersect Face with Shape or geometry object
+
+        Args:
+            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
+
+        Returns:
+            ShapeList[Vertex | Edge | Face] | None: ShapeList of vertices, edges, and/or
+                faces.
+        """
+
+        def to_vector(objs: Iterable) -> ShapeList:
+            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+
+        def to_vertex(objs: Iterable) -> ShapeList:
+            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+
+        def bool_op(
+            args: Sequence,
+            tools: Sequence,
+            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
+        ) -> ShapeList | None:
+            # Wrap Shape._bool_op for corrected output
+            intersections = args[0]._bool_op(args, tools, operation)
+            if isinstance(intersections, ShapeList):
+                return intersections or None
+            if isinstance(intersections, Shape) and not intersections.is_null:
+                return ShapeList([intersections])
+            return None
+
+        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
+            # Remove lower order shapes from list which *appear* to be part of
+            # a higher order shape using a lazy distance check
+            # (sufficient for vertices, may be an issue for higher orders)
+            order_groups = []
+            for order in orders:
+                order_groups.append(
+                    ShapeList([s for s in shapes if isinstance(s, order)])
+                )
+
+            filtered_shapes = order_groups[-1]
+            for i in range(len(order_groups) - 1):
+                los = order_groups[i]
+                his: list = sum(order_groups[i + 1 :], [])
+                filtered_shapes.extend(
+                    ShapeList(
+                        lo
+                        for lo in los
+                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
+                    )
+                )
+
+            return filtered_shapes
+
+        common_set: ShapeList[Vertex | Edge | Face] = ShapeList(self.faces())
+        target: ShapeList | Shape
+        for other in to_intersect:
+            # Conform target type
+            # Vertices need to be Vector for set()
+            match other:
+                case Axis():
+                    target = Edge(other)
+                case Plane():
+                    target = Face.make_plane(other)
+                case Vector():
+                    target = Vertex(other)
+                case Location():
+                    target = Vertex(other.position)
+                case _ if issubclass(type(other), Shape):
+                    target = other
+                case _:
+                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
+
+            # Find common matches
+            common: list[Vector | Edge | Face] = []
+            result: ShapeList | Shape | None
+            for obj in common_set:
+                match (obj, target):
+                    case (Vertex(), Vertex()):
+                        result = obj.intersect(target)
+
+                    case (Edge(), Edge() | Wire()):
+                        result = obj.intersect(target)
+
+                    case _ if issubclass(type(target), Shape):
+                        if isinstance(target, Wire):
+                            targets = target.edges()
+                        elif isinstance(target, Shell):
+                            targets = target.faces()
+                        else:
+                            targets = ShapeList([target])
+
+                        result = ShapeList()
+                        for t in targets:
+                            if not isinstance(obj, Edge) and not isinstance(t, (Edge)):
+                                # Face + Edge combinations may produce an intersection
+                                # with Common but always with Section.
+                                # No easy way to deduplicate
+                                operation = BRepAlgoAPI_Common()
+                                result.extend(bool_op((obj,), (t,), operation) or [])
+                            operation = BRepAlgoAPI_Section()
+                            result.extend(bool_op((obj,), (t,), operation) or [])
+
+                if result:
+                    common.extend(to_vector(result))
+
+            if common:
+                common_set = to_vertex(set(common))
+                common_set = filter_shapes_by_order(common_set, [Vertex, Edge, Face])
+            else:
+                return None
+
+        return ShapeList(common_set)
 
     @abstractmethod
     def location_at(self, *args: Any, **kwargs: Any) -> Location:
