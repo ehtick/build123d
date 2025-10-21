@@ -155,8 +155,10 @@ class TestWire(unittest.TestCase):
         t4 = o.trim(0.5, 0.75)
         self.assertAlmostEqual(t4.length, o.length * 0.25, 5)
 
-        with self.assertRaises(ValueError):
-            o.trim(0.75, 0.25)
+        w0 = Polyline((0, 0), (0, 1), (1, 1), (1, 0))
+        w2 = w0.trim(0, (0.5, 1))
+        self.assertAlmostEqual(w2 @ 1, (0.5, 1), 5)
+
         spline = Spline(
             (0, 0, 0),
             (0, 10, 0),

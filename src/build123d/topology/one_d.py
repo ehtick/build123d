@@ -52,18 +52,15 @@ license:
 from __future__ import annotations
 
 import copy
-import itertools
 import numpy as np
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
-from math import radians, inf, pi, cos, copysign, ceil, floor, isclose
+from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
+from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 from typing import cast as tcast
-from typing import Literal, overload, TYPE_CHECKING
-from typing_extensions import Self
-from scipy.optimize import minimize_scalar
-from scipy.spatial import ConvexHull
 
+import numpy as np
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve, BRepAdaptor_Curve
@@ -76,6 +73,7 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_DisconnectedWire,
     BRepBuilderAPI_EmptyWire,
     BRepBuilderAPI_MakeEdge,
+    BRepBuilderAPI_MakeEdge2d,
     BRepBuilderAPI_MakeFace,
     BRepBuilderAPI_MakePolygon,
     BRepBuilderAPI_MakeWire,
@@ -92,29 +90,45 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
+from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
 from OCP.GCPnts import GCPnts_AbscissaPoint
-from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
     Geom_ConicalSurface,
     Geom_CylindricalSurface,
+    Geom_Line,
     Geom_Plane,
     Geom_Surface,
     Geom_TrimmedCurve,
-    Geom_Line,
 )
-from OCP.Geom2d import Geom2d_Curve, Geom2d_Line, Geom2d_TrimmedCurve
+from OCP.Geom2d import (
+    Geom2d_CartesianPoint,
+    Geom2d_Circle,
+    Geom2d_Curve,
+    Geom2d_Line,
+    Geom2d_Point,
+    Geom2d_TrimmedCurve,
+)
+from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
 from OCP.Geom2dAPI import Geom2dAPI_InterCurveCurve
-from OCP.GeomAbs import GeomAbs_C0, GeomAbs_G1, GeomAbs_C1, GeomAbs_G2, GeomAbs_C2
+from OCP.Geom2dGcc import Geom2dGcc_Circ2d2TanRad, Geom2dGcc_QualifiedCurve
+from OCP.GeomAbs import (
+    GeomAbs_C0,
+    GeomAbs_C1,
+    GeomAbs_C2,
+    GeomAbs_G1,
+    GeomAbs_G2,
+    GeomAbs_JoinType,
+)
+from OCP.GeomAdaptor import GeomAdaptor_Curve
 from OCP.GeomAPI import (
+    GeomAPI,
     GeomAPI_IntCS,
     GeomAPI_Interpolate,
     GeomAPI_PointsToBSpline,
     GeomAPI_ProjectPointOnCurve,
 )
-from OCP.GeomAbs import GeomAbs_JoinType
-from OCP.GeomAdaptor import GeomAdaptor_Curve
 from OCP.GeomConvert import GeomConvert_CompCurveToBSplineCurve
 from OCP.GeomFill import (
     GeomFill_CorrectedFrenet,
@@ -122,30 +136,40 @@ from OCP.GeomFill import (
     GeomFill_TrihedronLaw,
 )
 from OCP.GeomProjLib import GeomProjLib
+from OCP.gp import (
+    gp_Ax1,
+    gp_Ax2,
+    gp_Ax3,
+    gp_Circ,
+    gp_Circ2d,
+    gp_Dir,
+    gp_Dir2d,
+    gp_Elips,
+    gp_Pln,
+    gp_Pnt,
+    gp_Pnt2d,
+    gp_Trsf,
+    gp_Vec,
+)
+from OCP.GProp import GProp_GProps
 from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCP.ShapeFix import ShapeFix_Shape, ShapeFix_Wireframe
 from OCP.Standard import (
+    Standard_ConstructionError,
     Standard_Failure,
     Standard_NoSuchObject,
-    Standard_ConstructionError,
 )
+from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TColStd import (
     TColStd_Array1OfReal,
     TColStd_HArray1OfBoolean,
     TColStd_HArray1OfReal,
 )
-from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TopAbs import TopAbs_Orientation, TopAbs_ShapeEnum
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopTools import (
-    TopTools_HSequenceOfShape,
-    TopTools_IndexedDataMapOfShapeListOfShape,
-    TopTools_IndexedMapOfShape,
-    TopTools_ListOfShape,
-)
 from OCP.TopoDS import (
     TopoDS,
     TopoDS_Compound,
@@ -156,34 +180,33 @@ from OCP.TopoDS import (
     TopoDS_Vertex,
     TopoDS_Wire,
 )
-from OCP.gp import (
-    gp_Ax1,
-    gp_Ax2,
-    gp_Ax3,
-    gp_Circ,
-    gp_Dir,
-    gp_Dir2d,
-    gp_Elips,
-    gp_Pnt,
-    gp_Pnt2d,
-    gp_Trsf,
-    gp_Vec,
+from OCP.TopTools import (
+    TopTools_HSequenceOfShape,
+    TopTools_IndexedDataMapOfShapeListOfShape,
+    TopTools_IndexedMapOfShape,
+    TopTools_ListOfShape,
 )
+from scipy.optimize import minimize_scalar
+from scipy.spatial import ConvexHull
+from typing_extensions import Self
+
 from build123d.build_enums import (
     AngularDirection,
-    ContinuityLevel,
     CenterOf,
+    ContinuityLevel,
     FrameMethod,
     GeomType,
     Keep,
     Kind,
+    Sagitta,
+    Tangency,
     PositionMode,
     Side,
 )
 from build123d.geometry import (
     DEG2RAD,
-    TOLERANCE,
     TOL_DIGITS,
+    TOLERANCE,
     Axis,
     Color,
     Location,
@@ -206,17 +229,25 @@ from .shape_core import (
 )
 from .utils import (
     _extrude_topods_shape,
-    isclose_b,
     _make_topods_face_from_wires,
     _topods_bool_op,
+    isclose_b,
 )
-from .zero_d import topo_explore_common_vertex, Vertex
-
+from .zero_d import Vertex, topo_explore_common_vertex
+from .constrained_lines import (
+    _make_2tan_rad_arcs,
+    _make_2tan_on_arcs,
+    _make_3tan_arcs,
+    _make_tan_cen_arcs,
+    _make_tan_on_rad_arcs,
+    _make_tan_oriented_lines,
+    _make_2tan_lines,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .two_d import Face, Shell  # pylint: disable=R0801
+    from .composite import Compound, Curve, Part, Sketch  # pylint: disable=R0801
     from .three_d import Solid  # pylint: disable=R0801
-    from .composite import Compound, Curve, Sketch, Part  # pylint: disable=R0801
+    from .two_d import Face, Shell  # pylint: disable=R0801
 
 
 class Mixin1D(Shape):
@@ -326,6 +357,21 @@ class Mixin1D(Shape):
     ) -> Edge | Face | Shell | Solid | Compound:
         """Unused - only here because Mixin1D is a subclass of Shape"""
         return NotImplemented
+
+    # ---- Static Methods ----
+
+    @staticmethod
+    def _to_param(edge_wire: Mixin1D, value: float | VectorLike, name: str) -> float:
+        """Convert a float or VectorLike into a curve parameter."""
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            point = Vector(value)
+        except TypeError as exc:
+            raise TypeError(
+                f"{name} must be a float or VectorLike, not {value!r}"
+            ) from exc
+        return edge_wire.param_at_point(point)
 
     # ---- Instance Methods ----
 
@@ -664,6 +710,145 @@ class Mixin1D(Shape):
         umax = curve.LastParameter() if self.is_forward else curve.FirstParameter()
 
         return Vector(curve.Value(umax))
+
+    def intersect(
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> None | ShapeList[Vertex | Edge]:
+        """Intersect Edge with Shape or geometry object
+
+        Args:
+            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
+
+        Returns:
+            ShapeList[Vertex | Edge] | None: ShapeList of vertices and/or edges
+        """
+
+        def to_vector(objs: Iterable) -> ShapeList:
+            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+
+        def to_vertex(objs: Iterable) -> ShapeList:
+            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+
+        common_set: ShapeList[Vertex | Edge] = ShapeList(self.edges())
+        target: ShapeList | Shape | Plane
+        for other in to_intersect:
+            # Conform target type
+            # Vertices need to be Vector for set()
+            match other:
+                case Axis():
+                    target = ShapeList([Edge(other)])
+                case Plane():
+                    target = other
+                case Vector():
+                    target = Vertex(other)
+                case Location():
+                    target = Vertex(other.position)
+                case Edge():
+                    target = ShapeList([other])
+                case Wire():
+                    target = ShapeList(other.edges())
+                case _ if issubclass(type(other), Shape):
+                    target = other
+                case _:
+                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
+
+            # Find common matches
+            common: list[Vector | Edge] = []
+            result: ShapeList | Shape | None
+            for obj in common_set:
+                match (obj, target):
+                    case obj, Shape() as target:
+                        # Find Shape with Edge/Wire
+                        if isinstance(target, Vertex):
+                            result = Shape.intersect(obj, target)
+                        else:
+                            result = target.intersect(obj)
+
+                        if result:
+                            if not isinstance(result, list):
+                                result = ShapeList([result])
+                            common.extend(to_vector(result))
+
+                    case Vertex() as obj, target:
+                        if not isinstance(target, ShapeList):
+                            target = ShapeList([target])
+
+                        for tar in target:
+                            if isinstance(tar, Edge):
+                                result = Shape.intersect(obj, tar)
+                            else:
+                                result = obj.intersect(tar)
+
+                            if result:
+                                if not isinstance(result, list):
+                                    result = ShapeList([result])
+                                common.extend(to_vector(result))
+
+                    case Edge() as obj, ShapeList() as targets:
+                        # Find any edge / edge intersection points
+                        for tar in targets:
+                            # Find crossing points
+                            try:
+                                intersection_points = obj.find_intersection_points(tar)
+                                common.extend(intersection_points)
+                            except ValueError:
+                                pass
+
+                            # Find common end points
+                            obj_end_points = set(Vector(v) for v in obj.vertices())
+                            tar_end_points = set(Vector(v) for v in tar.vertices())
+                            points = set.intersection(obj_end_points, tar_end_points)
+                            common.extend(points)
+
+                        # Find Edge/Edge overlaps
+                        result = obj._bool_op(
+                            (obj,), targets, BRepAlgoAPI_Common()
+                        ).edges()
+                        common.extend(result if isinstance(result, list) else [result])
+
+                    case Edge() as obj, Plane() as plane:
+                        # Find any edge / plane intersection points & edges
+                        # Find point intersections
+                        if obj.wrapped is None:
+                            continue
+                        geom_line = BRep_Tool.Curve_s(
+                            obj.wrapped, obj.param_at(0), obj.param_at(1)
+                        )
+                        geom_plane = Geom_Plane(plane.local_coord_system)
+                        intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
+                        plane_intersection_points: list[Vector] = []
+                        if intersection_calculator.IsDone():
+                            plane_intersection_points = [
+                                Vector(intersection_calculator.Point(i + 1))
+                                for i in range(intersection_calculator.NbPoints())
+                            ]
+                        common.extend(plane_intersection_points)
+
+                        # Find edge intersections
+                        if all(
+                            plane.contains(v)
+                            for v in obj.positions(i / 7 for i in range(8))
+                        ):  # is a 2D edge
+                            common.append(obj)
+
+            if common:
+                common_set = to_vertex(set(common))
+                # Remove Vertex intersections coincident to Edge intersections
+                vts = common_set.vertices()
+                eds = common_set.edges()
+                if vts and eds:
+                    filtered_vts = ShapeList(
+                        [
+                            v
+                            for v in vts
+                            if all(v.distance_to(e) > TOLERANCE for e in eds)
+                        ]
+                    )
+                    common_set = filtered_vts + eds
+            else:
+                return None
+
+        return ShapeList(common_set)
 
     def location_at(
         self,
@@ -1555,6 +1740,397 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             return_value = cls(BRepBuilderAPI_MakeEdge(circle_geom).Edge())
         return return_value
 
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs of a given radius that are tangent/contacting
+        the two provided objects on the XY plane.
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center_on: Axis | Edge,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar circular arcs whose circle is tangent to two objects and whose
+        CENTER lies on a given locus (line/circle/curve) on the XY plane.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axus | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            center_on (Axis | Edge): center must lie on this object
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_three: (
+            tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
+        ),
+        *,
+        sagitta: Sagitta = Sagitta.SHORT,
+    ) -> ShapeList[Edge]:
+        """
+        Create planar circular arc(s) on XY tangent to three provided objects.
+
+        Args:
+            tangency_one, tangency_two, tangency_three
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center: VectorLike,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY whose center is fixed and that are tangent/contacting
+        a single object.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            center (VectorLike): center position
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        center_on: Edge,
+    ) -> ShapeList[Edge]:
+        """make_constrained_arcs
+
+        Create planar circle(s) on XY that:
+        - are tangent/contacting a single object, and
+        - have a fixed radius, and
+        - have their CENTER constrained to lie on a given locus curve.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            center_on (Axis | Edge): center must lie on this object
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+
+        Returns:
+            ShapeList[Edge]: tangent arcs
+        """
+
+    @classmethod
+    def make_constrained_arcs(
+        cls,
+        *args,
+        sagitta: Sagitta = Sagitta.SHORT,
+        **kwargs,
+    ) -> ShapeList[Edge]:
+
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+        tangency_three = args[2] if len(args) > 2 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+        tangency_three = kwargs.pop("tangency_three", tangency_three)
+
+        radius = kwargs.pop("radius", None)
+        center = kwargs.pop("center", None)
+        center_on = kwargs.pop("center_on", None)
+
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        tangency_args = [
+            t for t in (tangency_one, tangency_two, tangency_three) if t is not None
+        ]
+        tangencies: list[tuple[Edge, Tangency] | Edge | Vector] = []
+        for tangency_arg in tangency_args:
+            if isinstance(tangency_arg, Axis):
+                tangencies.append(Edge(tangency_arg))
+                continue
+            elif isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple):
+                if isinstance(tangency_arg[0], Axis):
+                    tangencies.append(tuple(Edge(tangency_arg[0], tangency_arg[1])))
+                    continue
+                elif isinstance(tangency_arg[0], Edge):
+                    tangencies.append(tangency_arg)
+                    continue
+            if isinstance(tangency_arg, Vertex):
+                tangencies.append(Vector(tangency_arg) + tangency_arg.position)
+                continue
+
+            # if not Axes, Edges, constrained Edges or Vertex convert to Vectors
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
+
+        # # Sort the tangency inputs so points are always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, Vector))
+
+        tan_count = len(tangencies)
+        if not (1 <= tan_count <= 3):
+            raise TypeError("Provide 1 to 3 tangency targets.")
+
+        # Radius sanity
+        if radius is not None and radius <= 0:
+            raise ValueError("radius must be > 0.0")
+
+        if center_on is not None and isinstance(center_on, Axis):
+            center_on = Edge(center_on)
+
+        # --- decide problem kind ---
+        if (
+            tan_count == 2
+            and radius is not None
+            and center is None
+            and center_on is None
+        ):
+            return _make_2tan_rad_arcs(
+                *tangencies,
+                radius=radius,
+                sagitta=sagitta,
+                edge_factory=cls,
+            )
+        if (
+            tan_count == 2
+            and center_on is not None
+            and radius is None
+            and center is None
+        ):
+            return _make_2tan_on_arcs(
+                *tangencies,
+                center_on=center_on,
+                sagitta=sagitta,
+                edge_factory=cls,
+            )
+        if tan_count == 3 and radius is None and center is None and center_on is None:
+            return _make_3tan_arcs(*tangencies, sagitta=sagitta, edge_factory=cls)
+        if (
+            tan_count == 1
+            and center is not None
+            and radius is None
+            and center_on is None
+        ):
+            return _make_tan_cen_arcs(*tangencies, center=center, edge_factory=cls)
+        if tan_count == 1 and center_on is not None and radius is not None:
+            return _make_tan_on_rad_arcs(
+                *tangencies, center_on=center_on, radius=radius, edge_factory=cls
+            )
+
+        raise ValueError("Unsupported or ambiguous combination of constraints.")
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Axis | Edge,
+        tangency_two: tuple[Edge, Tangency] | Axis | Edge,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to two provided curves.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Edge, Tangency] | Axis | Edge):
+                Geometric entities to be contacted/touched by the line(s).
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: Vector,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one
+                (tuple[Edge, Tangency] | Edge):
+                Geometric entity to be contacted/touched by the line(s).
+            tangency_two (Vector):
+                Fixed point through which the line(s) must pass.
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: Axis,
+        *,
+        angle: float | None = None,
+        direction: VectorLike | None = None,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one (Edge): edge that line will be tangent to
+            tangency_two (Axis): axis that angle will be measured against
+            angle : float, optional
+                Line orientation in degrees (measured CCW from the X-axis).
+            direction : VectorLike, optional
+                Direction vector for the line (only X and Y components are used).
+            Note: one of angle or direction must be provided
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @classmethod
+    def make_constrained_lines(cls, *args, **kwargs) -> ShapeList[Edge]:
+        """
+        Create planar line(s) on XY subject to tangency/contact constraints.
+
+        Supported cases
+        ---------------
+        1. Tangent to two curves
+        2. Tangent to one curve and passing through a given point
+        """
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+
+        angle = kwargs.pop("angle", None)
+        direction = kwargs.pop("direction", None)
+        direction = Vector(direction) if direction is not None else None
+
+        is_ref = angle is not None or direction is not None
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        tangency_args = [t for t in (tangency_one, tangency_two) if t is not None]
+        if len(tangency_args) != 2:
+            raise TypeError("Provide exactly 2 tangency targets.")
+
+        tangencies: list[tuple[Edge, Tangency] | Axis | Edge | Vector] = []
+        for i, tangency_arg in enumerate(tangency_args):
+            if isinstance(tangency_arg, Axis):
+                if i == 1 and is_ref:
+                    tangencies.append(tangency_arg)
+                else:
+                    tangencies.append(Edge(tangency_arg))
+                continue
+            elif isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
+                tangencies.append(tangency_arg)
+                continue
+            # Fallback: treat as a point
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
+
+        # Sort so Vector (point) | Axis is always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, (Axis, Vector)))
+
+        # --- decide problem kind ---
+        if angle is not None or direction is not None:
+            if isinstance(tangencies[0], tuple):
+                assert isinstance(
+                    tangencies[0][0], Edge
+                ), "Internal error - 1st tangency must be Edge"
+            else:
+                assert isinstance(
+                    tangencies[0], Edge
+                ), "Internal error - 1st tangency must be Edge"
+            if angle is not None:
+                ang_rad = radians(angle)
+            else:
+                assert direction is not None
+                ang_rad = atan2(direction.Y, direction.X)
+            assert isinstance(
+                tangencies[1], Axis
+            ), "Internal error - 2nd tangency must be an Axis"
+            return _make_tan_oriented_lines(
+                tangencies[0], tangencies[1], ang_rad, edge_factory=cls
+            )
+        else:
+            assert not isinstance(
+                tangencies[0], (Axis, Vector)
+            ), "Internal error - 1st tangency can't be an Axis | Vector"
+            assert not isinstance(
+                tangencies[1], Axis
+            ), "Internal error - 2nd tangency can't be an Axis"
+
+            return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
+
     @classmethod
     def make_ellipse(
         cls,
@@ -2151,90 +2727,6 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
             raise ValueError("Can't find adaptor for empty edge")
         return BRepAdaptor_Curve(self.wrapped)
 
-    def intersect(
-        self, *to_intersect: Edge | Axis | Plane
-    ) -> None | Vertex | Edge | ShapeList[Vertex | Edge]:
-        """intersect Edge with Edge or Axis
-
-        Args:
-            other (Edge |  Axis): other object
-
-        Returns:
-            Shape |  None: Compound of vertices and/or edges
-        """
-        edges: list[Edge] = []
-        planes: list[Plane] = []
-        edges_common_to_planes: list[Edge] = []
-
-        for obj in to_intersect:
-            match obj:
-                case Axis():
-                    edges.append(Edge(obj))
-                case Edge():
-                    edges.append(obj)
-                case Plane():
-                    planes.append(obj)
-                case _:
-                    raise ValueError(f"Unknown object type: {type(obj)}")
-
-        # Find any edge / edge intersection points
-        points_sets: list[set[Vector]] = []
-        # Find crossing points
-        for edge_pair in combinations([self] + edges, 2):
-            intersection_points = edge_pair[0].find_intersection_points(edge_pair[1])
-            points_sets.append(set(intersection_points))
-
-        # Find common end points
-        self_end_points = set(Vector(v) for v in self.vertices())
-        edge_end_points = set(Vector(v) for edge in edges for v in edge.vertices())
-        common_end_points = set.intersection(self_end_points, edge_end_points)
-
-        # Find any edge / plane intersection points & edges
-        for edge, plane in itertools.product([self] + edges, planes):
-            if edge.wrapped is None:
-                continue
-            # Find point intersections
-            geom_line = BRep_Tool.Curve_s(
-                edge.wrapped, edge.param_at(0), edge.param_at(1)
-            )
-            geom_plane = Geom_Plane(plane.local_coord_system)
-            intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
-            plane_intersection_points: list[Vector] = []
-            if intersection_calculator.IsDone():
-                plane_intersection_points = [
-                    Vector(intersection_calculator.Point(i + 1))
-                    for i in range(intersection_calculator.NbPoints())
-                ]
-            points_sets.append(set(plane_intersection_points))
-
-            # Find edge intersections
-            if all(
-                plane.contains(v) for v in edge.positions(i / 7 for i in range(8))
-            ):  # is a 2D edge
-                edges_common_to_planes.append(edge)
-
-        edges.extend(edges_common_to_planes)
-
-        # Find the intersection of all sets
-        common_points = set.intersection(*points_sets)
-        common_vertices = [
-            Vertex(pnt) for pnt in common_points.union(common_end_points)
-        ]
-
-        # Find Edge/Edge overlaps
-        common_edges: list[Edge] = []
-        if edges:
-            common_edges = self._bool_op((self,), edges, BRepAlgoAPI_Common()).edges()
-
-        if common_vertices or common_edges:
-            # If there is just one vertex or edge return it
-            if len(common_vertices) == 1 and len(common_edges) == 0:
-                return common_vertices[0]
-            if len(common_vertices) == 0 and len(common_edges) == 1:
-                return common_edges[0]
-            return ShapeList(common_vertices + common_edges)
-        return None
-
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_Curve, float, bool]:
@@ -2495,24 +2987,43 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         )
         return Wire([self])
 
-    def trim(self, start: float, end: float) -> Edge:
+    def trim(self, start: float | VectorLike, end: float | VectorLike) -> Edge:
+        """_summary_
+
+        Args:
+            start (float | VectorLike): _description_
+            end (float | VectorLike): _description_
+
+        Raises:
+            TypeError: _description_
+            ValueError: _description_
+
+        Returns:
+            Edge: _description_
+        """
         """trim
 
         Create a new edge by keeping only the section between start and end.
 
         Args:
-            start (float): 0.0 <= start < 1.0
-            end (float): 0.0 < end <= 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
+            end (float  | VectorLike): 0.0 < end <= 1.0 or point on edge
 
         Raises:
-            ValueError: start >= end
+            TypeError: invalid input, must be float or VectorLike
             ValueError: can't trim empty edge
 
         Returns:
             Edge: trimmed edge
         """
-        if start >= end:
-            raise ValueError(f"start ({start}) must be less than end ({end})")
+
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
+
+        # if start_u >= end_u:
+        #     raise ValueError(f"start ({start_u}) must be less than end ({end_u})")
 
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
@@ -2523,8 +3034,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_curve = BRep_Tool.Curve_s(
             self_copy.wrapped, self.param_at(0), self.param_at(1)
         )
-        parm_start = self.param_at(start)
-        parm_end = self.param_at(end)
+        parm_start = self.param_at(start_u)
+        parm_end = self.param_at(end_u)
         trimmed_curve = Geom_TrimmedCurve(
             new_curve,
             parm_start,
@@ -2533,14 +3044,14 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
 
-    def trim_to_length(self, start: float, length: float) -> Edge:
+    def trim_to_length(self, start: float | VectorLike, length: float) -> Edge:
         """trim_to_length
 
         Create a new edge starting at the given normalized parameter of a
         given length.
 
         Args:
-            start (float): 0.0 <= start < 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
             length (float): target length
 
         Raise:
@@ -2551,6 +3062,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         """
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
+
+        start_u = Mixin1D._to_param(self, start, "start")
 
         self_copy = copy.deepcopy(self)
         assert self_copy.wrapped is not None
@@ -2563,7 +3076,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         adaptor_curve = GeomAdaptor_Curve(new_curve)
 
         # Find the parameter corresponding to the desired length
-        parm_start = self.param_at(start)
+        parm_start = self.param_at(start_u)
         abscissa_point = GCPnts_AbscissaPoint(adaptor_curve, length, parm_start)
 
         # Get the parameter at the desired length
@@ -3073,7 +3586,6 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return Wire.make_polygon(corners_world, close=True)
 
     # ---- Static Methods ----
-
     @staticmethod
     def order_chamfer_edges(
         reference_edge: Edge | None, edges: tuple[Edge, Edge]
@@ -3589,29 +4101,31 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         )
         return self
 
-    def trim(self: Wire, start: float, end: float) -> Wire:
+    def trim(self: Wire, start: float | VectorLike, end: float | VectorLike) -> Wire:
         """Trim a wire between [start, end] normalized over total length.
 
         Args:
-            start (float): normalized start position (0.0 to <1.0)
-            end (float): normalized end position (>0.0 to 1.0)
+            start (float | VectorLike): normalized start position (0.0 to <1.0) or point
+            end (float | VectorLike): normalized end position (>0.0 to 1.0) or point
 
         Returns:
             Wire: trimmed Wire
         """
-        if start >= end:
-            raise ValueError("start must be less than end")
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
 
         # Extract the edges in order
         ordered_edges = self.edges().sort_by(self)
 
         # If this is really just an edge, skip the complexity of a Wire
         if len(ordered_edges) == 1:
-            return Wire([ordered_edges[0].trim(start, end)])
+            return Wire([ordered_edges[0].trim(start_u, end_u)])
 
         total_length = self.length
-        start_len = start * total_length
-        end_len = end * total_length
+        start_len = start_u * total_length
+        end_len = end_u * total_length
 
         trimmed_edges = []
         cur_length = 0.0
