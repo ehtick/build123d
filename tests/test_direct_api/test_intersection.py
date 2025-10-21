@@ -248,7 +248,6 @@ shape_2d_matrix = [
     Case(fc2, ax1, None, "parallel/skew", None),
     Case(fc3, ax1, [Vertex], "intersecting", None),
     Case(fc1, ax1, [Edge], "collinear", None),
-    # Case(fc7, ax1, [Vertex, Vertex], "multi intersect", None),
 
     Case(fc1, pl3, None, "parallel/skew", None),
     Case(fc1, pl1, [Edge], "intersecting", None),
@@ -283,7 +282,9 @@ shape_2d_matrix = [
     Case(sh4, fc1, [Face, Face], "2 coplanar", None),
     Case(sh5, fc1, [Edge, Edge], "2 intersecting", None),
 
-    # Case(sh5, fc1, [Edge], "multi to_intersect, intersecting", None),
+    Case(fc1, [fc4, Pos(2, 2) * fc1], [Face], "multi to_intersect, intersecting", None),
+    Case(fc1, [ed1, Pos(2.5, 2.5) * fc1], [Edge], "multi to_intersect, intersecting", None),
+    Case(fc7, [wi5, fc1], [Vertex], "multi to_intersect, intersecting", None),
 ]
 
 @pytest.mark.parametrize("obj, target, expected", make_params(shape_2d_matrix))
@@ -344,6 +345,9 @@ shape_3d_matrix = [
     Case(sl1, Pos(2, 2, 1) * sl1, [Edge], "edge collinear", None),
     Case(sl1, Pos(2, 2, 2) * sl1, [Vertex], "corner coincident", None),
     Case(sl1, Pos(.45) * sl3, [Solid, Solid], "multi-intersect", None),
+
+    Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid], "multi to_intersect, intersecting", None),
+    Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(Z=.5) * fc1], [Face], "multi to_intersect, intersecting", None),
 ]
 
 @pytest.mark.parametrize("obj, target, expected", make_params(shape_3d_matrix))
@@ -410,6 +414,8 @@ def test_issues(obj, target, expected):
 exception_matrix = [
     Case(vt1, Color(), None, "Unsupported type", None),
     Case(ed1, Color(), None, "Unsupported type", None),
+    Case(fc1, Color(), None, "Unsupported type", None),
+    Case(sl1, Color(), None, "Unsupported type", None),
 ]
 
 @pytest.mark.skip
