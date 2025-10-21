@@ -107,7 +107,7 @@ from build123d.geometry import (
 from typing_extensions import Self
 
 from .one_d import Edge, Wire, Mixin1D
-from .shape_core import Shape, ShapeList, Joint, downcast, shapetype
+from .shape_core import TOPODS, Shape, ShapeList, Joint, downcast, shapetype
 from .two_d import sort_wires_by_build_order, Mixin2D, Face, Shell
 from .utils import (
     _extrude_topods_shape,
@@ -122,7 +122,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .composite import Compound, Curve, Sketch, Part  # pylint: disable=R0801
 
 
-class Mixin3D(Shape):
+class Mixin3D(Shape[TOPODS]):
     """Additional methods to add to 3D Shape classes"""
 
     project_to_viewport = Mixin1D.project_to_viewport
@@ -590,7 +590,7 @@ class Mixin3D(Shape):
         return Shape.get_shape_list(self, "Solid")
 
 
-class Solid(Mixin3D, Shape[TopoDS_Solid]):
+class Solid(Mixin3D[TopoDS_Solid]):
     """A Solid in build123d represents a three-dimensional solid geometry
     in a topological structure. A solid is a closed and bounded volume, enclosing
     a region in 3D space. It comprises faces, edges, and vertices connected in a

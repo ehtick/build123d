@@ -139,6 +139,7 @@ from build123d.geometry import (
 
 from .one_d import Edge, Mixin1D, Wire
 from .shape_core import (
+    TOPODS,
     Shape,
     ShapeList,
     SkipClean,
@@ -165,7 +166,7 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T", Edge, Wire, "Face")
 
 
-class Mixin2D(ABC, Shape):
+class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
     project_to_viewport = Mixin1D.project_to_viewport
@@ -434,7 +435,7 @@ class Mixin2D(ABC, Shape):
         return projected_edge
 
 
-class Face(Mixin2D, Shape[TopoDS_Face]):
+class Face(Mixin2D[TopoDS_Face]):
     """A Face in build123d represents a 3D bounded surface within the topological data
     structure. It encapsulates geometric information, defining a face of a 3D shape.
     These faces are integral components of complex structures, such as solids and
@@ -2327,7 +2328,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         return wrapped_wire
 
 
-class Shell(Mixin2D, Shape[TopoDS_Shell]):
+class Shell(Mixin2D[TopoDS_Shell]):
     """A Shell is a fundamental component in build123d's topological data structure
     representing a connected set of faces forming a closed surface in 3D space. As
     part of a geometric model, it defines a watertight enclosure, commonly encountered

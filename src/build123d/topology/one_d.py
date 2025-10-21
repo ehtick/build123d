@@ -217,6 +217,7 @@ from build123d.geometry import (
 )
 
 from .shape_core import (
+    TOPODS,
     Shape,
     ShapeList,
     SkipClean,
@@ -250,7 +251,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .two_d import Face, Shell  # pylint: disable=R0801
 
 
-class Mixin1D(Shape):
+class Mixin1D(Shape[TOPODS]):
     """Methods to add to the Edge and Wire classes"""
 
     # ---- Properties ----
@@ -1565,7 +1566,7 @@ class Mixin1D(Shape):
         return Shape.get_shape_list(self, "Wire")
 
 
-class Edge(Mixin1D, Shape[TopoDS_Edge]):
+class Edge(Mixin1D[TopoDS_Edge]):
     """An Edge in build123d is a fundamental element in the topological data structure
     representing a one-dimensional geometric entity within a 3D model. It encapsulates
     information about a curve, which could be a line, arc, or other parametrically
@@ -3088,7 +3089,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         return Edge(new_edge)
 
 
-class Wire(Mixin1D, Shape[TopoDS_Wire]):
+class Wire(Mixin1D[TopoDS_Wire]):
     """A Wire in build123d is a topological entity representing a connected sequence
     of edges forming a continuous curve or path in 3D space. Wires are essential
     components in modeling complex objects, defining boundaries for surfaces or

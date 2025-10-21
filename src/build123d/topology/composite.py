@@ -130,7 +130,7 @@ from .utils import (
 from .zero_d import Vertex
 
 
-class Compound(Mixin3D, Shape[TopoDS_Compound]):
+class Compound(Mixin3D[TopoDS_Compound]):
     """A Compound in build123d is a topological entity representing a collection of
     geometric shapes grouped together within a single structure. It serves as a
     container for organizing diverse shapes like edges, faces, or solids. This
