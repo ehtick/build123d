@@ -388,8 +388,8 @@ class TestLocation(unittest.TestCase):
         e3 = Edge.make_line((0, 0), (2, 0))
 
         i = e1.intersect(e2, e3)
-        self.assertTrue(isinstance(i, Vertex))
-        self.assertAlmostEqual(Vector(i), (1, 0, 0), 5)
+        self.assertTrue(isinstance(i, list))
+        self.assertAlmostEqual(Vector(i[0]), (1, 0, 0), 5)
 
         e4 = Edge.make_line((1, -1), (1, 1))
         e5 = Edge.make_line((2, -1), (2, 1))

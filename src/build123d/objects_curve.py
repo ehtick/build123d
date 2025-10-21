@@ -30,11 +30,13 @@ from __future__ import annotations
 
 import copy as copy_module
 import warnings
+import numpy as np
+import sympy  # type: ignore
 from collections.abc import Iterable
 from itertools import product
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
-import sympy  # type: ignore
+from typing import overload, Literal
 
 from build123d.build_common import WorkplaneList, flatten_sequence, validate_inputs
 from build123d.build_enums import (
@@ -99,6 +101,129 @@ class BaseEdgeObject(Edge):
         # Use the helper function to handle adding the curve to the context
         _add_curve_to_context(curve, mode)
         super().__init__(curve.wrapped)
+
+
+class Airfoil(BaseLineObject):
+    """
+    Create an airfoil described by a 4-digit (or fractional) NACA airfoil
+    (e.g. '2412' or '2213.323').
+
+    The NACA four-digit wing sections define the airfoil_code by:
+    - First digit describing maximum camber as percentage of the chord.
+    - Second digit describing the distance of maximum camber from the airfoil leading edge
+    in tenths of the chord.
+    - Last two digits describing maximum thickness of the airfoil as percent of the chord.
+
+    Args:
+        airfoil_code : str
+            The NACA 4-digit (or fractional) airfoil code (e.g. '2213.323').
+        n_points : int
+            Number of points per upper/lower surface.
+        finite_te : bool
+            If True, enforces a finite trailing edge (default False).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    @staticmethod
+    def parse_naca4(value: str | float) -> tuple[float, float, float]:
+        """
+        Parse NACA 4-digit (or fractional) airfoil code into parameters.
+        """
+        s = str(value).replace("NACA", "").strip()
+        if "." in s:
+            int_part, frac_part = s.split(".", 1)
+            m = int(int_part[0]) / 100
+            p = int(int_part[1]) / 10
+            t = float(f"{int(int_part[2:]):02}.{frac_part}") / 100
+        else:
+            m = int(s[0]) / 100
+            p = int(s[1]) / 10
+            t = int(s[2:]) / 100
+        return m, p, t
+
+    def __init__(
+        self,
+        airfoil_code: str,
+        n_points: int = 50,
+        finite_te: bool = False,
+        mode: Mode = Mode.ADD,
+    ):
+
+        # Airfoil thickness distribution equation:
+        #
+        # yₜ=5t[0.2969√x-0.1260x-0.3516x²+0.2843x³-0.1015x⁴]
+        #
+        # where:
+        # - x is the distance along the chord (0 at the leading edge, 1 at the trailing edge),
+        # - t is the maximum thickness as a fraction of the chord (e.g. 0.12 for a NACA 2412),
+        # - yₜ gives the half-thickness at each chordwise location.
+
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        m, p, t = Airfoil.parse_naca4(airfoil_code)
+
+        # Cosine-spaced x values for better nose resolution
+        beta = np.linspace(0.0, np.pi, n_points)
+        x = (1 - np.cos(beta)) / 2
+
+        # Thickness distribution
+        a0, a1, a2, a3 = 0.2969, -0.1260, -0.3516, 0.2843
+        a4 = -0.1015 if finite_te else -0.1036
+        yt = 5 * t * (a0 * np.sqrt(x) + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4)
+
+        # Camber line and slope
+        if m == 0 or p == 0 or p == 1:
+            yc = np.zeros_like(x)
+            dyc_dx = np.zeros_like(x)
+        else:
+            yc = np.empty_like(x)
+            dyc_dx = np.empty_like(x)
+            mask = x < p
+            yc[mask] = m / p**2 * (2 * p * x[mask] - x[mask] ** 2)
+            yc[~mask] = (
+                m / (1 - p) ** 2 * ((1 - 2 * p) + 2 * p * x[~mask] - x[~mask] ** 2)
+            )
+            dyc_dx[mask] = 2 * m / p**2 * (p - x[mask])
+            dyc_dx[~mask] = 2 * m / (1 - p) ** 2 * (p - x[~mask])
+
+        theta = np.arctan(dyc_dx)
+        self._camber_points = [Vector(xi, yi) for xi, yi in zip(x, yc)]
+
+        # Upper and lower surfaces
+        xu = x - yt * np.sin(theta)
+        yu = yc + yt * np.cos(theta)
+        xl = x + yt * np.sin(theta)
+        yl = yc - yt * np.cos(theta)
+
+        upper_pnts = [Vector(x, y) for x, y in zip(xu, yu)]
+        lower_pnts = [Vector(x, y) for x, y in zip(xl, yl)]
+        unique_points: list[
+            Vector | tuple[float, float] | tuple[float, float, float]
+        ] = list(dict.fromkeys(upper_pnts[::-1] + lower_pnts))
+        surface = Edge.make_spline(unique_points, periodic=not finite_te)  # type: ignore[arg-type]
+        if finite_te:
+            trailing_edge = Edge.make_line(surface @ 0, surface @ 1)
+            airfoil_profile = Wire([surface, trailing_edge])
+        else:
+            airfoil_profile = Wire([surface])
+
+        super().__init__(airfoil_profile, mode=mode)
+
+        # Store metadata
+        self.code: str = airfoil_code  #: NACA code string (e.g. "2412")
+        self.max_camber: float = m  #: Maximum camber as fraction of chord
+        self.camber_pos: float = p  #: Chordwise position of max camber (0–1)
+        self.thickness: float = t  #: Maximum thickness as fraction of chord
+        self.finite_te: bool = finite_te  #: If True, trailing edge is finite
+
+    @property
+    def camber_line(self) -> Edge:
+        """Camber line of the airfoil as an Edge."""
+        return Edge.make_spline(self._camber_points)  # type: ignore[arg-type]
 
 
 class Bezier(BaseEdgeObject):

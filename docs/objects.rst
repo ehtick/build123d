@@ -76,6 +76,13 @@ The following objects all can be used in BuildLine contexts. Note that
 
 .. grid:: 3
 
+    .. grid-item-card:: :class:`~objects_curve.Airfoil`
+
+        .. image:: assets/example_airfoil.svg
+
+        +++
+        Airfoil described by 4 digit NACA profile
+
     .. grid-item-card:: :class:`~objects_curve.Bezier`
 
         .. image:: assets/bezier_curve_example.svg
@@ -228,6 +235,7 @@ Reference
 .. py:module:: objects_curve
 
 .. autoclass:: BaseLineObject
+.. autoclass:: Airfoil
 .. autoclass:: Bezier
 .. autoclass:: BlendCurve
 .. autoclass:: CenterArc

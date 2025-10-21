@@ -38,8 +38,10 @@ from pathlib import Path
 from typing import Literal, Optional, TextIO, Union
 import warnings
 
+from OCP.Bnd import Bnd_Box
 from OCP.BRep import BRep_Builder
-from OCP.BRepGProp import BRepGProp
+from OCP.BRepBndLib import BRepBndLib
+from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepTools import BRepTools
 from OCP.GProp import GProp_GProps
 from OCP.Quantity import Quantity_ColorRGBA
@@ -145,37 +147,42 @@ def import_step(filename: PathLike | str | bytes) -> Compound:
         clean_name = "".join(ch for ch in name if unicodedata.category(ch)[0] != "C")
         return clean_name.translate(str.maketrans(" .()", "____"))
 
-    def get_color(shape: TopoDS_Shape) -> Quantity_ColorRGBA:
+    def get_shape_color_from_cache(obj: TopoDS_Shape) -> Quantity_ColorRGBA | None:
+        """Get the color of a shape from a cache"""
+        key = obj.TShape().__hash__()
+        if key in _color_cache:
+            return _color_cache[key]
+
+        col = Quantity_ColorRGBA()
+        has_color = (
+            color_tool.GetColor(obj, XCAFDoc_ColorCurv, col)
+            or color_tool.GetColor(obj, XCAFDoc_ColorGen, col)
+            or color_tool.GetColor(obj, XCAFDoc_ColorSurf, col)
+        )
+        _color_cache[key] = col if has_color else None
+        return _color_cache[key]
+
+    def get_color(shape: TopoDS_Shape) -> Quantity_ColorRGBA | None:
         """Get the color - take that of the largest Face if multiple"""
+        shape_color = get_shape_color_from_cache(shape)
+        if shape_color is not None:
+            return shape_color
 
-        def get_col(obj: TopoDS_Shape) -> Quantity_ColorRGBA:
-            col = Quantity_ColorRGBA()
-            if (
-                color_tool.GetColor(obj, XCAFDoc_ColorCurv, col)
-                or color_tool.GetColor(obj, XCAFDoc_ColorGen, col)
-                or color_tool.GetColor(obj, XCAFDoc_ColorSurf, col)
-            ):
-                return col
-
-        shape_color = get_col(shape)
-
-        colors = {}
-        face_explorer = TopExp_Explorer(shape, TopAbs_FACE)
-        while face_explorer.More():
-            current_face = face_explorer.Current()
-            properties = GProp_GProps()
-            BRepGProp.SurfaceProperties_s(current_face, properties)
-            area = properties.Mass()
-            color = get_col(current_face)
-            if color is not None:
-                colors[area] = color
-            face_explorer.Next()
-
-        # If there are multiple colors, return the one from the largest face
-        if colors:
-            shape_color = sorted(colors.items())[-1][1]
-
-        return shape_color
+        max_extent = -1.0
+        winner = None
+        exp = TopExp_Explorer(shape, TopAbs_FACE)
+        while exp.More():
+            face = exp.Current()
+            col = get_shape_color_from_cache(face)
+            if col is not None:
+                box = Bnd_Box()
+                BRepBndLib.Add_s(face, box)
+                extent = box.SquareExtent()
+                if extent > max_extent:
+                    max_extent = extent
+                    winner = col
+            exp.Next()
+        return winner
 
     def build_assembly(parent_tdf_label: TDF_Label | None = None) -> list[Shape]:
         """Recursively extract object into an assembly"""
@@ -210,6 +217,9 @@ def import_step(filename: PathLike | str | bytes) -> Compound:
 
     if not os.path.exists(filename):
         raise FileNotFoundError(filename)
+
+    # Retrieving color info is expensive so cache the lookups
+    _color_cache: dict[int, Quantity_ColorRGBA | None] = {}
 
     fmt = TCollection_ExtendedString("XCAF")
     doc = TDocStd_Document(fmt)
