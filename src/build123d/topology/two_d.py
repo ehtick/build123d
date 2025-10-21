@@ -213,7 +213,7 @@ class Mixin2D(ABC, Shape):
 
     def __neg__(self) -> Self:
         """Reverse normal operator -"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Invalid Shape")
         new_surface = copy.deepcopy(self)
         new_surface.wrapped = downcast(self.wrapped.Complemented())
@@ -244,7 +244,7 @@ class Mixin2D(ABC, Shape):
         Returns:
             list[tuple[Vector, Vector]]: Point and normal of intersection
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return []
 
         intersection_line = gce_MakeLin(other.wrapped).Value()
@@ -350,7 +350,7 @@ class Mixin2D(ABC, Shape):
                 world_point, world_point - target_object_center
             )
 
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Can't wrap around an empty face")
 
         # Initial setup
@@ -545,7 +545,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             float: The total surface area, including the area of holes. Returns 0.0 if
             the face is empty.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return 0.0
 
         return self.without_holes().area
@@ -605,7 +605,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             ValueError: If the face or its underlying representation is empty.
             ValueError: If the face is not planar.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Can't determine axes_of_symmetry of empty face")
 
         if not self.is_planar_face:
@@ -1940,7 +1940,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             DeprecationWarning,
             stacklevel=2,
         )
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot approximate an empty shape")
 
         return self.__class__.cast(BRepAlgo.ConvertFace_s(self.wrapped, tolerance))
@@ -1953,7 +1953,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         Returns:
             Face: A new Face instance identical to the original but without any holes.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot remove holes from an empty face")
 
         if not (inner_wires := self.inner_wires()):

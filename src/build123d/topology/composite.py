@@ -455,7 +455,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
         will be a Wire, otherwise a Shape.
         """
         if self._dim == 1:
-            curve = Curve() if self.wrapped is None else Curve(self.wrapped)
+            curve = Curve() if self._wrapped is None else Curve(self.wrapped)
             sum1d: Edge | Wire | ShapeList[Edge] = curve + other
             if isinstance(sum1d, ShapeList):
                 result1d: Curve | Wire = Curve(sum1d)
@@ -517,7 +517,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
         Check if empty.
         """
 
-        return TopoDS_Iterator(self.wrapped).More()
+        return self._wrapped is not None and TopoDS_Iterator(self.wrapped).More()
 
     def __iter__(self) -> Iterator[Shape]:
         """
@@ -602,7 +602,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return ShapeList()
         if isinstance(self.wrapped, TopoDS_Compound):
             # pylint: disable=not-an-iterable
