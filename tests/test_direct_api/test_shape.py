@@ -475,7 +475,7 @@ class TestShape(unittest.TestCase):
         self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
-        verts, edges = Vertex(1, 2, 0)._ocp_section(Face.make_plane(Plane.XY))
+        verts, edges = Vertex(1, 2, 0)._ocp_section(Face(Plane.XY))
         self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
@@ -493,7 +493,7 @@ class TestShape(unittest.TestCase):
         self.assertEqual(len(edges1), 1)
         self.assertAlmostEqual(edges1[0].length, 20, 5)
 
-        vertices2, edges2 = cylinder._ocp_section(Face.make_plane(pln))
+        vertices2, edges2 = cylinder._ocp_section(Face(pln))
         self.assertEqual(len(vertices2), 1)
         self.assertEqual(len(edges2), 1)
         self.assertAlmostEqual(Vector(vertices2[0]), (5, 0, 0), 5)

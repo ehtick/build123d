@@ -130,8 +130,8 @@ class TestFace(unittest.TestCase):
                 distance=1, distance2=2, vertices=[vertex], edge=other_edge
             )
 
-    def test_make_rect(self):
-        test_face = Face.make_plane()
+    def test_plane_as_face(self):
+        test_face = Face(Plane.XY)
         self.assertAlmostEqual(test_face.normal_at(), (0, 0, 1), 5)
 
     def test_length_width(self):
