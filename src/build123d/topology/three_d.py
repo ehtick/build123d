@@ -1269,7 +1269,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             outer_wire = section
             inner_wires = inner_wires if inner_wires else []
 
-        shapes = []
+        shapes: list[Mixin3D[TopoDS_Shape]] = []
         for wire in [outer_wire] + inner_wires:
             builder = BRepOffsetAPI_MakePipeShell(Wire(path).wrapped)
 
