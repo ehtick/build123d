@@ -809,7 +809,7 @@ class Mixin1D(Shape[TOPODS]):
                     case Edge() as obj, Plane() as plane:
                         # Find any edge / plane intersection points & edges
                         # Find point intersections
-                        if obj.wrapped is None:
+                        if not obj:
                             continue
                         geom_line = BRep_Tool.Curve_s(
                             obj.wrapped, obj.param_at(0), obj.param_at(1)
@@ -1225,7 +1225,7 @@ class Mixin1D(Shape[TOPODS]):
         Returns:
 
         """
-        if self._wrapped is None or face.wrapped is None:
+        if self._wrapped is None or not face:
             raise ValueError("Can't project an empty Edge or Wire onto empty Face")
 
         bldr = BRepProj_Projection(
@@ -1400,7 +1400,7 @@ class Mixin1D(Shape[TOPODS]):
             - **Keep.BOTH**: Returns a tuple `(inside, outside)` where each element is
               either a `Self` or `list[Self]`, or `None` if no corresponding part is found.
         """
-        if self._wrapped is None or tool.wrapped is None:
+        if self._wrapped is None or not tool:
             raise ValueError("Can't split an empty edge/wire/tool")
 
         shape_list = TopTools_ListOfShape()
@@ -1647,7 +1647,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         Returns:
             Edge: extruded shape
         """
-        if obj.wrapped is None:
+        if not obj:
             raise ValueError("Can't extrude empty vertex")
         return Edge(TopoDS.Edge_s(_extrude_topods_shape(obj.wrapped, direction)))
 
@@ -3638,7 +3638,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         )
 
         for v in vertices:
-            if v.wrapped is None:
+            if not v:
                 continue
             edge_list = vertex_edge_map.FindFromKey(v.wrapped)
 
@@ -3932,7 +3932,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
 
         """
         # pylint: disable=too-many-branches
-        if self._wrapped is None or target_object.wrapped is None:
+        if self._wrapped is None or not target_object:
             raise ValueError("Can't project empty Wires or to empty Shapes")
 
         if direction is not None and center is None:
@@ -4021,7 +4021,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         Returns:
             Wire: stitched wires
         """
-        if self._wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             raise ValueError("Can't stitch empty wires")
 
         wire_builder = BRepBuilderAPI_MakeWire()
@@ -4266,7 +4266,7 @@ def topo_explore_connected_faces(
         raise ValueError("Can't explore from an empty edge")
 
     parent = parent if parent is not None else edge.topo_parent
-    if parent is None or parent.wrapped is None:
+    if not parent:
         raise ValueError("edge has no valid parent")
 
     # make a edge --> faces mapping

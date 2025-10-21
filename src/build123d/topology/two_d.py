@@ -412,7 +412,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
             raise RuntimeError(
                 f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
             )
-        if wrapped_edge.wrapped is None or not wrapped_edge.is_valid:
+        if not wrapped_edge or not wrapped_edge.is_valid:
             raise RuntimeError("Wrapped edge is invalid")
 
         if not snap_to_face:
@@ -872,7 +872,7 @@ class Face(Mixin2D[TopoDS_Face]):
         Returns:
             Face: extruded shape
         """
-        if obj.wrapped is None:
+        if not obj:
             raise ValueError("Can't extrude empty object")
         return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
 
@@ -982,7 +982,7 @@ class Face(Mixin2D[TopoDS_Face]):
                 )
                 return single_point_curve
 
-            if shape.wrapped is None:
+            if not shape:
                 raise ValueError("input Edge cannot be empty")
 
             adaptor = BRepAdaptor_Curve(shape.wrapped)
@@ -1105,7 +1105,7 @@ class Face(Mixin2D[TopoDS_Face]):
             raise ValueError("exterior must be a Wire or list of Edges")
 
         for edge in outside_edges:
-            if edge.wrapped is None:
+            if not edge:
                 raise ValueError("exterior contains empty edges")
             surface.Add(edge.wrapped, GeomAbs_C0)
 
@@ -1136,7 +1136,7 @@ class Face(Mixin2D[TopoDS_Face]):
         if interior_wires:
             makeface_object = BRepBuilderAPI_MakeFace(surface_face.wrapped)
             for wire in interior_wires:
-                if wire.wrapped is None:
+                if not wire:
                     raise ValueError("interior_wires contain an empty wire")
                 makeface_object.Add(wire.wrapped)
             try:
@@ -1330,7 +1330,7 @@ class Face(Mixin2D[TopoDS_Face]):
             ) from err
 
         result = result.fix()
-        if not result.is_valid or result.wrapped is None:
+        if not result.is_valid or not result:
             raise RuntimeError("Non planar face is invalid")
 
         return result
@@ -2360,7 +2360,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             obj = obj_list[0]
 
         if isinstance(obj, Face):
-            if obj.wrapped is None:
+            if not obj.wrapped:
                 raise ValueError(f"Can't create a Shell from empty Face")
             builder = BRep_Builder()
             shell = TopoDS_Shell()

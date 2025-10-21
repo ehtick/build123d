@@ -797,7 +797,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if obj.wrapped is None:
+        if not obj:
             return 0.0
 
         properties = GProp_GProps()
@@ -817,7 +817,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         ],
     ) -> ShapeList:
         """Helper to extract entities of a specific type from a shape."""
-        if shape.wrapped is None:
+        if not shape:
             return ShapeList()
         shape_list = ShapeList(
             [shape.__class__.cast(i) for i in shape.entities(entity_type)]
@@ -1124,7 +1124,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self._wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             raise ValueError("Cannot calculate distance to or from an empty shape")
 
         return BRepExtrema_DistShapeShape(self.wrapped, other.wrapped).Value()
@@ -1137,9 +1137,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         self, other: Shape | VectorLike
     ) -> tuple[float, Vector, Vector]:
         """Minimal distance between two shapes and the points on each shape"""
-        if self._wrapped is None or (
-            isinstance(other, Shape) and other.wrapped is None
-        ):
+        if self._wrapped is None or (isinstance(other, Shape) and not other):
             raise ValueError("Cannot calculate distance to or from an empty shape")
 
         if isinstance(other, Shape):
@@ -1176,7 +1174,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         dist_calc.LoadS1(self.wrapped)
 
         for other_shape in others:
-            if other_shape.wrapped is None:
+            if not other_shape:
                 raise ValueError("Cannot calculate distance to or from an empty shape")
             dist_calc.LoadS2(other_shape.wrapped)
             dist_calc.Perform()
@@ -1415,7 +1413,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self._wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return False
         return self.wrapped.IsEqual(other.wrapped)
 
@@ -1430,7 +1428,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self._wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return False
         return self.wrapped.IsSame(other.wrapped)
 
@@ -1877,7 +1875,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             raise ValueError("perimeter must be a closed Wire or Edge")
         perimeter_edges = TopTools_SequenceOfShape()
         for perimeter_edge in perimeter.edges():
-            if perimeter_edge.wrapped is None:
+            if not perimeter_edge:
                 continue
             perimeter_edges.Append(perimeter_edge.wrapped)
 
@@ -1885,7 +1883,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         lefts: list[Shell] = []
         rights: list[Shell] = []
         for target_shell in self.shells():
-            if target_shell.wrapped is None:
+            if not target_shell:
                 continue
             constructor = BRepFeat_SplitShape(target_shell.wrapped)
             constructor.Add(perimeter_edges)
@@ -2214,7 +2212,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             tuple[ShapeList[Vertex], ShapeList[Edge]]: section results
         """
-        if self._wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return (ShapeList(), ShapeList())
 
         section = BRepAlgoAPI_Section(self.wrapped, other.wrapped)
@@ -2715,15 +2713,16 @@ class ShapeList(list[T]):
                     tol_digits,
                 )
 
-        elif hasattr(group_by, "wrapped"):
-            if group_by.wrapped is None:
-                raise ValueError("Cannot group by an empty object")
+        elif not group_by:
+            raise ValueError("Cannot group by an empty object")
 
-            if isinstance(group_by.wrapped, (TopoDS_Edge, TopoDS_Wire)):
+        elif hasattr(group_by, "wrapped") and isinstance(
+            group_by.wrapped, (TopoDS_Edge, TopoDS_Wire)
+        ):
 
-                def key_f(obj):
-                    pnt1, _pnt2 = group_by.closest_points(obj.center())
-                    return round(group_by.param_at_point(pnt1), tol_digits)
+            def key_f(obj):
+                pnt1, _pnt2 = group_by.closest_points(obj.center())
+                return round(group_by.param_at_point(pnt1), tol_digits)
 
         elif isinstance(group_by, SortBy):
             if group_by == SortBy.LENGTH:
@@ -2829,22 +2828,22 @@ class ShapeList(list[T]):
                 ).position.Z,
                 reverse=reverse,
             )
-        elif hasattr(sort_by, "wrapped"):
-            if sort_by.wrapped is None:
-                raise ValueError("Cannot sort by an empty object")
+        elif not sort_by:
+            raise ValueError("Cannot sort by an empty object")
+        elif hasattr(sort_by, "wrapped") and isinstance(
+            sort_by.wrapped, (TopoDS_Edge, TopoDS_Wire)
+        ):
 
-            if isinstance(sort_by.wrapped, (TopoDS_Edge, TopoDS_Wire)):
+            def u_of_closest_center(obj) -> float:
+                """u-value of closest point between object center and sort_by"""
+                assert not isinstance(sort_by, SortBy)
+                pnt1, _pnt2 = sort_by.closest_points(obj.center())
+                return sort_by.param_at_point(pnt1)
 
-                def u_of_closest_center(obj) -> float:
-                    """u-value of closest point between object center and sort_by"""
-                    assert not isinstance(sort_by, SortBy)
-                    pnt1, _pnt2 = sort_by.closest_points(obj.center())
-                    return sort_by.param_at_point(pnt1)
-
-                # pylint: disable=unnecessary-lambda
-                objects = sorted(
-                    self, key=lambda o: u_of_closest_center(o), reverse=reverse
-                )
+            # pylint: disable=unnecessary-lambda
+            objects = sorted(
+                self, key=lambda o: u_of_closest_center(o), reverse=reverse
+            )
 
         elif isinstance(sort_by, SortBy):
             if sort_by == SortBy.LENGTH:

@@ -534,7 +534,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
     def __len__(self) -> int:
         """Return the number of subshapes"""
         count = 0
-        if self.wrapped is not None:
+        if self._wrapped is not None:
             for _ in self:
                 count += 1
         return count
