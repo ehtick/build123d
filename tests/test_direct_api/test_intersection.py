@@ -323,7 +323,7 @@ shape_3d_matrix = [
 
     Case(sl1, ed3, None, "non-coincident", None),
     Case(sl1, ed1, [Edge], "intersecting", None),
-    Case(sl1, Pos(0, 1, 1) * ed1, [Edge], "edge collinear", "BRepAlgoAPI_Common and _Section both return edge"),
+    Case(sl1, Pos(0, 1, 1) * ed1, [Edge], "edge collinear", "duplicate edges, BRepAlgoAPI_Common and _Section both return edge"),
     Case(sl1, Pos(1, 1, 1) * ed1, [Vertex], "corner coincident", None),
     Case(Pos(2.1, 1) * sl1, ed4, [Edge, Edge], "multi-intersect", None),
 
@@ -354,6 +354,61 @@ shape_3d_matrix = [
 def test_shape_3d(obj, target, expected):
     run_test(obj, target, expected)
 
+# Compound Shapes
+cp1 = Compound() + GridLocations(5, 0, 2, 1) * Vertex()
+cp2 = Compound() + GridLocations(5, 0, 2, 1) * Line((0, -1), (0, 1))
+cp3 = Compound() + GridLocations(5, 0, 2, 1) * Rectangle(2, 2)
+cp4 = Compound() + GridLocations(5, 0, 2, 1) * Box(2, 2, 2)
+
+cv1 = Curve() + [ed1, ed2, ed3]
+sk1 = Sketch() + [fc1, fc2, fc3]
+pt1 = Part() + [sl1, sl2, sl3]
+
+
+shape_compound_matrix = [
+    Case(cp1, vl1, None, "non-coincident", None),
+    Case(Pos(-.5) * cp1, vl1, [Vertex], "intersecting", None),
+
+    Case(cp2, lc1, None, "non-coincident", None),
+    Case(Pos(-.5) * cp2, lc1, [Vertex], "intersecting", None),
+
+    Case(Pos(Z=1) * cp3, ax1, None, "non-coincident", None),
+    Case(cp3, ax1, [Edge, Edge], "intersecting", None),
+
+    Case(Pos(Z=3) * cp4, pl2, None, "non-coincident", None),
+    Case(cp4, pl2, [Face, Face], "intersecting", None),
+
+    Case(cp1, vt1, None, "non-coincident", None),
+    Case(Pos(-.5) * cp1, vt1, [Vertex], "intersecting", None),
+
+    Case(Pos(Z=1) * cp2, ed1, None, "non-coincident", None),
+    Case(cp2, ed1, [Vertex], "intersecting", None),
+
+    Case(Pos(Z=1) * cp3, fc1, None, "non-coincident", None),
+    Case(cp3, fc1, [Face, Face], "intersecting", None),
+
+    Case(Pos(Z=5) * cp4, sl1, None, "non-coincident", None),
+    Case(Pos(2) * cp4, sl1, [Solid], "intersecting", None),
+
+    Case(cp1, Pos(Z=1) * cp1, None, "non-coincident", None),
+    Case(cp1, cp2, [Vertex, Vertex], "intersecting", None),
+    Case(cp2, cp3, [Edge, Edge], "intersecting", None),
+    Case(cp3, cp4, [Face, Face], "intersecting", None),
+
+    Case(cp1, Compound(children=cp1.get_type(Vertex)), [Vertex, Vertex], "mixed child type", None),
+    Case(cp4, Compound(children=cp3.get_type(Face)), [Face, Face], "mixed child type", None),
+
+    Case(cp2, [cp3, cp4], [Edge, Edge], "multi to_intersect, intersecting", None),
+
+    Case(cv1, cp3, [Edge, Edge], "intersecting", "duplicate edges, BRepAlgoAPI_Common and _Section both return edge"),
+    Case(sk1, cp3, [Face, Face], "intersecting", None),
+    Case(pt1, cp3, [Face, Face], "intersecting", None),
+
+]
+
+@pytest.mark.parametrize("obj, target, expected", make_params(shape_compound_matrix))
+def test_shape_compound(obj, target, expected):
+    run_test(obj, target, expected)
 
 # FreeCAD issue example
 c1 = CenterArc((0, 0), 10, 0, 360).edge()
@@ -416,6 +471,7 @@ exception_matrix = [
     Case(ed1, Color(), None, "Unsupported type", None),
     Case(fc1, Color(), None, "Unsupported type", None),
     Case(sl1, Color(), None, "Unsupported type", None),
+    Case(cp1, Color(), None, "Unsupported type", None),
 ]
 
 @pytest.mark.skip
