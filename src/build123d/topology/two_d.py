@@ -352,7 +352,7 @@ class Mixin2D(ABC, Shape):
                     case (Edge(), Edge() | Wire()):
                         result = obj.intersect(target)
 
-                    case _ if issubclass(type(target), Shape):
+                    case (_, Vertex() | Edge() | Wire() | Face() | Shell()):
                         if isinstance(target, Wire):
                             targets = target.edges()
                         elif isinstance(target, Shell):
@@ -370,6 +370,9 @@ class Mixin2D(ABC, Shape):
                                 result.extend(bool_op((obj,), (t,), operation) or [])
                             operation = BRepAlgoAPI_Section()
                             result.extend(bool_op((obj,), (t,), operation) or [])
+
+                    case _ if issubclass(type(target), Shape):
+                        result = target.intersect(obj)
 
                 if result:
                     common.extend(to_vector(result))

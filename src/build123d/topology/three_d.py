@@ -422,7 +422,7 @@ class Mixin3D(Shape):
 
     def intersect(
         self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge | Face | Shape]:
+    ) -> None | ShapeList[Vertex | Edge | Face | Solid]:
         """Intersect Solid with Shape or geometry object
 
         Args:
@@ -448,7 +448,7 @@ class Mixin3D(Shape):
             intersections = args[0]._bool_op(args, tools, operation)
             if isinstance(intersections, ShapeList):
                 return intersections or None
-            if (isinstance(intersections, Shape) and not intersections.is_null):
+            if isinstance(intersections, Shape) and not intersections.is_null:
                 return ShapeList([intersections])
             return None
 
@@ -476,7 +476,7 @@ class Mixin3D(Shape):
 
             return filtered_shapes
 
-        common_set: ShapeList[Vertex | Edge | Face] = ShapeList(self.solids())
+        common_set: ShapeList[Vertex | Edge | Face | Solid] = ShapeList(self.solids())
         target: ShapeList | Shape
         for other in to_intersect:
             # Conform target type
@@ -506,7 +506,7 @@ class Mixin3D(Shape):
                     case (Edge(), Edge() | Wire()):
                         result = obj.intersect(target)
 
-                    case _ if issubclass(type(target), Shape):
+                    case (_, Vertex() | Edge() | Wire() | Face() | Shell() | Solid()):
                         if isinstance(target, Wire):
                             targets = target.edges()
                         elif isinstance(target, Shell):
@@ -527,6 +527,9 @@ class Mixin3D(Shape):
                                 result.extend(bool_op((obj,), (t,), operation) or [])
                             operation = BRepAlgoAPI_Section()
                             result.extend(bool_op((obj,), (t,), operation) or [])
+
+                    case _ if issubclass(type(target), Shape):
+                        result = target.intersect(obj)
 
                 if result:
                     common.extend(to_vector(result))
