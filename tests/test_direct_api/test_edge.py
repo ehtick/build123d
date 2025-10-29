@@ -37,7 +37,7 @@ from build123d.geometry import Axis, Plane, Vector
 from build123d.objects_curve import CenterArc, EllipticalCenterArc
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import sweep
-from build123d.topology import Edge, Face, Wire
+from build123d.topology import Edge, Face, Wire, Vertex
 from OCP.GeomProjLib import GeomProjLib
 
 
@@ -183,8 +183,23 @@ class TestEdge(unittest.TestCase):
         line = Edge.make_line((-2, 0), (2, 0))
         self.assertAlmostEqual(line.trim(0.25, 0.75).position_at(0), (-1, 0, 0), 5)
         self.assertAlmostEqual(line.trim(0.25, 0.75).position_at(1), (1, 0, 0), 5)
-        with self.assertRaises(ValueError):
-            line.trim(0.75, 0.25)
+
+        l1 = CenterArc((0, 0), 1, 0, 180)
+        l2 = l1.trim(0, l1 @ 0.5)
+        self.assertAlmostEqual(l2 @ 0, (1, 0, 0), 5)
+        self.assertAlmostEqual(l2 @ 1, (0, 1, 0), 5)
+
+        l3 = l1.trim((1, 0), (0, 1))
+        self.assertAlmostEqual(l3 @ 0, (1, 0, 0), 5)
+        self.assertAlmostEqual(l3 @ 1, (0, 1, 0), 5)
+
+        l4 = l1.trim(0.5, (-1, 0))
+        self.assertAlmostEqual(l4 @ 0, (0, 1, 0), 5)
+        self.assertAlmostEqual(l4 @ 1, (-1, 0, 0), 5)
+
+        l5 = l1.trim(0.5, Vertex(-1, 0))
+        self.assertAlmostEqual(l5 @ 0, (0, 1, 0), 5)
+        self.assertAlmostEqual(l5 @ 1, (-1, 0, 0), 5)
 
         line.wrapped = None
         with self.assertRaises(ValueError):
@@ -212,6 +227,10 @@ class TestEdge(unittest.TestCase):
         a4 = Axis((0, 0, 0), (1, 1, 1))
         e4_trim = Edge(a4).trim_to_length(0.5, 2)
         self.assertAlmostEqual(e4_trim.length, 2, 5)
+
+        e5 = e1.trim_to_length((5, 5), 1)
+        self.assertAlmostEqual(e5 @ 0, (5, 5), 5)
+        self.assertAlmostEqual(e5.length, 1, 5)
 
         e1.wrapped = None
         with self.assertRaises(ValueError):

@@ -56,7 +56,7 @@ import numpy as np
 import warnings
 from collections.abc import Iterable
 from itertools import combinations
-from math import ceil, copysign, cos, floor, inf, isclose, pi, radians
+from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
 from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 from typing import cast as tcast
 
@@ -240,6 +240,8 @@ from .constrained_lines import (
     _make_3tan_arcs,
     _make_tan_cen_arcs,
     _make_tan_on_rad_arcs,
+    _make_tan_oriented_lines,
+    _make_2tan_lines,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -355,6 +357,21 @@ class Mixin1D(Shape):
     ) -> Edge | Face | Shell | Solid | Compound:
         """Unused - only here because Mixin1D is a subclass of Shape"""
         return NotImplemented
+
+    # ---- Static Methods ----
+
+    @staticmethod
+    def _to_param(edge_wire: Mixin1D, value: float | VectorLike, name: str) -> float:
+        """Convert a float or VectorLike into a curve parameter."""
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            point = Vector(value)
+        except TypeError as exc:
+            raise TypeError(
+                f"{name} must be a float or VectorLike, not {value!r}"
+            ) from exc
+        return edge_wire.param_at_point(point)
 
     # ---- Instance Methods ----
 
@@ -792,6 +809,8 @@ class Mixin1D(Shape):
                     case Edge() as obj, Plane() as plane:
                         # Find any edge / plane intersection points & edges
                         # Find point intersections
+                        if obj.wrapped is None:
+                            continue
                         geom_line = BRep_Tool.Curve_s(
                             obj.wrapped, obj.param_at(0), obj.param_at(1)
                         )
@@ -818,10 +837,13 @@ class Mixin1D(Shape):
                 vts = common_set.vertices()
                 eds = common_set.edges()
                 if vts and eds:
-                    filtered_vts = ShapeList([
-                        v for v in vts
-                        if all(v.distance_to(e) > TOLERANCE for e in eds)
-                    ])
+                    filtered_vts = ShapeList(
+                        [
+                            v
+                            for v in vts
+                            if all(v.distance_to(e) > TOLERANCE for e in eds)
+                        ]
+                    )
                     common_set = filtered_vts + eds
             else:
                 return None
@@ -1958,6 +1980,157 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
 
         raise ValueError("Unsupported or ambiguous combination of constraints.")
 
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Axis | Edge,
+        tangency_two: tuple[Edge, Tangency] | Axis | Edge,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to two provided curves.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Edge, Tangency] | Axis | Edge):
+                Geometric entities to be contacted/touched by the line(s).
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: Vector,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one
+                (tuple[Edge, Tangency] | Edge):
+                Geometric entity to be contacted/touched by the line(s).
+            tangency_two (Vector):
+                Fixed point through which the line(s) must pass.
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @overload
+    @classmethod
+    def make_constrained_lines(
+        cls,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: Axis,
+        *,
+        angle: float | None = None,
+        direction: VectorLike | None = None,
+    ) -> ShapeList[Edge]:
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one (Edge): edge that line will be tangent to
+            tangency_two (Axis): axis that angle will be measured against
+            angle : float, optional
+                Line orientation in degrees (measured CCW from the X-axis).
+            direction : VectorLike, optional
+                Direction vector for the line (only X and Y components are used).
+            Note: one of angle or direction must be provided
+
+        Returns:
+            ShapeList[Edge]: tangent lines
+        """
+
+    @classmethod
+    def make_constrained_lines(cls, *args, **kwargs) -> ShapeList[Edge]:
+        """
+        Create planar line(s) on XY subject to tangency/contact constraints.
+
+        Supported cases
+        ---------------
+        1. Tangent to two curves
+        2. Tangent to one curve and passing through a given point
+        """
+        tangency_one = args[0] if len(args) > 0 else None
+        tangency_two = args[1] if len(args) > 1 else None
+
+        tangency_one = kwargs.pop("tangency_one", tangency_one)
+        tangency_two = kwargs.pop("tangency_two", tangency_two)
+
+        angle = kwargs.pop("angle", None)
+        direction = kwargs.pop("direction", None)
+        direction = Vector(direction) if direction is not None else None
+
+        is_ref = angle is not None or direction is not None
+        # Handle unexpected kwargs
+        if kwargs:
+            raise TypeError(f"Unexpected argument(s): {', '.join(kwargs.keys())}")
+
+        tangency_args = [t for t in (tangency_one, tangency_two) if t is not None]
+        if len(tangency_args) != 2:
+            raise TypeError("Provide exactly 2 tangency targets.")
+
+        tangencies: list[tuple[Edge, Tangency] | Axis | Edge | Vector] = []
+        for i, tangency_arg in enumerate(tangency_args):
+            if isinstance(tangency_arg, Axis):
+                if i == 1 and is_ref:
+                    tangencies.append(tangency_arg)
+                else:
+                    tangencies.append(Edge(tangency_arg))
+                continue
+            elif isinstance(tangency_arg, Edge):
+                tangencies.append(tangency_arg)
+                continue
+            if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
+                tangencies.append(tangency_arg)
+                continue
+            # Fallback: treat as a point
+            try:
+                tangencies.append(Vector(tangency_arg))
+            except Exception as exc:
+                raise TypeError(f"Invalid tangency: {tangency_arg!r}") from exc
+
+        # Sort so Vector (point) | Axis is always last
+        tangencies = sorted(tangencies, key=lambda x: isinstance(x, (Axis, Vector)))
+
+        # --- decide problem kind ---
+        if angle is not None or direction is not None:
+            if isinstance(tangencies[0], tuple):
+                assert isinstance(
+                    tangencies[0][0], Edge
+                ), "Internal error - 1st tangency must be Edge"
+            else:
+                assert isinstance(
+                    tangencies[0], Edge
+                ), "Internal error - 1st tangency must be Edge"
+            if angle is not None:
+                ang_rad = radians(angle)
+            else:
+                assert direction is not None
+                ang_rad = atan2(direction.Y, direction.X)
+            assert isinstance(
+                tangencies[1], Axis
+            ), "Internal error - 2nd tangency must be an Axis"
+            return _make_tan_oriented_lines(
+                tangencies[0], tangencies[1], ang_rad, edge_factory=cls
+            )
+        else:
+            assert not isinstance(
+                tangencies[0], (Axis, Vector)
+            ), "Internal error - 1st tangency can't be an Axis | Vector"
+            assert not isinstance(
+                tangencies[1], Axis
+            ), "Internal error - 2nd tangency can't be an Axis"
+
+            return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
+
     @classmethod
     def make_ellipse(
         cls,
@@ -2814,24 +2987,43 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         )
         return Wire([self])
 
-    def trim(self, start: float, end: float) -> Edge:
+    def trim(self, start: float | VectorLike, end: float | VectorLike) -> Edge:
+        """_summary_
+
+        Args:
+            start (float | VectorLike): _description_
+            end (float | VectorLike): _description_
+
+        Raises:
+            TypeError: _description_
+            ValueError: _description_
+
+        Returns:
+            Edge: _description_
+        """
         """trim
 
         Create a new edge by keeping only the section between start and end.
 
         Args:
-            start (float): 0.0 <= start < 1.0
-            end (float): 0.0 < end <= 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
+            end (float  | VectorLike): 0.0 < end <= 1.0 or point on edge
 
         Raises:
-            ValueError: start >= end
+            TypeError: invalid input, must be float or VectorLike
             ValueError: can't trim empty edge
 
         Returns:
             Edge: trimmed edge
         """
-        if start >= end:
-            raise ValueError(f"start ({start}) must be less than end ({end})")
+
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
+
+        # if start_u >= end_u:
+        #     raise ValueError(f"start ({start_u}) must be less than end ({end_u})")
 
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
@@ -2842,8 +3034,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_curve = BRep_Tool.Curve_s(
             self_copy.wrapped, self.param_at(0), self.param_at(1)
         )
-        parm_start = self.param_at(start)
-        parm_end = self.param_at(end)
+        parm_start = self.param_at(start_u)
+        parm_end = self.param_at(end_u)
         trimmed_curve = Geom_TrimmedCurve(
             new_curve,
             parm_start,
@@ -2852,14 +3044,14 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
 
-    def trim_to_length(self, start: float, length: float) -> Edge:
+    def trim_to_length(self, start: float | VectorLike, length: float) -> Edge:
         """trim_to_length
 
         Create a new edge starting at the given normalized parameter of a
         given length.
 
         Args:
-            start (float): 0.0 <= start < 1.0
+            start (float | VectorLike): 0.0 <= start < 1.0 or point on edge
             length (float): target length
 
         Raise:
@@ -2870,6 +3062,8 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         """
         if self.wrapped is None:
             raise ValueError("Can't trim empty edge")
+
+        start_u = Mixin1D._to_param(self, start, "start")
 
         self_copy = copy.deepcopy(self)
         assert self_copy.wrapped is not None
@@ -2882,7 +3076,7 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         adaptor_curve = GeomAdaptor_Curve(new_curve)
 
         # Find the parameter corresponding to the desired length
-        parm_start = self.param_at(start)
+        parm_start = self.param_at(start_u)
         abscissa_point = GCPnts_AbscissaPoint(adaptor_curve, length, parm_start)
 
         # Get the parameter at the desired length
@@ -3392,7 +3586,6 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         return Wire.make_polygon(corners_world, close=True)
 
     # ---- Static Methods ----
-
     @staticmethod
     def order_chamfer_edges(
         reference_edge: Edge | None, edges: tuple[Edge, Edge]
@@ -3908,29 +4101,31 @@ class Wire(Mixin1D, Shape[TopoDS_Wire]):
         )
         return self
 
-    def trim(self: Wire, start: float, end: float) -> Wire:
+    def trim(self: Wire, start: float | VectorLike, end: float | VectorLike) -> Wire:
         """Trim a wire between [start, end] normalized over total length.
 
         Args:
-            start (float): normalized start position (0.0 to <1.0)
-            end (float): normalized end position (>0.0 to 1.0)
+            start (float | VectorLike): normalized start position (0.0 to <1.0) or point
+            end (float | VectorLike): normalized end position (>0.0 to 1.0) or point
 
         Returns:
             Wire: trimmed Wire
         """
-        if start >= end:
-            raise ValueError("start must be less than end")
+        start_u = Mixin1D._to_param(self, start, "start")
+        end_u = Mixin1D._to_param(self, end, "end")
+
+        start_u, end_u = sorted([start_u, end_u])
 
         # Extract the edges in order
         ordered_edges = self.edges().sort_by(self)
 
         # If this is really just an edge, skip the complexity of a Wire
         if len(ordered_edges) == 1:
-            return Wire([ordered_edges[0].trim(start, end)])
+            return Wire([ordered_edges[0].trim(start_u, end_u)])
 
         total_length = self.length
-        start_len = start * total_length
-        end_len = end * total_length
+        start_len = start_u * total_length
+        end_len = end_u * total_length
 
         trimmed_edges = []
         cur_length = 0.0

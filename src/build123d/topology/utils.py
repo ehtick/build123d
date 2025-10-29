@@ -263,7 +263,10 @@ def _make_topods_face_from_wires(
     for inner_wire in inner_wires:
         if not BRep_Tool.IsClosed_s(inner_wire):
             raise ValueError("Cannot build face(s): inner wire is not closed")
-        face_builder.Add(inner_wire)
+        sf_s = ShapeFix_Shape(inner_wire)
+        sf_s.Perform()
+        fixed_inner_wire = TopoDS.Wire_s(sf_s.Shape())
+        face_builder.Add(fixed_inner_wire)
 
     face_builder.Build()
 
