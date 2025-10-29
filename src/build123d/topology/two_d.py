@@ -778,15 +778,13 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             ).sort_by(Axis(cog, cross_dir))
 
             bottom_area = sum(f.area for f in bottom_list)
-            intersect_area = 0.0
             for flipped_face, bottom_face in zip(top_flipped_list, bottom_list):
                 intersection = flipped_face.intersect(bottom_face)
-                if intersection is None or isinstance(intersection, list):
+                if intersection is None:
                     intersect_area = -1.0
                     break
                 else:
-                    assert isinstance(intersection, Face)
-                    intersect_area += intersection.area
+                    intersect_area = sum(f.area for f in intersection.faces())
 
             if intersect_area == -1.0:
                 continue

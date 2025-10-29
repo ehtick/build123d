@@ -649,11 +649,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
                     children[child_index_pair[1]]
                 )
                 if obj_intersection is not None:
-                    common_volume = (
-                        0.0
-                        if isinstance(obj_intersection, list)
-                        else obj_intersection.volume
-                    )
+                    common_volume = sum(s.volume for s in obj_intersection.solids())
                     if common_volume > tolerance:
                         return (
                             True,
