@@ -453,11 +453,11 @@ w1 = Wire.make_circle(0.5)
 f1 = Face(Wire.make_circle(0.5))
 
 issues_matrix = [
-    Case(t, t, [Face, Face], "issue #1015", "Returns Compound"),
-    Case(l, s, [Edge], "issue #945", "Edge.intersect only takes 1D"),
-    Case(a, b, [Edge], "issue #918", "Returns empty Compound"),
-    Case(e1, w1, [Vertex, Vertex], "issue #697"),
-    Case(e1, f1, [Edge], "issue #697", "Edge.intersect only takes 1D"),
+    Case(t, t, [Face, Face], "issue #1015", None),
+    Case(l, s, [Edge], "issue #945", None),
+    Case(a, b, [Edge], "issue #918", None),
+    Case(e1, w1, [Vertex, Vertex], "issue #697", None),
+    Case(e1, f1, [Edge], "issue #697", None),
 ]
 
 @pytest.mark.parametrize("obj, target, expected", make_params(issues_matrix))
