@@ -1015,6 +1015,21 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         )
 
     @classmethod
+    def make_plane(
+        cls,
+        plane: Plane = Plane.XY,
+    ) -> Face:
+        """Create a unlimited size Face aligned with plane"""
+        warnings.warn(
+            "The 'make_plane' method is deprecated and will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        pln_shape = BRepBuilderAPI_MakeFace(plane.wrapped).Face()
+        return cls(pln_shape)
+
+    @classmethod
     def make_rect(cls, width: float, height: float, plane: Plane = Plane.XY) -> Face:
         """make_rect
 
