@@ -2360,7 +2360,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             obj = obj_list[0]
 
         if isinstance(obj, Face):
-            if not obj.wrapped:
+            if not obj:
                 raise ValueError(f"Can't create a Shell from empty Face")
             builder = BRep_Builder()
             shell = TopoDS_Shell()
