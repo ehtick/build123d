@@ -758,7 +758,7 @@ class ExportDXF(Export2D):
         )
 
         # need to apply the transform on the geometry level
-        if edge.wrapped is None or edge.location is None:
+        if not edge or edge.location is None:
             raise ValueError(f"Edge is empty {edge}.")
         t = edge.location.wrapped.Transformation()
         spline.Transform(t)
@@ -1345,7 +1345,7 @@ class ExportSVG(Export2D):
         u2 = adaptor.LastParameter()
 
         # Apply the shape location to the geometry.
-        if edge.wrapped is None or edge.location is None:
+        if not edge or edge.location is None:
             raise ValueError(f"Edge is empty {edge}.")
         t = edge.location.wrapped.Transformation()
         spline.Transform(t)
@@ -1411,7 +1411,7 @@ class ExportSVG(Export2D):
     }
 
     def _edge_segments(self, edge: Edge, reverse: bool) -> list[PathSegment]:
-        if edge.wrapped is None:
+        if not edge:
             raise ValueError(f"Edge is empty {edge}.")
         edge_reversed = edge.wrapped.Orientation() == TopAbs_Orientation.TopAbs_REVERSED
         geom_type = edge.geom_type
