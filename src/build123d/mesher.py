@@ -295,7 +295,7 @@ class Mesher:
                 ocp_mesh_vertices.append(pnt)
 
             # Store the triangles from the triangulated faces
-            if facet.wrapped is None:
+            if not facet:
                 continue
             facet_reversed = facet.wrapped.Orientation() == ta.TopAbs_REVERSED
             order = [1, 3, 2] if facet_reversed else [1, 2, 3]

@@ -139,6 +139,7 @@ from build123d.geometry import (
 
 from .one_d import Edge, Mixin1D, Wire
 from .shape_core import (
+    TOPODS,
     Shape,
     ShapeList,
     SkipClean,
@@ -165,7 +166,7 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T", Edge, Wire, "Face")
 
 
-class Mixin2D(ABC, Shape):
+class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
     project_to_viewport = Mixin1D.project_to_viewport
@@ -213,7 +214,7 @@ class Mixin2D(ABC, Shape):
 
     def __neg__(self) -> Self:
         """Reverse normal operator -"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Invalid Shape")
         new_surface = copy.deepcopy(self)
         new_surface.wrapped = downcast(self.wrapped.Complemented())
@@ -244,7 +245,7 @@ class Mixin2D(ABC, Shape):
         Returns:
             list[tuple[Vector, Vector]]: Point and normal of intersection
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return []
 
         intersection_line = gce_MakeLin(other.wrapped).Value()
@@ -350,7 +351,7 @@ class Mixin2D(ABC, Shape):
                 world_point, world_point - target_object_center
             )
 
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Can't wrap around an empty face")
 
         # Initial setup
@@ -411,7 +412,7 @@ class Mixin2D(ABC, Shape):
             raise RuntimeError(
                 f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
             )
-        if wrapped_edge.wrapped is None or not wrapped_edge.is_valid:
+        if not wrapped_edge or not wrapped_edge.is_valid:
             raise RuntimeError("Wrapped edge is invalid")
 
         if not snap_to_face:
@@ -434,7 +435,7 @@ class Mixin2D(ABC, Shape):
         return projected_edge
 
 
-class Face(Mixin2D, Shape[TopoDS_Face]):
+class Face(Mixin2D[TopoDS_Face]):
     """A Face in build123d represents a 3D bounded surface within the topological data
     structure. It encapsulates geometric information, defining a face of a 3D shape.
     These faces are integral components of complex structures, such as solids and
@@ -545,7 +546,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             float: The total surface area, including the area of holes. Returns 0.0 if
             the face is empty.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return 0.0
 
         return self.without_holes().area
@@ -605,7 +606,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             ValueError: If the face or its underlying representation is empty.
             ValueError: If the face is not planar.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Can't determine axes_of_symmetry of empty face")
 
         if not self.is_planar_face:
@@ -871,7 +872,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         Returns:
             Face: extruded shape
         """
-        if obj.wrapped is None:
+        if not obj:
             raise ValueError("Can't extrude empty object")
         return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
 
@@ -981,7 +982,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
                 )
                 return single_point_curve
 
-            if shape.wrapped is None:
+            if not shape:
                 raise ValueError("input Edge cannot be empty")
 
             adaptor = BRepAdaptor_Curve(shape.wrapped)
@@ -1104,7 +1105,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             raise ValueError("exterior must be a Wire or list of Edges")
 
         for edge in outside_edges:
-            if edge.wrapped is None:
+            if not edge:
                 raise ValueError("exterior contains empty edges")
             surface.Add(edge.wrapped, GeomAbs_C0)
 
@@ -1135,7 +1136,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         if interior_wires:
             makeface_object = BRepBuilderAPI_MakeFace(surface_face.wrapped)
             for wire in interior_wires:
-                if wire.wrapped is None:
+                if not wire:
                     raise ValueError("interior_wires contain an empty wire")
                 makeface_object.Add(wire.wrapped)
             try:
@@ -1329,7 +1330,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             ) from err
 
         result = result.fix()
-        if not result.is_valid or result.wrapped is None:
+        if not result.is_valid or not result:
             raise RuntimeError("Non planar face is invalid")
 
         return result
@@ -1940,7 +1941,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             DeprecationWarning,
             stacklevel=2,
         )
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot approximate an empty shape")
 
         return self.__class__.cast(BRepAlgo.ConvertFace_s(self.wrapped, tolerance))
@@ -1953,7 +1954,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         Returns:
             Face: A new Face instance identical to the original but without any holes.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot remove holes from an empty face")
 
         if not (inner_wires := self.inner_wires()):
@@ -2327,7 +2328,7 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         return wrapped_wire
 
 
-class Shell(Mixin2D, Shape[TopoDS_Shell]):
+class Shell(Mixin2D[TopoDS_Shell]):
     """A Shell is a fundamental component in build123d's topological data structure
     representing a connected set of faces forming a closed surface in 3D space. As
     part of a geometric model, it defines a watertight enclosure, commonly encountered
@@ -2359,7 +2360,7 @@ class Shell(Mixin2D, Shape[TopoDS_Shell]):
             obj = obj_list[0]
 
         if isinstance(obj, Face):
-            if obj.wrapped is None:
+            if not obj:
                 raise ValueError(f"Can't create a Shell from empty Face")
             builder = BRep_Builder()
             shell = TopoDS_Shell()
