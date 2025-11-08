@@ -60,6 +60,7 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
+from math import degrees
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 import OCP.TopAbs as ta
@@ -556,6 +557,11 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         if type(self.geom_adaptor()) == Geom_RectangularTrimmedSurface:
             return None
 
+        if self.geom_type == GeomType.CONE:
+            return Axis(
+                self.geom_adaptor().Cone().Axis()  # type:ignore[attr-defined]
+            )
+
         if self.geom_type == GeomType.CYLINDER:
             return Axis(
                 self.geom_adaptor().Cylinder().Axis()  # type:ignore[attr-defined]
@@ -834,6 +840,17 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
             and type(self.geom_adaptor()) != Geom_RectangularTrimmedSurface
         ):
             return self.geom_adaptor().Radius()  # type:ignore[attr-defined]
+        else:
+            return None
+
+    @property
+    def semi_angle(self) -> None | float:
+        """Return the semi angle of a cone, otherwise None"""
+        if (
+            self.geom_type == GeomType.CONE
+            and type(self.geom_adaptor()) != Geom_RectangularTrimmedSurface
+        ):
+            return degrees(self.geom_adaptor().SemiAngle())  # type:ignore[attr-defined]
         else:
             return None
 
