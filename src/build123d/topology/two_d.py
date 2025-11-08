@@ -450,7 +450,7 @@ class Face(Mixin2D[TopoDS_Face]):
     @overload
     def __init__(
         self,
-        obj: TopoDS_Face,
+        obj: TopoDS_Face | Plane,
         label: str = "",
         color: Color | None = None,
         parent: Compound | None = None,
@@ -458,7 +458,7 @@ class Face(Mixin2D[TopoDS_Face]):
         """Build a Face from an OCCT TopoDS_Shape/TopoDS_Face
 
         Args:
-            obj (TopoDS_Shape, optional): OCCT Face.
+            obj (TopoDS_Shape | Plane, optional): OCCT Face or Plane.
             label (str, optional): Defaults to ''.
             color (Color, optional): Defaults to None.
             parent (Compound, optional): assembly parent. Defaults to None.
@@ -488,7 +488,9 @@ class Face(Mixin2D[TopoDS_Face]):
 
         if args:
             l_a = len(args)
-            if isinstance(args[0], TopoDS_Shape):
+            if isinstance(args[0], Plane):
+                obj = args[0]
+            elif isinstance(args[0], TopoDS_Shape):
                 obj, label, color, parent = args[:4] + (None,) * (4 - l_a)
             elif isinstance(args[0], Wire):
                 outer_wire, inner_wires, label, color, parent = args[:5] + (None,) * (
@@ -516,6 +518,9 @@ class Face(Mixin2D[TopoDS_Face]):
         label = kwargs.get("label", label)
         color = kwargs.get("color", color)
         parent = kwargs.get("parent", parent)
+
+        if isinstance(obj, Plane):
+            obj = BRepBuilderAPI_MakeFace(obj.wrapped).Face()
 
         if outer_wire is not None:
             inner_topods_wires = (
@@ -1016,6 +1021,12 @@ class Face(Mixin2D[TopoDS_Face]):
         plane: Plane = Plane.XY,
     ) -> Face:
         """Create a unlimited size Face aligned with plane"""
+        warnings.warn(
+            "The 'make_plane' method is deprecated and will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         pln_shape = BRepBuilderAPI_MakeFace(plane.wrapped).Face()
         return cls(pln_shape)
 
