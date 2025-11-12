@@ -137,6 +137,18 @@ class TestColor(unittest.TestCase):
             " #ff0000 ",
             ("#ff0000",),
             ("#ff0000", 1),
+            "#ff0000ff",
+            " #ff0000ff ",
+            ("#ff0000ff",),
+            ("#ff0000ff", .6),
+            "#f00",
+            " #f00 ",
+            ("#f00",),
+            ("#f00", 1),
+            "#f00f",
+            " #f00f ",
+            ("#f00f",),
+            ("#f00f", .6),
             0xff0000,
             (0xff0000),
             (0xff0000, 0xff),
@@ -164,6 +176,9 @@ class TestColor(unittest.TestCase):
             Quantity_ColorRGBA(1, 0, 0, 0.6),
             ("red", 0.6),
             ("#ff0000", 0.6),
+            ("#ff000099"),
+            ("#f00", 0.6),
+            ("#f009"),
             (0xff0000, 153),
             (1., 0., 0., 0.6)
             ]
@@ -176,6 +191,21 @@ class TestColor(unittest.TestCase):
     def test_bad_color_name(self):
         with self.assertRaises(ValueError):
             Color("build123d")
+
+        with self.assertRaises(ValueError):
+            Color("#ff")
+
+        with self.assertRaises(ValueError):
+            Color("#ffg")
+
+        with self.assertRaises(ValueError):
+            Color("#fffff")
+
+        with self.assertRaises(ValueError):
+            Color("#fffg")
+
+        with self.assertRaises(ValueError):
+            Color("#fff00gg")
 
     def test_bad_color_type(self):
         with self.assertRaises(TypeError):
