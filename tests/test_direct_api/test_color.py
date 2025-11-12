@@ -167,10 +167,6 @@ def test_rgba_wrapped():
     assert c.wrapped.GetRGB().Blue() == 0.0
     assert c.wrapped.Alpha() == 0.5
 
-def test_to_tuple():
-    c = Color("blue", alpha=0.5)
-    np.testing.assert_allclose(tuple(c), (0, 0, 1, 0.5), rtol=1e-5)
-
 def test_copy():
     c = Color(0.1, 0.2, 0.3, alpha=0.4)
     c_copy = copy.copy(c)

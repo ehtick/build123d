@@ -1319,16 +1319,6 @@ class Color:
         self.iter_index += 1
         return value
 
-    def to_tuple(self):
-        """Value as tuple"""
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'tuple(Color)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return tuple(self)
-
     def __copy__(self) -> Color:
         """Return copy of self"""
         return Color(*tuple(self))
