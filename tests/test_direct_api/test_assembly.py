@@ -70,9 +70,9 @@ class TestAssembly(unittest.TestCase):
     def test_show_topology_compound(self):
         assembly = TestAssembly.create_test_assembly()
         expected = [
-            "assembly   Compound at 0x7fced0fd1b50, Location(p=(0.00, 0.00, 0.00), o=(-0.00, 0.00, -0.00))",
-            "├── box    Solid    at 0x7fced102d3a0, Location(p=(0.00, 0.00, 0.00), o=(45.00, 45.00, -0.00))",
-            "└── sphere Solid    at 0x7fced0fd1f10, Location(p=(1.00, 2.00, 3.00), o=(-0.00, 0.00, -0.00))",
+            "assembly   Compound at 0x7fced0fd1b50, Location((0.0, 0.0, 0.0), (-0.0, 0.0, -0.0))",
+            "├── box    Solid    at 0x7fced102d3a0, Location((0.0, 0.0, 0.0), (45.0, 45.0, -0.0))",
+            "└── sphere Solid    at 0x7fced0fd1f10, Location((1.0, 2.0, 3.0), (-0.0, 0.0, -0.0))",
         ]
         self.assertTopoEqual(assembly.show_topology("Solid"), expected)
 

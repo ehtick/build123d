@@ -228,16 +228,16 @@ class TestLocation(unittest.TestCase):
 
     def test_location_repr_and_str(self):
         self.assertEqual(
-            repr(Location()), "(p=(0.00, 0.00, 0.00), o=(-0.00, 0.00, -0.00))"
+            repr(Location()), "Location((0.0, 0.0, 0.0), (-0.0, 0.0, -0.0))"
         )
         self.assertEqual(
             str(Location()),
-            "Location: (position=(0.00, 0.00, 0.00), orientation=(-0.00, 0.00, -0.00))",
+            "Location: (position=(0, 0, 0), orientation=(-0, 0, -0))",
         )
         loc = Location((1, 2, 3), (33, 45, 67))
         self.assertEqual(
             str(loc),
-            "Location: (position=(1.00, 2.00, 3.00), orientation=(33.00, 45.00, 67.00))",
+            "Location: (position=(1, 2, 3), orientation=(33, 45, 67))",
         )
 
     def test_location_inverted(self):

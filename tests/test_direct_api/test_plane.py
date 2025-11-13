@@ -335,7 +335,11 @@ class TestPlane(unittest.TestCase):
     def test_repr(self):
         self.assertEqual(
             repr(Plane.XY),
-            "Plane(o=(0.00, 0.00, 0.00), x=(1.00, 0.00, 0.00), z=(0.00, 0.00, 1.00))",
+            "Plane((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0))",
+        )
+        self.assertEqual(
+            str(Plane.XY),
+            "Plane: (origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, 0, 1))",
         )
 
     def test_shift_origin_axis(self):

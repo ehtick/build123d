@@ -157,9 +157,9 @@ class TestOrientedBoundBox(unittest.TestCase):
         pattern = (
             r"OrientedBoundBox\(center=Vector\((?P<c0>[-\d\.]+), (?P<c1>[-\d\.]+), (?P<c2>[-\d\.]+)\), "
             r"size=Vector\((?P<s0>[-\d\.]+), (?P<s1>[-\d\.]+), (?P<s2>[-\d\.]+)\), "
-            r"plane=Plane\(o=\((?P<o0>[-\d\.]+), (?P<o1>[-\d\.]+), (?P<o2>[-\d\.]+)\), "
-            r"x=\((?P<x0>[-\d\.]+), (?P<x1>[-\d\.]+), (?P<x2>[-\d\.]+)\), "
-            r"z=\((?P<z0>[-\d\.]+), (?P<z1>[-\d\.]+), (?P<z2>[-\d\.]+)\)\)\)"
+            r"plane=Plane\(\((?P<o0>[-\d\.]+), (?P<o1>[-\d\.]+), (?P<o2>[-\d\.]+)\), "
+            r"\((?P<x0>[-\d\.]+), (?P<x1>[-\d\.]+), (?P<x2>[-\d\.]+)\), "
+            r"\((?P<z0>[-\d\.]+), (?P<z1>[-\d\.]+), (?P<z2>[-\d\.]+)\)\)\)"
         )
         m = re.match(pattern, rep)
         self.assertIsNotNone(

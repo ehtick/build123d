@@ -443,13 +443,19 @@ class Vector:
         return self.intersect(other)
 
     def __repr__(self) -> str:
-        """Display vector"""
+        """Represent vector"""
         x = round(self.X, 13) if abs(self.X) > TOLERANCE else 0.0
         y = round(self.Y, 13) if abs(self.Y) > TOLERANCE else 0.0
         z = round(self.Z, 13) if abs(self.Z) > TOLERANCE else 0.0
-        return f"Vector({x:.14g}, {y:.14g}, {z:.14g})"
+        return f"{type(self).__name__}({x:.14g}, {y:.14g}, {z:.14g})"
 
-    __str__ = __repr__
+    def __str__(self) -> str:
+        """Display vector"""
+        strf = f".{TOL_DIGITS}g"
+        x = round(self.X, 13) if abs(self.X) > TOLERANCE else 0.0
+        y = round(self.Y, 13) if abs(self.Y) > TOLERANCE else 0.0
+        z = round(self.Z, 13) if abs(self.Z) > TOLERANCE else 0.0
+        return f"{type(self).__name__}: (X={x:{strf}}, Y={y:{strf}}, Z={z:{strf}})"
 
     def __eq__(self, other: object) -> bool:
         """Vectors equal operator =="""
@@ -738,14 +744,15 @@ class Axis(metaclass=AxisMeta):
         )
 
     def __repr__(self) -> str:
-        """Display self"""
-        return f"({tuple(self.position)},{tuple(self.direction)})"
+        """Represent axis"""
+        return f"{type(self).__name__}({tuple(self.position)}, {tuple(self.direction)})"
 
     def __str__(self) -> str:
-        """Display self"""
-        return (
-            f"{type(self).__name__}: ({tuple(self.position)},{tuple(self.direction)})"
-        )
+        """Display axis"""
+        strf = f".{TOL_DIGITS}g"
+        position_str = ", ".join(f"{v:{strf}}" for v in tuple(self.position))
+        direction_str = ", ".join(f"{v:{strf}}" for v in tuple(self.direction))
+        return f"{type(self).__name__}: (position=({position_str}), direction=({direction_str}))"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Axis):
@@ -1315,7 +1322,7 @@ class Color:
         return Color(*tuple(self))
 
     def __str__(self) -> str:
-        """Generate string"""
+        """Display color"""
         rgb = self.wrapped.GetRGB()
         rgb = (rgb.Red(), rgb.Green(), rgb.Blue())
         try:
@@ -1326,11 +1333,11 @@ class Color:
             quantity_color_enum = self.wrapped.GetRGB().Name()
             name = Quantity_Color.StringName_s(quantity_color_enum)
             qualifier = "near"
-        return f"Color: {str(tuple(self))} {qualifier} {name.upper()!r}"
+        return f"{type(self).__name__}: {str(tuple(self))} {qualifier} {name.upper()!r}"
 
     def __repr__(self) -> str:
-        """Color repr"""
-        return f"Color{str(tuple(self))}"
+        """Represent colr"""
+        return f"{type(self).__name__}{str(tuple(self))}"
 
     @staticmethod
     def _rgb_from_int(triplet: int) -> tuple[float, float, float]:
@@ -1911,29 +1918,21 @@ class Location:
 
         return rv_trans, rv_rot
 
-    def __repr__(self):
-        """To String
+    def __repr__(self) -> str:
+        """Represent location"""
+        return (
+            f"{type(self).__name__}({tuple(self.position)}, {tuple(self.orientation)})"
+        )
 
-        Convert Location to String for display
-
-        Returns:
-            Location as String
-        """
-        position_str = ", ".join(f"{v:.2f}" for v in tuple(self)[0])
-        orientation_str = ", ".join(f"{v:.2f}" for v in tuple(self)[1])
-        return f"(p=({position_str}), o=({orientation_str}))"
-
-    def __str__(self):
-        """To String
-
-        Convert Location to String for display
-
-        Returns:
-            Location as String
-        """
-        position_str = ", ".join(f"{v:.2f}" for v in tuple(self)[0])
-        orientation_str = ", ".join(f"{v:.2f}" for v in tuple(self)[1])
-        return f"Location: (position=({position_str}), orientation=({orientation_str}))"
+    def __str__(self) -> str:
+        """Display location"""
+        strf = f".{TOL_DIGITS}g"
+        position_str = ", ".join(f"{v:{strf}}" for v in tuple(self.position))
+        orientation_str = ", ".join(f"{v:{strf}}" for v in tuple(self.orientation))
+        return (
+            f"{type(self).__name__}: "
+            f"(position=({position_str}), orientation=({orientation_str}))"
+        )
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
@@ -2231,7 +2230,7 @@ class OrientedBoundBox:
         return self.wrapped.IsOut(point.to_pnt())
 
     def __repr__(self) -> str:
-        return f"OrientedBoundBox(center={self.center()}, size={self.size}, plane={self.plane})"
+        return f"OrientedBoundBox(center={self.center()!r}, size={self.size!r}, plane={self.plane!r})"
 
 
 class Rotation(Location):
@@ -2854,18 +2853,23 @@ class Plane(metaclass=PlaneMeta):
         """intersect plane with other &"""
         return self.intersect(other)
 
-    def __repr__(self):
-        """To String
+    def __repr__(self) -> str:
+        """Represent plane"""
+        return (
+            f"{type(self).__name__}"
+            f"({tuple(self._origin)}, {tuple(self.x_dir)}, {tuple(self.z_dir)})"
+        )
 
-        Convert Plane to String for display
-
-        Returns:
-            Plane as String
-        """
-        origin_str = ", ".join(f"{v:.2f}" for v in tuple(self._origin))
-        x_dir_str = ", ".join(f"{v:.2f}" for v in tuple(self.x_dir))
-        z_dir_str = ", ".join(f"{v:.2f}" for v in tuple(self.z_dir))
-        return f"Plane(o=({origin_str}), x=({x_dir_str}), z=({z_dir_str}))"
+    def __str__(self) -> str:
+        """Display plane"""
+        strf = f".{TOL_DIGITS}g"
+        origin_str = ", ".join(f"{v:{strf}}" for v in tuple(self.origin))
+        x_dir_str = ", ".join(f"{v:{strf}}" for v in tuple(self.x_dir))
+        z_dir_str = ", ".join(f"{v:{strf}}" for v in tuple(self.z_dir))
+        return (
+            f"{type(self).__name__}: "
+            f"(origin=({origin_str}), x_dir=({x_dir_str}), z_dir=({z_dir_str}))"
+        )
 
     def reverse(self) -> Plane:
         """Reverse z direction of plane"""

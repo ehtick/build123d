@@ -85,8 +85,8 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(test_axis.direction, (0, 1, 0), 5)
 
     def test_axis_repr_and_str(self):
-        self.assertEqual(repr(Axis.X), "((0.0, 0.0, 0.0),(1.0, 0.0, 0.0))")
-        self.assertEqual(str(Axis.Y), "Axis: ((0.0, 0.0, 0.0),(0.0, 1.0, 0.0))")
+        self.assertEqual(repr(Axis.X), "Axis((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))")
+        self.assertEqual(str(Axis.Y), "Axis: (position=(0, 0, 0), direction=(0, 1, 0))")
 
     def test_axis_copy(self):
         x_copy = copy.copy(Axis.X)

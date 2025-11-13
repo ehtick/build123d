@@ -735,7 +735,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 loc = (
                     "Center" + str(tuple(node.center()))
                     if show_center
-                    else "Location" + repr(node.location)
+                    else repr(node.location)
                 )
             result += f"{treestr}{name}at {address:#x}, {loc}\n"
         return result
