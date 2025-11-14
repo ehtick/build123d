@@ -2123,7 +2123,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args = list(args)
         tools = list(tools)
         # Find the highest order class from all the inputs Solid > Vertex
-        order_dict = {type(s): type(s).order for s in [self] + args + tools}
+        order_dict = {
+            type(s): type(s).order
+            for s in [self] + args + tools
+            if hasattr(type(s), "order")
+        }
         highest_order = sorted(order_dict.items(), key=lambda item: item[1])[-1]
 
         # The base of the operation
