@@ -466,13 +466,7 @@ class Builder(ABC, Generic[ShapeT]):
                 elif mode == Mode.INTERSECT:
                     if self._obj is None:
                         raise RuntimeError("Nothing to intersect with")
-                    intersections: ShapeList[Shape] = ShapeList()
-                    for target in typed[self._shape]:
-                        result = self._obj.intersect(target)
-                        if result is None:
-                            continue
-                        intersections.extend(result)
-                    combined = self._sub_class(intersections)
+                    combined = self._obj.intersect(Compound(typed[self._shape]))
                 elif mode == Mode.REPLACE:
                     combined = self._sub_class(list(typed[self._shape]))
 
