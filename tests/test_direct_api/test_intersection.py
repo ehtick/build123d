@@ -296,7 +296,7 @@ sl1 = Box(2, 2, 2).solid()
 sl2 = Pos(Z=5) * Box(2, 2, 2).solid()
 sl3 = Cylinder(2, 1).solid() - Cylinder(1.5, 1).solid()
 
-wi7 = Wire([l1 := sl3.faces().sort_by(Axis.Z)[-1].edge().trim(.3, .4),
+wi7 = Wire([l1 := sl3.faces().sort_by(Axis.Z)[-1].edges()[0].trim(.3, .4),
           l2 := l1.trim(2, 3),
           RadiusArc(l1 @ 1, l2 @ 0, 1, short_sagitta=False)
           ])
@@ -430,7 +430,7 @@ freecad_matrix = [
     Case(vert, e1, [Vertex], "vertical, ellipse, tangent", None),
     Case(horz, e1, [Vertex], "horizontal, ellipse, tangent", None),
 
-    Case(c1, c2, [Vertex, Vertex], "circle, skew, intersect", "Should return 2 Vertices"),
+    Case(c1, c2, [Vertex, Vertex], "circle, skew, intersect", None),
     Case(c1, horz, [Vertex], "circle, horiz, tangent", None),
     Case(c2, horz, [Vertex], "circle, horiz, tangent", None),
     Case(c1, vert, [Vertex], "circle, vert, tangent", None),

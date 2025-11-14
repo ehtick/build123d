@@ -52,12 +52,11 @@ license:
 from __future__ import annotations
 
 import copy
-import numpy as np
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import combinations
 from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
-from typing import TYPE_CHECKING, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Literal, overload
 from typing import cast as tcast
 
 import numpy as np
@@ -729,122 +728,103 @@ class Mixin1D(Shape):
         def to_vertex(objs: Iterable) -> ShapeList:
             return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
 
-        common_set: ShapeList[Vertex | Edge] = ShapeList(self.edges())
-        target: ShapeList | Shape | Plane
+        def bool_op(
+            args: Sequence,
+            tools: Sequence,
+            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
+        ) -> ShapeList:
+            # Wrap Shape._bool_op for corrected output
+            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
+            if isinstance(intersections, ShapeList):
+                return intersections or ShapeList()
+            if isinstance(intersections, Shape) and not intersections.is_null:
+                return ShapeList([intersections])
+            return ShapeList()
+
+        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
+            # Remove lower order shapes from list which *appear* to be part of
+            # a higher order shape using a lazy distance check
+            # (sufficient for vertices, may be an issue for higher orders)
+            order_groups = []
+            for order in orders:
+                order_groups.append(
+                    ShapeList([s for s in shapes if isinstance(s, order)])
+                )
+
+            filtered_shapes = order_groups[-1]
+            for i in range(len(order_groups) - 1):
+                los = order_groups[i]
+                his: list = sum(order_groups[i + 1 :], [])
+                filtered_shapes.extend(
+                    ShapeList(
+                        lo
+                        for lo in los
+                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
+                    )
+                )
+
+            return filtered_shapes
+
+        common_set: ShapeList[Vertex | Edge | Wire] = ShapeList([self])
+        target: Shape | Plane
         for other in to_intersect:
             # Conform target type
-            # Vertices need to be Vector for set()
             match other:
                 case Axis():
-                    target = ShapeList([Edge(other)])
+                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
+                    bbox = self.bounding_box()
+                    dist = self.distance_to(other.position)
+                    dist = dist if dist >= 1 else 1
+                    target = Edge.make_line(
+                        other.position - other.direction * bbox.diagonal * dist,
+                        other.position + other.direction * bbox.diagonal * dist,
+                    )
                 case Plane():
                     target = other
                 case Vector():
                     target = Vertex(other)
                 case Location():
                     target = Vertex(other.position)
-                case Edge():
-                    target = ShapeList([other])
-                case Wire():
-                    target = ShapeList(other.edges())
                 case _ if issubclass(type(other), Shape):
                     target = other
                 case _:
                     raise ValueError(f"Unsupported type to_intersect: {type(other)}")
 
             # Find common matches
-            common: list[Vector | Edge] = []
-            result: ShapeList | Shape | None
+            common: list[Vertex | Edge | Wire] = []
+            result: ShapeList | None
             for obj in common_set:
                 match (obj, target):
-                    case obj, Shape() as target:
-                        # Find Shape with Edge/Wire
-                        if isinstance(target, Vertex):
-                            result = Shape.intersect(obj, target)
-                        else:
-                            result = target.intersect(obj)
+                    case (_, Plane()):
+                        target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
+                        operation = BRepAlgoAPI_Section()
+                        result = bool_op((obj,), (target,), operation)
+                        operation = BRepAlgoAPI_Common()
+                        result.extend(bool_op((obj,), (target,), operation))
 
-                        if result:
-                            if not isinstance(result, list):
-                                result = ShapeList([result])
-                            common.extend(to_vector(result))
+                    case (_, Vertex() | Edge() | Wire()):
+                        operation = BRepAlgoAPI_Section()
+                        section = bool_op((obj,), (target,), operation)
+                        result = section
+                        if not section:
+                            operation = BRepAlgoAPI_Common()
+                            result.extend(bool_op((obj,), (target,), operation))
 
-                    case Vertex() as obj, target:
-                        if not isinstance(target, ShapeList):
-                            target = ShapeList([target])
+                    case _ if issubclass(type(target), Shape):
+                        result = target.intersect(obj)
 
-                        for tar in target:
-                            if isinstance(tar, Edge):
-                                result = Shape.intersect(obj, tar)
-                            else:
-                                result = obj.intersect(tar)
-
-                            if result:
-                                if not isinstance(result, list):
-                                    result = ShapeList([result])
-                                common.extend(to_vector(result))
-
-                    case Edge() as obj, ShapeList() as targets:
-                        # Find any edge / edge intersection points
-                        for tar in targets:
-                            # Find crossing points
-                            try:
-                                intersection_points = obj.find_intersection_points(tar)
-                                common.extend(intersection_points)
-                            except ValueError:
-                                pass
-
-                            # Find common end points
-                            obj_end_points = set(Vector(v) for v in obj.vertices())
-                            tar_end_points = set(Vector(v) for v in tar.vertices())
-                            points = set.intersection(obj_end_points, tar_end_points)
-                            common.extend(points)
-
-                        # Find Edge/Edge overlaps
-                        result = obj._bool_op(
-                            (obj,), targets, BRepAlgoAPI_Common()
-                        ).edges()
-                        common.extend(result if isinstance(result, list) else [result])
-
-                    case Edge() as obj, Plane() as plane:
-                        # Find any edge / plane intersection points & edges
-                        # Find point intersections
-                        if obj.wrapped is None:
-                            continue
-                        geom_line = BRep_Tool.Curve_s(
-                            obj.wrapped, obj.param_at(0), obj.param_at(1)
-                        )
-                        geom_plane = Geom_Plane(plane.local_coord_system)
-                        intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
-                        plane_intersection_points: list[Vector] = []
-                        if intersection_calculator.IsDone():
-                            plane_intersection_points = [
-                                Vector(intersection_calculator.Point(i + 1))
-                                for i in range(intersection_calculator.NbPoints())
-                            ]
-                        common.extend(plane_intersection_points)
-
-                        # Find edge intersections
-                        if all(
-                            plane.contains(v)
-                            for v in obj.positions(i / 7 for i in range(8))
-                        ):  # is a 2D edge
-                            common.append(obj)
+                if result:
+                    common.extend(result)
 
             if common:
-                common_set = to_vertex(set(common))
-                # Remove Vertex intersections coincident to Edge intersections
-                vts = common_set.vertices()
-                eds = common_set.edges()
-                if vts and eds:
-                    filtered_vts = ShapeList(
-                        [
-                            v
-                            for v in vts
-                            if all(v.distance_to(e) > TOLERANCE for e in eds)
-                        ]
-                    )
-                    common_set = filtered_vts + eds
+                common_set = ShapeList()
+                for shape in common:
+                    if isinstance(shape, Wire):
+                        common_set.extend(shape.edges())
+                    else:
+                        common_set.append(shape)
+                common_set = to_vertex(set(to_vector(common_set)))
+                common_set = filter_shapes_by_order(common_set, [Vertex, Edge])
             else:
                 return None
 
