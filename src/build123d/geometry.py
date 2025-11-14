@@ -1483,56 +1483,50 @@ class Location:
 
     @overload
     def __init__(self):
-        """Empty location with not rotation or translation with respect to the original location."""
+        """Location with no position or orientation"""
 
     @overload
     def __init__(self, location: Location):
-        """Location with another given location."""
+        """Location from Location"""
 
     @overload
-    def __init__(self, translation: VectorLike, angle: float = 0):
-        """Location with translation with respect to the original location.
-        If angle != 0 then the location includes a rotation around z-axis by angle"""
+    def __init__(self, position: VectorLike, angle: float = 0):
+        """Location from position and rotation around z-axis by optional angle"""
 
     @overload
-    def __init__(self, translation: VectorLike, rotation: RotationLike | None = None):
-        """Location with translation with respect to the original location.
-        If rotation is not None then the location includes the rotation (see also Rotation class)
-        """
+    def __init__(self, position: VectorLike, orientation: RotationLike | None = None):
+        """Location from position and optional orientation (see Rotation class)"""
 
     @overload
     def __init__(
         self,
-        translation: VectorLike,
-        rotation: RotationLike,
+        position: VectorLike,
+        orientation: RotationLike,
         ordering: Extrinsic | Intrinsic,
     ):
-        """Location with translation with respect to the original location.
-        If rotation is not None then the location includes the rotation (see also Rotation class)
-        ordering defaults to Intrinsic.XYZ, but can also be set to Extrinsic
+        """Location from position and optional orientation (see Rotation class).
+        Orientation determined by optional ordering, defaults to Intrinsic.XYZ
         """
 
     @overload
     def __init__(self, plane: Plane):
-        """Location corresponding to the location of the Plane."""
+        """Location from location of Plane."""
 
     @overload
     def __init__(self, plane: Plane, plane_offset: VectorLike):
-        """Location corresponding to the angular location of the Plane with
-        translation plane_offset."""
+        """Location from location of Plane translated by plane_offset"""
 
     @overload
     def __init__(self, top_loc: TopLoc_Location):
-        """Location wrapping the low-level TopLoc_Location object t"""
+        """Location from low-level TopLoc_Location object"""
 
     @overload
     def __init__(self, gp_trsf: gp_Trsf):
-        """Location wrapping the low-level gp_Trsf object t"""
+        """Location from low-level gp_Trsf object"""
 
     @overload
-    def __init__(self, translation: VectorLike, direction: VectorLike, angle: float):
-        """Location with translation t and rotation around direction by angle
-        with respect to the original location."""
+    def __init__(self, position: VectorLike, direction: VectorLike, angle: float):
+        """Location from position and rotation around direction by angle"""
 
     def __init__(
         self, *args, **kwargs
@@ -1542,6 +1536,7 @@ class Location:
 
         position = kwargs.pop("position", None)
         orientation = kwargs.pop("orientation", None)
+        direction = kwargs.pop("direction", None)
         ordering = kwargs.pop("ordering", None)
         angle = kwargs.pop("angle", None)
         plane = kwargs.pop("plane", None)
@@ -1571,7 +1566,10 @@ class Location:
                     elif isinstance(args[1], (int, float)):
                         angle = args[1]
                 if len(args) > 2:
-                    if isinstance(args[2], (int, float)) and orientation is not None:
+                    if isinstance(args[1], (Vector, Iterable)) and isinstance(
+                        args[2], (int, float)
+                    ):
+                        direction = Vector(args[1])
                         angle = args[2]
                     elif isinstance(args[2], (Intrinsic, Extrinsic)):
                         ordering = args[2]
@@ -1600,7 +1598,7 @@ class Location:
         elif angle is not None:
             axis = gp_Ax1(
                 gp_Pnt(0, 0, 0),
-                Vector(orientation).to_dir() if orientation else gp_Dir(0, 0, 1),
+                Vector(direction).to_dir() if direction else gp_Dir(0, 0, 1),
             )
             trsf.SetRotation(axis, radians(angle))
 
