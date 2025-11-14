@@ -301,14 +301,14 @@ class Mixin2D(ABC, Shape):
             args: Sequence,
             tools: Sequence,
             operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
-        ) -> ShapeList | None:
+        ) -> ShapeList:
             # Wrap Shape._bool_op for corrected output
-            intersections = args[0]._bool_op(args, tools, operation)
+            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
             if isinstance(intersections, ShapeList):
-                return intersections or None
+                return intersections or ShapeList()
             if isinstance(intersections, Shape) and not intersections.is_null:
                 return ShapeList([intersections])
-            return None
+            return ShapeList()
 
         def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
             # Remove lower order shapes from list which *appear* to be part of
@@ -334,14 +334,20 @@ class Mixin2D(ABC, Shape):
 
             return filtered_shapes
 
-        common_set: ShapeList[Vertex | Edge | Face] = ShapeList(self.faces())
-        target: ShapeList | Shape
+        common_set: ShapeList[Vertex | Edge | Face | Shell] = ShapeList([self])
+        target: Shape
         for other in to_intersect:
             # Conform target type
-            # Vertices need to be Vector for set()
             match other:
                 case Axis():
-                    target = Edge(other)
+                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
+                    bbox = self.bounding_box()
+                    dist = self.distance_to(other.position)
+                    dist = dist if dist >= 1 else 1
+                    target = Edge.make_line(
+                        other.position - other.direction * bbox.diagonal * dist,
+                        other.position + other.direction * bbox.diagonal * dist,
+                    )
                 case Plane():
                     target = Face.make_plane(other)
                 case Vector():
@@ -354,43 +360,38 @@ class Mixin2D(ABC, Shape):
                     raise ValueError(f"Unsupported type to_intersect: {type(other)}")
 
             # Find common matches
-            common: list[Vector | Edge | Face] = []
-            result: ShapeList | Shape | None
+            common: list[Vertex | Edge | Wire | Face | Shell] = []
+            result: ShapeList | None
             for obj in common_set:
                 match (obj, target):
-                    case (Vertex(), Vertex()):
-                        result = obj.intersect(target)
-
-                    case (Edge(), Edge() | Wire()):
-                        result = obj.intersect(target)
-
                     case (_, Vertex() | Edge() | Wire() | Face() | Shell()):
-                        if isinstance(target, Wire):
-                            targets = target.edges()
-                        elif isinstance(target, Shell):
-                            targets = target.faces()
-                        else:
-                            targets = ShapeList([target])
-
-                        result = ShapeList()
-                        for t in targets:
-                            if not isinstance(obj, Edge) and not isinstance(t, (Edge)):
-                                # Face + Edge combinations may produce an intersection
-                                # with Common but always with Section.
-                                # No easy way to deduplicate
-                                operation = BRepAlgoAPI_Common()
-                                result.extend(bool_op((obj,), (t,), operation) or [])
-                            operation = BRepAlgoAPI_Section()
-                            result.extend(bool_op((obj,), (t,), operation) or [])
+                        operation = BRepAlgoAPI_Section()
+                        result = bool_op((obj,), (target,), operation)
+                        if not isinstance(obj, Edge | Wire) and not isinstance(
+                            target, (Edge | Wire)
+                        ):
+                            # Face + Edge combinations may produce an intersection
+                            # with Common but always with Section.
+                            # No easy way to deduplicate
+                            operation = BRepAlgoAPI_Common()
+                            result.extend(bool_op((obj,), (target,), operation))
 
                     case _ if issubclass(type(target), Shape):
                         result = target.intersect(obj)
 
                 if result:
-                    common.extend(to_vector(result))
+                    common.extend(result)
 
             if common:
-                common_set = to_vertex(set(common))
+                common_set = ShapeList()
+                for shape in common:
+                    if isinstance(shape, Wire):
+                        common_set.extend(shape.edges())
+                    elif isinstance(shape, Shell):
+                        common_set.extend(shape.faces())
+                    else:
+                        common_set.append(shape)
+                common_set = to_vertex(set(to_vector(common_set)))
                 common_set = filter_shapes_by_order(common_set, [Vertex, Edge, Face])
             else:
                 return None

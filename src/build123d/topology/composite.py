@@ -728,24 +728,19 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
             args: Sequence,
             tools: Sequence,
             operation: BRepAlgoAPI_Common | BRepAlgoAPI_Section,
-        ) -> ShapeList | None:
+        ) -> ShapeList:
             # Wrap Shape._bool_op for corrected output
-            intersections = args[0]._bool_op(args, tools, operation)
+            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
             if isinstance(intersections, ShapeList):
-                return intersections or None
+                return intersections
             if isinstance(intersections, Shape) and not intersections.is_null:
                 return ShapeList([intersections])
-            return None
+            return ShapeList()
 
         def expand_compound(compound: Compound) -> ShapeList:
             shapes = ShapeList(compound.children)
             for shape_type in [Vertex, Edge, Wire, Face, Shell, Solid]:
-                new = compound.get_type(shape_type)
-                if shape_type == Wire:
-                    new = [edge for new_shape in new for edge in new_shape.edges()]
-                elif shape_type == Shell:
-                    new = [face for new_shape in new for face in new_shape.faces()]
-                shapes.extend(new)
+                shapes.extend(compound.get_type(shape_type))
             return shapes
 
         def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
@@ -772,14 +767,20 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
 
             return filtered_shapes
 
-        common_set: ShapeList[Vertex | Edge | Face | Solid] = expand_compound(self)
+        common_set: ShapeList[Shape] = expand_compound(self)
         target: ShapeList | Shape
         for other in to_intersect:
             # Conform target type
-            # Vertices need to be Vector for set()
             match other:
                 case Axis():
-                    target = Edge(other)
+                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
+                    bbox = self.bounding_box()
+                    dist = self.distance_to(other.position)
+                    dist = dist if dist >= 1 else 1
+                    target = Edge.make_line(
+                        other.position - other.direction * bbox.diagonal * dist,
+                        other.position + other.direction * bbox.diagonal * dist,
+                    )
                 case Plane():
                     target = Face.make_plane(other)
                 case Vector():
@@ -794,58 +795,50 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
                     raise ValueError(f"Unsupported type to_intersect: {type(other)}")
 
             # Find common matches
-            common: list[Vector | Edge | Face] = []
-            result: ShapeList | Shape | None
+            common: list[Vertex | Edge | Wire | Face | Shell | Solid] = []
+            result: ShapeList
             for obj in common_set:
-                match (obj, target):
-                    case (Vertex(), Vertex()):
-                        result = obj.intersect(target)
-
-                    case (Edge(), Edge() | Wire()):
-                        result = obj.intersect(target)
-
-                    case (_, ShapeList()):
-                        result = ShapeList()
-                        for t in target:
-                            if (
-                                not isinstance(obj, Edge) and not isinstance(t, (Edge))
-                            ) or (isinstance(obj, Solid) or isinstance(t, Solid)):
-                                # Face + Edge combinations may produce an intersection
-                                # with Common but always with Section.
-                                # No easy way to deduplicate
-                                # Many Solid + Edge combinations need Common
-                                operation = BRepAlgoAPI_Common()
-                                result.extend(bool_op((obj,), (t,), operation) or [])
-                            operation = BRepAlgoAPI_Section()
-                            result.extend(bool_op((obj,), (t,), operation) or [])
-
-                    case _ if issubclass(type(target), Shape):
-                        if isinstance(target, Wire):
-                            targets = target.edges()
-                        elif isinstance(target, Shell):
-                            targets = target.faces()
-                        else:
-                            targets = ShapeList([target])
-
-                        result = ShapeList()
-                        for t in targets:
-                            if (
-                                not isinstance(obj, Edge) and not isinstance(t, (Edge))
-                            ) or (isinstance(obj, Solid) or isinstance(t, Solid)):
-                                # Face + Edge combinations may produce an intersection
-                                # with Common but always with Section.
-                                # No easy way to deduplicate
-                                # Many Solid + Edge combinations need Common
-                                operation = BRepAlgoAPI_Common()
-                                result.extend(bool_op((obj,), (t,), operation) or [])
-                            operation = BRepAlgoAPI_Section()
-                            result.extend(bool_op((obj,), (t,), operation) or [])
+                if isinstance(target, Shape):
+                    target = ShapeList([target])
+                result = ShapeList()
+                for t in target:
+                    operation = BRepAlgoAPI_Section()
+                    result.extend(bool_op((obj,), (t,), operation))
+                    if (
+                        not isinstance(obj, Edge | Wire)
+                        and not isinstance(t, Edge | Wire)
+                    ) or (
+                        isinstance(obj, Solid | Compound)
+                        or isinstance(t, Solid | Compound)
+                    ):
+                        # Face + Edge combinations may produce an intersection
+                        # with Common but always with Section.
+                        # No easy way to deduplicate
+                        # Many Solid + Edge combinations need Common
+                        operation = BRepAlgoAPI_Common()
+                        result.extend(bool_op((obj,), (t,), operation))
 
                 if result:
-                    common.extend(to_vector(result))
+                    common.extend(result)
 
+            expanded: ShapeList = ShapeList()
             if common:
-                common_set = to_vertex(set(common))
+                for shape in common:
+                    if isinstance(shape, Compound):
+                        expanded.extend(expand_compound(shape))
+                    else:
+                        expanded.append(shape)
+
+            if expanded:
+                common_set = ShapeList()
+                for shape in expanded:
+                    if isinstance(shape, Wire):
+                        common_set.extend(shape.edges())
+                    elif isinstance(shape, Shell):
+                        common_set.extend(shape.faces())
+                    else:
+                        common_set.append(shape)
+                common_set = to_vertex(set(to_vector(common_set)))
                 common_set = filter_shapes_by_order(
                     common_set, [Vertex, Edge, Face, Solid]
                 )
