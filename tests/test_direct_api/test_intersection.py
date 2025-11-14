@@ -355,10 +355,10 @@ def test_shape_3d(obj, target, expected):
     run_test(obj, target, expected)
 
 # Compound Shapes
-cp1 = Compound() + GridLocations(5, 0, 2, 1) * Vertex()
-cp2 = Compound() + GridLocations(5, 0, 2, 1) * Line((0, -1), (0, 1))
-cp3 = Compound() + GridLocations(5, 0, 2, 1) * Rectangle(2, 2)
-cp4 = Compound() + GridLocations(5, 0, 2, 1) * Box(2, 2, 2)
+cp1 = Compound(GridLocations(5, 0, 2, 1) * Vertex())
+cp2 = Compound(GridLocations(5, 0, 2, 1) * Line((0, -1), (0, 1)))
+cp3 = Compound(GridLocations(5, 0, 2, 1) * Rectangle(2, 2))
+cp4 = Compound(GridLocations(5, 0, 2, 1) * Box(2, 2, 2))
 
 cv1 = Curve() + [ed1, ed2, ed3]
 sk1 = Sketch() + [fc1, fc2, fc3]

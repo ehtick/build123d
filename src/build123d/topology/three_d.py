@@ -491,7 +491,7 @@ class Mixin3D(Shape[TOPODS]):
                         other.position + other.direction * bbox.diagonal * dist,
                     )
                 case Plane():
-                    target = Face.make_plane(other)
+                    target = Face(other)
                 case Vector():
                     target = Vertex(other)
                 case Location():
