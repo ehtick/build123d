@@ -128,7 +128,7 @@ from .utils import (
 from .zero_d import Vertex
 
 
-class Compound(Mixin3D, Shape[TopoDS_Compound]):
+class Compound(Mixin3D[TopoDS_Compound]):
     """A Compound in build123d is a topological entity representing a collection of
     geometric shapes grouped together within a single structure. It serves as a
     container for organizing diverse shapes like edges, faces, or solids. This
@@ -453,7 +453,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
         will be a Wire, otherwise a Shape.
         """
         if self._dim == 1:
-            curve = Curve() if self.wrapped is None else Curve(self.wrapped)
+            curve = Curve() if self._wrapped is None else Curve(self.wrapped)
             sum1d: Edge | Wire | ShapeList[Edge] = curve + other
             if isinstance(sum1d, ShapeList):
                 result1d: Curve | Wire = Curve(sum1d)
@@ -515,7 +515,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
         Check if empty.
         """
 
-        return TopoDS_Iterator(self.wrapped).More()
+        return self._wrapped is not None and TopoDS_Iterator(self.wrapped).More()
 
     def __iter__(self) -> Iterator[Shape]:
         """
@@ -532,7 +532,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
     def __len__(self) -> int:
         """Return the number of subshapes"""
         count = 0
-        if self.wrapped is not None:
+        if self._wrapped is not None:
             for _ in self:
                 count += 1
         return count
@@ -600,7 +600,7 @@ class Compound(Mixin3D, Shape[TopoDS_Compound]):
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return ShapeList()
         if isinstance(self.wrapped, TopoDS_Compound):
             # pylint: disable=not-an-iterable
