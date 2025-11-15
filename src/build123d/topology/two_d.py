@@ -67,7 +67,7 @@ import OCP.TopAbs as ta
 from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgo import BRepAlgo
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Section
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeEdge,
     BRepBuilderAPI_MakeFace,
@@ -279,6 +279,126 @@ class Mixin2D(ABC, Shape[TOPODS]):
             result.append((pnt, normal))
 
         return result
+
+    def intersect(
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> None | ShapeList[Vertex | Edge | Face]:
+        """Intersect Face with Shape or geometry object
+
+        Args:
+            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
+
+        Returns:
+            ShapeList[Vertex | Edge | Face] | None: ShapeList of vertices, edges, and/or
+                faces.
+        """
+
+        def to_vector(objs: Iterable) -> ShapeList:
+            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+
+        def to_vertex(objs: Iterable) -> ShapeList:
+            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+
+        def bool_op(
+            args: Sequence,
+            tools: Sequence,
+            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
+        ) -> ShapeList:
+            # Wrap Shape._bool_op for corrected output
+            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
+            if isinstance(intersections, ShapeList):
+                return intersections or ShapeList()
+            if isinstance(intersections, Shape) and not intersections.is_null:
+                return ShapeList([intersections])
+            return ShapeList()
+
+        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
+            # Remove lower order shapes from list which *appear* to be part of
+            # a higher order shape using a lazy distance check
+            # (sufficient for vertices, may be an issue for higher orders)
+            order_groups = []
+            for order in orders:
+                order_groups.append(
+                    ShapeList([s for s in shapes if isinstance(s, order)])
+                )
+
+            filtered_shapes = order_groups[-1]
+            for i in range(len(order_groups) - 1):
+                los = order_groups[i]
+                his: list = sum(order_groups[i + 1 :], [])
+                filtered_shapes.extend(
+                    ShapeList(
+                        lo
+                        for lo in los
+                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
+                    )
+                )
+
+            return filtered_shapes
+
+        common_set: ShapeList[Vertex | Edge | Face | Shell] = ShapeList([self])
+        target: Shape
+        for other in to_intersect:
+            # Conform target type
+            match other:
+                case Axis():
+                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
+                    bbox = self.bounding_box()
+                    dist = self.distance_to(other.position)
+                    dist = dist if dist >= 1 else 1
+                    target = Edge.make_line(
+                        other.position - other.direction * bbox.diagonal * dist,
+                        other.position + other.direction * bbox.diagonal * dist,
+                    )
+                case Plane():
+                    target = Face(other)
+                case Vector():
+                    target = Vertex(other)
+                case Location():
+                    target = Vertex(other.position)
+                case _ if issubclass(type(other), Shape):
+                    target = other
+                case _:
+                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
+
+            # Find common matches
+            common: list[Vertex | Edge | Wire | Face | Shell] = []
+            result: ShapeList | None
+            for obj in common_set:
+                match (obj, target):
+                    case (_, Vertex() | Edge() | Wire() | Face() | Shell()):
+                        operation = BRepAlgoAPI_Section()
+                        result = bool_op((obj,), (target,), operation)
+                        if not isinstance(obj, Edge | Wire) and not isinstance(
+                            target, (Edge | Wire)
+                        ):
+                            # Face + Edge combinations may produce an intersection
+                            # with Common but always with Section.
+                            # No easy way to deduplicate
+                            operation = BRepAlgoAPI_Common()
+                            result.extend(bool_op((obj,), (target,), operation))
+
+                    case _ if issubclass(type(target), Shape):
+                        result = target.intersect(obj)
+
+                if result:
+                    common.extend(result)
+
+            if common:
+                common_set = ShapeList()
+                for shape in common:
+                    if isinstance(shape, Wire):
+                        common_set.extend(shape.edges())
+                    elif isinstance(shape, Shell):
+                        common_set.extend(shape.faces())
+                    else:
+                        common_set.append(shape)
+                common_set = to_vertex(set(to_vector(common_set)))
+                common_set = filter_shapes_by_order(common_set, [Vertex, Edge, Face])
+            else:
+                return None
+
+        return ShapeList(common_set)
 
     @abstractmethod
     def location_at(self, *args: Any, **kwargs: Any) -> Location:
@@ -683,15 +803,13 @@ class Face(Mixin2D[TopoDS_Face]):
             ).sort_by(Axis(cog, cross_dir))
 
             bottom_area = sum(f.area for f in bottom_list)
-            intersect_area = 0.0
             for flipped_face, bottom_face in zip(top_flipped_list, bottom_list):
                 intersection = flipped_face.intersect(bottom_face)
-                if intersection is None or isinstance(intersection, list):
+                if intersection is None:
                     intersect_area = -1.0
                     break
                 else:
-                    assert isinstance(intersection, Face)
-                    intersect_area += intersection.area
+                    intersect_area = sum(f.area for f in intersection.faces())
 
             if intersect_area == -1.0:
                 continue
