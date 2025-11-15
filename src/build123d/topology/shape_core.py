@@ -1339,7 +1339,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def intersect(
         self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | Self | ShapeList[Self]:
+    ) -> None | ShapeList[Self]:
         """Intersection of the arguments and this shape
 
         Args:
@@ -1347,8 +1347,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 intersect with
 
         Returns:
-            Self | ShapeList[Self]: Resulting object may be of a different class than self
-                or a ShapeList if multiple non-Compound object created
+            None | ShapeList[Self]: Resulting ShapeList may contain different class
+                than self
         """
 
         def _to_vertex(vec: Vector) -> Vertex:
@@ -1392,15 +1392,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         # Find the shape intersections
         intersect_op = BRepAlgoAPI_Common()
-        shape_intersections = self._bool_op((self,), objs, intersect_op)
-        if isinstance(shape_intersections, ShapeList) and not shape_intersections:
-            return None
-        if (
-            not isinstance(shape_intersections, ShapeList)
-            and shape_intersections.is_null
-        ):
-            return None
-        return shape_intersections
+        intersections = self._bool_op((self,), objs, intersect_op)
+        if isinstance(intersections, ShapeList):
+            return intersections or None
+        if isinstance(intersections, Shape) and not intersections.is_null:
+            return ShapeList([intersections])
+        return None
 
     def is_equal(self, other: Shape) -> bool:
         """Returns True if two shapes are equal, i.e. if they share the same
@@ -2138,7 +2135,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args = list(args)
         tools = list(tools)
         # Find the highest order class from all the inputs Solid > Vertex
-        order_dict = {type(s): type(s).order for s in [self] + args + tools}
+        order_dict = {
+            type(s): type(s).order
+            for s in [self] + args + tools
+            if hasattr(type(s), "order")
+        }
         highest_order = sorted(order_dict.items(), key=lambda item: item[1])[-1]
 
         # The base of the operation
