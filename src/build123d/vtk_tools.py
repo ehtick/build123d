@@ -80,7 +80,7 @@ def to_vtk_poly_data(
     if not HAS_VTK:
         warnings.warn("VTK not supported", stacklevel=2)
 
-    if obj.wrapped is None:
+    if not obj:
         raise ValueError("Cannot convert an empty shape")
 
     vtk_shape = IVtkOCC_Shape(obj.wrapped)

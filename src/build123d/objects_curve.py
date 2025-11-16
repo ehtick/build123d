@@ -29,6 +29,7 @@ license:
 from __future__ import annotations
 
 import copy as copy_module
+import warnings
 import numpy as np
 import sympy  # type: ignore
 from collections.abc import Iterable
@@ -792,7 +793,7 @@ class FilletPolyline(BaseLineObject):
 
     Args:
         pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
-        radius (float): fillet radius
+        radius (float | Iterable[float]): radius to fillet at each vertex or a single value for all vertices
         close (bool, optional): close end points with extra Edge and corner fillets.
             Defaults to False
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -807,7 +808,7 @@ class FilletPolyline(BaseLineObject):
     def __init__(
         self,
         *pts: VectorLike | Iterable[VectorLike],
-        radius: float,
+        radius: float | Iterable[float],
         close: bool = False,
         mode: Mode = Mode.ADD,
     ):
@@ -818,8 +819,18 @@ class FilletPolyline(BaseLineObject):
 
         if len(points) < 2:
             raise ValueError("FilletPolyline requires two or more pts")
-        if radius <= 0:
-            raise ValueError("radius must be positive")
+
+        if isinstance(radius, (int, float)):
+            radius_list = [radius] * len(points)  # Single radius for all points
+        else:
+            radius_list = list(radius)
+            if len(radius_list) != len(points) - int(not close) * 2:
+                raise ValueError(
+                    f"radius list length ({len(radius_list)}) must match angle count ({ len(points) - int(not close) * 2})"
+                )
+        for r in radius_list:
+            if r <= 0:
+                raise ValueError(f"radius {r} must be positive")
 
         lines_pts = WorkplaneList.localize(*points)
 
@@ -851,12 +862,14 @@ class FilletPolyline(BaseLineObject):
 
         # For each corner vertex create a new fillet Edge
         fillets = []
-        for vertex, edges in vertex_to_edges.items():
+        for i, (vertex, edges) in enumerate(vertex_to_edges.items()):
             if len(edges) != 2:
                 continue
             other_vertices = {ve for e in edges for ve in e.vertices() if ve != vertex}
             third_edge = Edge.make_line(*[v for v in other_vertices])
-            fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(radius, [vertex])
+            fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(
+                radius_list[i - int(not close)], [vertex]
+            )
             fillets.append(fillet_face.edges().filter_by(GeomType.CIRCLE)[0])
 
         # Create the Edges that join the fillets
@@ -1362,6 +1375,12 @@ class PointArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
+    warnings.warn(
+        "The 'PointArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -1440,6 +1459,12 @@ class PointArcTangentArc(BaseEdgeObject):
         ValueError: Point is already tangent to arc
         RuntimeError: No tangent arc found
     """
+
+    warnings.warn(
+        "The 'PointArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 
@@ -1585,6 +1610,12 @@ class ArcArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
+    warnings.warn(
+        "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -1684,6 +1715,12 @@ class ArcArcTangentArc(BaseEdgeObject):
             chord), else the long sagitta crossing the center. Defaults to True
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
+
+    warnings.warn(
+        "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 

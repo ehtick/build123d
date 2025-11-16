@@ -299,7 +299,8 @@ class TestShape(unittest.TestCase):
         predicted_location = Location(offset) * Rotation(*rotation)
         located_shape = Solid.make_box(1, 1, 1).locate(predicted_location)
         intersect = shape.intersect(located_shape)
-        self.assertAlmostEqual(intersect.volume, 1, 5)
+        volume = sum(s.volume for s in intersect.solids())
+        self.assertAlmostEqual(volume, 1, 5)
 
     def test_position_and_orientation(self):
         box = Solid.make_box(1, 1, 1).locate(Location((1, 2, 3), (10, 20, 30)))
@@ -475,7 +476,7 @@ class TestShape(unittest.TestCase):
         self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
-        verts, edges = Vertex(1, 2, 0)._ocp_section(Face.make_plane(Plane.XY))
+        verts, edges = Vertex(1, 2, 0)._ocp_section(Face(Plane.XY))
         self.assertAlmostEqual(Vector(verts[0]), (1, 2, 0), 5)
         self.assertListEqual(edges, [])
 
@@ -493,7 +494,7 @@ class TestShape(unittest.TestCase):
         self.assertEqual(len(edges1), 1)
         self.assertAlmostEqual(edges1[0].length, 20, 5)
 
-        vertices2, edges2 = cylinder._ocp_section(Face.make_plane(pln))
+        vertices2, edges2 = cylinder._ocp_section(Face(pln))
         self.assertEqual(len(vertices2), 1)
         self.assertEqual(len(edges2), 1)
         self.assertAlmostEqual(Vector(vertices2[0]), (5, 0, 0), 5)
@@ -588,7 +589,7 @@ class TestShape(unittest.TestCase):
             empty.distance_to_with_closest_points(Vector(1, 1, 1))
         with self.assertRaises(ValueError):
             empty.distance_to(Vector(1, 1, 1))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AttributeError):
             box.intersect(empty_loc)
         self.assertEqual(empty._ocp_section(Vertex(1, 1, 1)), ([], []))
         self.assertEqual(empty.faces_intersected_by_axis(Axis.Z), ShapeList())

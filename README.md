@@ -1,5 +1,5 @@
 <p align="center">
-    <img alt="build123d logo" src="docs/assets/build123d_logo/logo-banner.svg">
+    <img alt="build123d logo" src="https://github.com/gumyr/build123d/raw/dev/docs/assets/build123d_logo/logo-banner.svg">
 </p>
 
 [![Documentation Status](https://readthedocs.org/projects/build123d/badge/?version=latest)](https://build123d.readthedocs.io/en/latest/?badge=latest)
@@ -19,9 +19,17 @@
 [![DOI](https://zenodo.org/badge/510925389.svg)](https://doi.org/10.5281/zenodo.14872322)
 
 
-Build123d is a python-based, parametric, [boundary representation (BREP)][BREP] modeling framework for 2D and 3D CAD. It's built on the [Open Cascade] geometric kernel and allows for the creation of complex models using a simple and intuitive python syntax. Build123d can be used to create models for 3D printing, CNC machining, laser cutting, and other manufacturing processes.  Models can be exported to a wide variety of popular CAD tools such as [FreeCAD] and SolidWorks.
+Build123d is a Python-based, parametric [boundary representation (BREP)][BREP] modeling framework for 2D and 3D CAD. Built on the [Open Cascade] geometric kernel, it provides a clean, fully Pythonic interface for creating precise models suitable for 3D printing, CNC machining, laser cutting, and other manufacturing processes. Models can be exported to popular CAD tools such as [FreeCAD] and SolidWorks.
 
-Build123d could be considered as an evolution of [CadQuery] where the somewhat restrictive Fluent API (method chaining) is replaced with stateful context managers - e.g. `with` blocks - thus enabling the full python toolbox: for loops, references to objects, object sorting and filtering, etc.
+Designed for modern, maintainable CAD-as-code, build123d combines clear architecture with expressive, algebraic modeling. It offers:
+- Minimal or no internal state depending on mode,
+- Explicit 1D, 2D, and 3D geometry classes with well-defined operations,
+- Extensibility through subclassing and functional composition—no monkey patching,
+- Standards-compliant code (PEP 8, mypy, pylint) with rich pylance type hints,
+- Deep Python integration—selectors as lists, locations as iterables, and natural conversions (Solid(shell), tuple(Vector)),
+- Operator-driven modeling (obj += sub_obj, Plane.XZ * Pos(X=5) * Rectangle(1, 1)) for algebraic, readable, and composable design logic.
+
+The result is a framework that feels native to Python while providing the full power of OpenCascade geometry underneath.
 
 The documentation for **build123d** can be found at [readthedocs](https://build123d.readthedocs.io/en/latest/index.html).
 
@@ -61,6 +69,10 @@ python3 -m pip install -e .
 ```
 
 Further installation instructions are available (e.g. Poetry) see the [installation section on readthedocs](https://build123d.readthedocs.io/en/latest/installation.html).
+
+Attribution:
+
+Build123d was originally derived from portions of the [CadQuery] codebase but has since been extensively refactored and restructured into an independent system.
 
 [BREP]: https://en.wikipedia.org/wiki/Boundary_representation
 [CadQuery]: https://cadquery.readthedocs.io/en/latest/index.html
