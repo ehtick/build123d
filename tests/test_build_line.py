@@ -183,7 +183,7 @@ class BuildLineTests(unittest.TestCase):
         self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 2)
         self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 3)
 
-        with self.assertRaises(ValueError):
+        with BuildLine(Plane.YZ):
             p = FilletPolyline(
                 (0, 0),
                 (10, 0),
@@ -192,6 +192,9 @@ class BuildLineTests(unittest.TestCase):
                 radius=(1, 2, 3, 0),
                 close=True,
             )
+        self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 3)
+        self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 4)
+
 
         with self.assertRaises(ValueError):
             p = FilletPolyline(
