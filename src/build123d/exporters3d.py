@@ -182,7 +182,7 @@ def export_brep(
 
 def export_gltf(
     to_export: Shape,
-    file_path: PathLike | str | bytes,
+    file_path: PathLike | str | bytes | BytesIO,
     unit: Unit = Unit.MM,
     binary: bool = False,
     linear_deflection: float = 0.001,
@@ -198,7 +198,7 @@ def export_gltf(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (Union[PathLike, str, bytes]): glTF file path
+        file_path (Union[PathLike, str, bytes, BytesIO]): glTF file path
         unit (Unit, optional): shape units. Defaults to Unit.MM.
         binary (bool, optional): output format. Defaults to False.
         linear_deflection (float, optional): A linear deflection setting which limits
@@ -234,9 +234,12 @@ def export_gltf(
     # Create the XCAF document
     doc: TDocStd_Document = _create_xde(to_export, unit)
 
+    if not isinstance(file_path, BytesIO):
+        file_path = fsdecode(file_path)
+
     # Write the glTF file
     writer = RWGltf_CafWriter(
-        theFile=TCollection_AsciiString(fsdecode(file_path)), theIsBinary=binary
+        theFile=TCollection_AsciiString(file_path, theIsBinary=binary
     )
     writer.SetParallel(True)
     index_map = TColStd_IndexedDataMapOfStringString()
@@ -262,7 +265,7 @@ def export_gltf(
 
 def export_step(
     to_export: Shape,
-    file_path: PathLike | str | bytes,
+    file_path: PathLike | str | bytes | BytesIO,
     unit: Unit = Unit.MM,
     write_pcurves: bool = True,
     precision_mode: PrecisionMode = PrecisionMode.AVERAGE,
@@ -277,7 +280,7 @@ def export_step(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (Union[PathLike, str, bytes]): step file path
+        file_path (Union[PathLike, str, bytes, BytesIO]): step file path
         unit (Unit, optional): shape units. Defaults to Unit.MM.
         write_pcurves (bool, optional): write parametric curves to the STEP file.
             Defaults to True.
@@ -326,7 +329,10 @@ def export_step(
     Interface_Static.SetIVal_s("write.precision.mode", precision_mode.value)
     writer.Transfer(doc, STEPControl_StepModelType.STEPControl_AsIs)
 
-    status = writer.Write(fspath(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
+    if not isinstance(file_path, BytesIO):
+        file_path = fspath(file_path)
+
+    status = writer.Write(file_path) == IFSelect_ReturnStatus.IFSelect_RetDone
     if not status:
         raise RuntimeError("Failed to write STEP file")
 
@@ -335,7 +341,7 @@ def export_step(
 
 def export_stl(
     to_export: Shape,
-    file_path: PathLike | str | bytes,
+    file_path: PathLike | str | bytes | BytesIO,
     tolerance: float = 1e-3,
     angular_tolerance: float = 0.1,
     ascii_format: bool = False,
@@ -346,7 +352,7 @@ def export_stl(
 
     Args:
         to_export (Shape): object or assembly
-        file_path (str): The path and file name to write the STL output to.
+        file_path (Union[PathLike, str, bytes, BytesIO]): The path and file name to write the STL output to.
         tolerance (float, optional): A linear deflection setting which limits the distance
             between a curve and its tessellation. Setting this value too low will result in
             large meshes that can consume computing resources. Setting the value too high can
@@ -369,6 +375,7 @@ def export_stl(
 
     writer.ASCIIMode = ascii_format
 
-    file_path = str(file_path)
+    if not isinstance(file_path, BytesIO):
+        file_path = fsdecode(file_path)
 
     return writer.Write(to_export.wrapped, file_path)
