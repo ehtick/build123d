@@ -174,7 +174,7 @@ def _as_gcc_arg(obj: Edge | Vector, constaint: Tangency) -> tuple[
     - Edge -> (QualifiedCurve, h2d, first, last, True)
     - Vector -> (CartesianPoint, None, None, None, False)
     """
-    if obj.wrapped is None:
+    if not obj:
         raise TypeError("Can't create a qualified curve from empty edge")
 
     if isinstance(obj.wrapped, TopoDS_Edge):

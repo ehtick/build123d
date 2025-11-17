@@ -8,7 +8,7 @@ Position a shape relative to the XY plane
 
 For the following use the helper function:
 
-.. code-block:: python
+.. code-block:: build123d
 
     def location_symbol(location: Location, scale: float = 1) -> Compound:
         return Compound.make_triad(axes_scale=scale).locate(location)
@@ -20,7 +20,7 @@ For the following use the helper function:
 
 1. **Positioning at a location**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
@@ -33,7 +33,7 @@ For the following use the helper function:
 
 2) **Positioning on a plane**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     plane = Plane.XZ
 
@@ -51,7 +51,7 @@ Relative positioning to a plane
 
 1. **Position an object on a plane relative to the plane**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
@@ -74,7 +74,7 @@ Note: ``Plane(loc) *``, ``Plane(face.location) *`` and ``loc *`` are equivalent 
 
 2. **Rotate an object on a plane relative to the plane**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
@@ -93,7 +93,7 @@ The box is rotated via ``Rot(Z=80)`` around the ``z``-axis of the underlying loc
 
 More general:
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
@@ -111,7 +111,7 @@ The box is rotated via ``Rot(20, 40, 80)`` around all three axes relative to the
 
 3. **Rotate and position an object relative to a location**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
@@ -130,7 +130,7 @@ The box is positioned via ``Pos(0.2, 0.4, 0.1)`` relative to the location ``loc 
 
 4. **Position and rotate an object relative to a location**
 
-.. code-block:: python
+    .. code-block:: build123d
 
     loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 

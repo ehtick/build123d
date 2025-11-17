@@ -365,7 +365,7 @@ def chamfer(
 
     if target._dim == 1:
         if isinstance(target, BaseLineObject):
-            if target.wrapped is None:
+            if not target:
                 target = Wire([])  # empty wire
             else:
                 target = Wire(target.wrapped)
@@ -465,7 +465,7 @@ def fillet(
 
     if target._dim == 1:
         if isinstance(target, BaseLineObject):
-            if target.wrapped is None:
+            if not target:
                 target = Wire([])  # empty wire
             else:
                 target = Wire(target.wrapped)
