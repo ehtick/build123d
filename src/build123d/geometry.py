@@ -1160,8 +1160,8 @@ class Color:
 
         Args:
             color_like (ColorLike):
-                name, ex: "red",
-                name + alpha, ex: ("red", 0.5),
+                name, ex: "red" or "#ff0000",
+                name + alpha, ex: ("red", 0.5) or "#ff000080",
                 rgb, ex: (1., 0., 0.),
                 rgb + alpha, ex: (1., 0., 0., 0.5),
                 hex, ex: 0xff0000,
@@ -1172,7 +1172,7 @@ class Color:
 
     @overload
     def __init__(self, name: str, alpha: float = 1.0):
-        """Color from name
+        """Color from name or hexadecimal string
 
         `CSS3 Color Names
             <https://en.wikipedia.org/wiki/Web_colors#Extended_colors>`
@@ -1180,8 +1180,10 @@ class Color:
         `OCCT Color Names
             <https://dev.opencascade.org/doc/refman/html/_quantity___name_of_color_8hxx.html>`_
 
+        Hexadecimal string may be RGB or RGBA format with leading "#"     
+
         Args:
-            name (str): color, e.g. "blue"
+            name (str): color, e.g. "blue" or "#0000ff""
             alpha (float, optional): 0.0 <= alpha <= 1.0. Defaults to 1.0
         """
 
@@ -1237,6 +1239,27 @@ class Color:
                         return
                     case str():
                         name, alpha = fill_defaults(args, (name, alpha))
+                        name = name.strip()
+                        if "#" in name:
+                            # extract alpha from hex string
+                            hex_a = format(int(alpha * 255), "x")
+                            if len(name) == 5:
+                                hex_a = name[4] * 2
+                                name = name[:4]
+                            elif len(name) == 9:
+                                hex_a = name[7:9]
+                                name = name[:7]
+                            elif len(name) not in [4, 5, 7, 9]:
+                                raise ValueError(
+                                    f'"{name}" is not a valid hexadecimal color value.'
+                                )
+                            try:
+                                if hex_a:
+                                    alpha = int(hex_a, 16) / 0xFF
+                            except ValueError as ex:
+                                raise ValueError(
+                                    f"Invald alpha hex string: {hex_a}"
+                                ) from ex
                     case int():
                         color_code, alpha = fill_defaults(args, (color_code, alpha))
                     case float():
@@ -1296,16 +1319,6 @@ class Color:
         self.iter_index += 1
         return value
 
-    def to_tuple(self):
-        """Value as tuple"""
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'tuple(Color)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return tuple(self)
-
     def __copy__(self) -> Color:
         """Return copy of self"""
         return Color(*tuple(self))
@@ -1340,7 +1353,6 @@ class Color:
 
     @staticmethod
     def _rgb_from_str(name: str) -> tuple:
-        name = name.strip()
         if "#" not in name:
             try:
                 # Use css3 color names by default
