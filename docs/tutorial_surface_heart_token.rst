@@ -20,7 +20,7 @@ the object. To illustrate this process, we will create the following game token:
 Useful :class:`~topology.Face` creation methods include
 :meth:`~topology.Face.make_surface`, :meth:`~topology.Face.make_bezier_surface`,
 and :meth:`~topology.Face.make_surface_from_array_of_points`. See the
-:doc:`surface_modeling` overview for the full list.
+:doc:`tutorial_surface_modeling` overview for the full list.
 
 In this case, we'll use the ``make_surface`` method, providing it with the edges that define
 the perimeter of the surface and a central point on that surface.
@@ -128,5 +128,5 @@ from the heart.
 Next steps
 ----------
 
-Continue to :doc:`tutorial_heart_token` for an advanced example using
+Continue to :doc:`tutorial_spitfire_wing_gordon` for an advanced example using
 :meth:`~topology.Face.make_gordon_surface` to create a Supermarine Spitfire wing.
