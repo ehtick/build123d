@@ -443,7 +443,7 @@ Counter-sink and counter-bore holes are useful for creating recessed areas for f
 
 .. _ex 14:
 
-1.  Position on a line with '\@', '\%' and introduce Sweep
+14.  Position on a line with '\@', '\%' and introduce Sweep
 ------------------------------------------------------------
 
 build123d includes a feature for finding the position along a line segment. This
@@ -1121,3 +1121,4 @@ with ``Until.NEXT`` or ``Until.LAST``.
         :language: build123d
         :start-after: [Ex. 36]
         :end-before: [Ex. 36]
+
