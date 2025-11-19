@@ -34,6 +34,7 @@ from __future__ import annotations
 # other pylint warning to temp remove:
 #   too-many-arguments, too-many-locals, too-many-public-methods,
 #   too-many-statements, too-many-instance-attributes, too-many-branches
+import colorsys
 import copy as copy_module
 import itertools
 import json
@@ -1180,7 +1181,7 @@ class Color:
         `OCCT Color Names
             <https://dev.opencascade.org/doc/refman/html/_quantity___name_of_color_8hxx.html>`_
 
-        Hexadecimal string may be RGB or RGBA format with leading "#"     
+        Hexadecimal string may be RGB or RGBA format with leading "#"
 
         Args:
             name (str): color, e.g. "blue" or "#0000ff""
@@ -1344,6 +1345,74 @@ class Color:
     def __repr__(self) -> str:
         """Color repr"""
         return f"Color{str(tuple(self))}"
+
+    @classmethod
+    def categorical_set(
+        cls,
+        color_count: int,
+        starting_hue: ColorLike | float = 0.0,
+        alpha: float | Iterable[float] = 1.0,
+    ) -> list[Color]:
+        """Generate a palette of evenly spaced colors.
+
+        Creates a list of visually distinct colors suitable for representing
+        discrete categories (such as different parts, assemblies, or data
+        series). Colors are evenly spaced around the hue circle and share
+        consistent lightness and saturation levels, resulting in balanced
+        perceptual contrast across all hues.
+
+        Produces palettes similar in appearance to the **Tableau 10** and **D3
+        Category10** color sets—both widely recognized standards in data
+        visualization for their clarity and accessibility. These values have
+        been empirically chosen to maintain consistent perceived brightness
+        across hues while avoiding overly vivid or dark colors.
+
+        Args:
+            color_count (int): Number of colors to generate.
+            starting_hue (ColorLike | float): Either a Color-like object or
+                a hue value in the range [0.0, 1.0] that defines the starting color.
+            alpha (float | Iterable[float]): Alpha value(s) for the colors. Can be a
+                single float or an iterable of length `color_count`.
+
+        Returns:
+            list[Color]: List of generated colors.
+
+        Raises:
+            ValueError: If starting_hue is out of range or alpha length mismatch.
+        """
+
+        # --- Determine starting hue ---
+        if isinstance(starting_hue, float):
+            if not (0.0 <= starting_hue <= 1.0):
+                raise ValueError("Starting hue must be within range 0.0–1.0")
+        elif isinstance(starting_hue, int):
+            if starting_hue < 0:
+                raise ValueError("Starting color integer must be non-negative")
+            rgb = tuple(Color(starting_hue))[:3]
+            starting_hue = colorsys.rgb_to_hls(*rgb)[0]
+        else:
+            raise TypeError(
+                "Starting hue must be a float in [0,1] or an integer color literal"
+            )
+
+        # --- Normalize alpha values ---
+        if isinstance(alpha, (float, int)):
+            alphas = [float(alpha)] * color_count
+        else:
+            alphas = list(alpha)
+            if len(alphas) != color_count:
+                raise ValueError("Number of alpha values must match color_count")
+
+        # --- Generate color list ---
+        hues = np.linspace(
+            starting_hue, starting_hue + 1.0, color_count, endpoint=False
+        )
+        colors = [
+            cls(*colorsys.hls_to_rgb(h % 1.0, 0.55, 0.9), a)
+            for h, a in zip(hues, alphas)
+        ]
+
+        return colors
 
     @staticmethod
     def _rgb_from_int(triplet: int) -> tuple[float, float, float]:
