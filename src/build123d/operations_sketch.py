@@ -43,8 +43,6 @@ from build123d.topology import (
     Wire,
     Sketch,
     topo_explore_connected_edges,
-    topo_explore_common_vertex,
-    edges_to_wires,
 )
 from build123d.geometry import Plane, Vector, TOLERANCE
 from build123d.build_common import flatten_sequence, validate_inputs
@@ -201,33 +199,26 @@ def make_face(
 ) -> Sketch:
     """Sketch Operation: make_face
 
-    Create a face from the given edges.
+    Create a face from the given perimeter edges.
 
     Args:
-        edges (Edge): sequence of edges. Defaults to all sketch pending edges.
+        edges (Edge): sequence of perimeter edges. Defaults to all
+            sketch pending edges.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
     """
     context: BuildSketch | None = BuildSketch._get_context("make_face")
 
     if edges is not None:
-        raw_edges = flatten_sequence(edges)
+        outer_edges = flatten_sequence(edges)
     elif context is not None:
-        raw_edges = context.pending_edges
+        outer_edges = context.pending_edges
     else:
         raise ValueError("No objects to create a face")
-    if not raw_edges:
-        raise ValueError("No objects to create a face")
-    validate_inputs(context, "make_face", raw_edges)
+    if not outer_edges:
+        raise ValueError("No objects to create a hull")
+    validate_inputs(context, "make_face", outer_edges)
 
-    wires = list(
-        edges_to_wires(raw_edges).sort_by(
-            lambda w: w.bounding_box().measure, reverse=True
-        )
-    )
-    if len(wires) > 1:
-        pending_face = Face(wires[0], wires[1:])
-    else:
-        pending_face = Face(wires[0])
+    pending_face = Face(Wire.combine(outer_edges)[0])
     if pending_face.normal_at().Z < 0:  # flip up-side-down faces
         pending_face = -pending_face
 
