@@ -542,7 +542,7 @@ class Mesher:
         """write
 
         Args:
-            file_name Union[Pathlike, str, bytes, BytesIO]: file path
+            file_name Union[Pathlike, str, bytes]: file path
 
         Raises:
             ValueError: Unknown file format - must be 3mf or stl
