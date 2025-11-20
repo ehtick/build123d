@@ -168,6 +168,17 @@ class TestUpSideDown(unittest.TestCase):
         sketch = make_face(wire.edges())
         self.assertTrue(sketch.faces()[0].normal_at().Z > 0)
 
+    def test_make_face_with_holes(self):
+        with BuildSketch() as skt:
+            with BuildLine() as perimeter:
+                CenterArc((0, 0), 3, 0, 360)
+            with BuildLine() as hole1:
+                Polyline((-1, 1), (1, 1), (1, 2), (-1, 2), (-1, 1))
+            with BuildLine() as hole2:
+                Airfoil("4020")
+            make_face()
+        self.assertEqual(len(skt.face().inner_wires()), 2)
+
 
 class TestBuildSketchExceptions(unittest.TestCase):
     """Test exception handling"""

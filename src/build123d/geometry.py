@@ -41,7 +41,7 @@ import json
 import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from math import degrees, isclose, log10, pi, radians
+from math import degrees, isclose, log10, pi, radians, prod
 from typing import TYPE_CHECKING, Any, TypeAlias, overload
 
 import numpy as np
@@ -1000,6 +1000,16 @@ class BoundBox:
         self.min = Vector(x_min, y_min, z_min)  #: location of minimum corner
         self.max = Vector(x_max, y_max, z_max)  #: location of maximum corner
         self.size = Vector(x_max - x_min, y_max - y_min, z_max - z_min)  #: overall size
+
+    @property
+    def measure(self) -> float:
+        """Return the overall Lebesgue measure of the bounding box.
+
+        - For 1D objects: length
+        - For 2D objects: area
+        - For 3D objects: volume
+        """
+        return prod([x for x in self.size if x > TOLERANCE])
 
     @property
     def diagonal(self) -> float:
