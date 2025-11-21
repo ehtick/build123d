@@ -90,7 +90,11 @@ from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
 from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
-from OCP.GCPnts import GCPnts_AbscissaPoint
+from OCP.GCPnts import (
+    GCPnts_AbscissaPoint,
+    GCPnts_QuasiUniformDeflection,
+    GCPnts_UniformDeflection,
+)
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
@@ -116,6 +120,9 @@ from OCP.GeomAbs import (
     GeomAbs_C0,
     GeomAbs_C1,
     GeomAbs_C2,
+    GeomAbs_C3,
+    GeomAbs_CN,
+    GeomAbs_C1,
     GeomAbs_G1,
     GeomAbs_G2,
     GeomAbs_JoinType,
@@ -1178,22 +1185,50 @@ class Mixin1D(Shape[TOPODS]):
 
     def positions(
         self,
-        distances: Iterable[float],
+        distances: Iterable[float] | None = None,
         position_mode: PositionMode = PositionMode.PARAMETER,
+        deflection: float | None = None,
     ) -> list[Vector]:
         """Positions along curve
 
         Generate positions along the underlying curve
 
         Args:
-            distances (Iterable[float]): distance or parameter values
-            position_mode (PositionMode, optional): position calculation mode.
-                Defaults to PositionMode.PARAMETER.
+            distances (Iterable[float] | None, optional): distance or parameter values.
+                Defaults to None.
+            position_mode (PositionMode, optional): position calculation mode only applies
+                when using distances. Defaults to PositionMode.PARAMETER.
+            deflection (float | None, optional): maximum deflection between the curve and
+                the polygon that results from the computed points. Defaults to None.
+
 
         Returns:
             list[Vector]: positions along curve
         """
-        return [self.position_at(d, position_mode) for d in distances]
+        if deflection is not None:
+            curve: BRepAdaptor_Curve | BRepAdaptor_CompCurve = self.geom_adaptor()
+            # GCPnts_UniformDeflection provides the best results but is limited
+            if curve.Continuity() in (GeomAbs_C2, GeomAbs_C3, GeomAbs_CN):
+                discretizer = GCPnts_UniformDeflection()
+            else:
+                discretizer = GCPnts_QuasiUniformDeflection()
+
+            discretizer.Initialize(
+                curve,
+                deflection,
+                curve.FirstParameter(),
+                curve.LastParameter(),
+            )
+            if not discretizer.IsDone() or discretizer.NbPoints() == 0:
+                raise RuntimeError("Deflection calculation failed")
+            return [
+                Vector(curve.Value(discretizer.Parameter(i + 1)))
+                for i in range(discretizer.NbPoints())
+            ]
+        elif distances is not None:
+            return [self.position_at(d, position_mode) for d in distances]
+        else:
+            raise ValueError("Either distances or deflection must be provided")
 
     def project(
         self, face: Face, direction: VectorLike, closest: bool = True
