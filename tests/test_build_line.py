@@ -98,14 +98,14 @@ class BuildLineTests(unittest.TestCase):
                 powerup @ 0,
                 tangents=(screw % 1, powerup % 0),
             )
-        self.assertAlmostEqual(roller_coaster.wires()[0].length, 678.983628932414, 5)
+        self.assertAlmostEqual(roller_coaster.wires()[0].length, 678.9785865257071, 5)
 
     def test_bezier(self):
         pts = [(0, 0), (20, 20), (40, 0), (0, -40), (-60, 0), (0, 100), (100, 0)]
         wts = [1.0, 1.0, 2.0, 3.0, 4.0, 2.0, 1.0]
         with BuildLine() as bz:
             b1 = Bezier(*pts, weights=wts)
-        self.assertAlmostEqual(bz.wires()[0].length, 225.86389406824566, 5)
+        self.assertAlmostEqual(bz.wires()[0].length, 225.98661946375782, 5)
         self.assertTrue(isinstance(b1, Edge))
 
     def test_double_tangent_arc(self):

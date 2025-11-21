@@ -305,7 +305,9 @@ class Mixin1D(Shape[TOPODS]):
     @property
     def length(self) -> float:
         """Edge or Wire length"""
-        return GCPnts_AbscissaPoint.Length_s(self.geom_adaptor())
+        props = GProp_GProps()
+        BRepGProp.LinearProperties_s(self.wrapped, props)
+        return props.Mass()
 
     @property
     def radius(self) -> float:
@@ -796,19 +798,20 @@ class Mixin1D(Shape[TOPODS]):
             for obj in common_set:
                 match (obj, target):
                     case (_, Plane()):
+                        assert isinstance(other.wrapped, gp_Pln)
                         target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
-                        operation = BRepAlgoAPI_Section()
-                        result = bool_op((obj,), (target,), operation)
-                        operation = BRepAlgoAPI_Common()
-                        result.extend(bool_op((obj,), (target,), operation))
+                        operation1 = BRepAlgoAPI_Section()
+                        result = bool_op((obj,), (target,), operation1)
+                        operation2 = BRepAlgoAPI_Common()
+                        result.extend(bool_op((obj,), (target,), operation2))
 
                     case (_, Vertex() | Edge() | Wire()):
-                        operation = BRepAlgoAPI_Section()
-                        section = bool_op((obj,), (target,), operation)
+                        operation1 = BRepAlgoAPI_Section()
+                        section = bool_op((obj,), (target,), operation1)
                         result = section
                         if not section:
-                            operation = BRepAlgoAPI_Common()
-                            result.extend(bool_op((obj,), (target,), operation))
+                            operation2 = BRepAlgoAPI_Common()
+                            result.extend(bool_op((obj,), (target,), operation2))
 
                     case _ if issubclass(type(target), Shape):
                         result = target.intersect(obj)
@@ -2940,7 +2943,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
             topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
             reversed_edge.wrapped = topods_edge
         else:
-            reversed_edge.wrapped = downcast(self.wrapped.Reversed())
+            reversed_edge.wrapped = TopoDS.Edge_s(self.wrapped.Reversed())
         return reversed_edge
 
     def to_axis(self) -> Axis:
