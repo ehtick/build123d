@@ -120,6 +120,9 @@ from OCP.GeomAbs import (
     GeomAbs_C0,
     GeomAbs_C1,
     GeomAbs_C2,
+    GeomAbs_C3,
+    GeomAbs_CN,
+    GeomAbs_C1,
     GeomAbs_G1,
     GeomAbs_G2,
     GeomAbs_JoinType,
@@ -545,31 +548,6 @@ class Mixin1D(Shape[TOPODS]):
 
         return result
 
-    def discretize(self, deflection: float = 0.1, quasi=True) -> list[Vector]:
-        """Discretize the shape into a list of points"""
-        if self.wrapped is None:
-            raise ValueError("Cannot discretize an empty shape")
-        curve = self.geom_adaptor()
-        if quasi:
-            discretizer = GCPnts_QuasiUniformDeflection()
-        else:
-            discretizer = GCPnts_UniformDeflection()
-        discretizer.Initialize(
-            curve,
-            deflection,
-            curve.FirstParameter(),
-            curve.LastParameter(),
-        )
-
-        assert discretizer.IsDone()
-
-        return [
-            Vector(v.X(), v.Y(), v.Z())
-            for v in (
-                curve.Value(discretizer.Parameter(i))
-                for i in range(1, discretizer.NbPoints() + 1)
-            )
-        ]
     def curvature_comb(
         self, count: int = 100, max_tooth_size: float | None = None
     ) -> ShapeList[Edge]:
@@ -1207,22 +1185,52 @@ class Mixin1D(Shape[TOPODS]):
 
     def positions(
         self,
-        distances: Iterable[float],
+        distances: Iterable[float] | None = None,
         position_mode: PositionMode = PositionMode.PARAMETER,
+        deflection: float | None = None,
     ) -> list[Vector]:
         """Positions along curve
 
         Generate positions along the underlying curve
 
         Args:
-            distances (Iterable[float]): distance or parameter values
-            position_mode (PositionMode, optional): position calculation mode.
-                Defaults to PositionMode.PARAMETER.
+            distances (Iterable[float] | None, optional): distance or parameter values.
+                Defaults to None.
+            position_mode (PositionMode, optional): position calculation mode only applies
+                when using distances. Defaults to PositionMode.PARAMETER.
+            deflection (float | None, optional): maximum deflection between the curve and
+                the polygon that results from the computed points. Defaults to None.
+
 
         Returns:
             list[Vector]: positions along curve
         """
-        return [self.position_at(d, position_mode) for d in distances]
+        if deflection is not None:
+            curve: BRepAdaptor_Curve | BRepAdaptor_CompCurve = self.geom_adaptor()
+            # GCPnts_UniformDeflection provides the best results but is limited
+            if curve.Continuity() in (GeomAbs_C2, GeomAbs_C3, GeomAbs_CN):
+                discretizer: (
+                    GCPnts_UniformDeflection | GCPnts_QuasiUniformDeflection
+                ) = GCPnts_UniformDeflection()
+            else:
+                discretizer = GCPnts_QuasiUniformDeflection()
+
+            discretizer.Initialize(
+                curve,
+                deflection,
+                curve.FirstParameter(),
+                curve.LastParameter(),
+            )
+            if not discretizer.IsDone() or discretizer.NbPoints() == 0:
+                raise RuntimeError("Deflection calculation failed")
+            return [
+                Vector(curve.Value(discretizer.Parameter(i + 1)))
+                for i in range(discretizer.NbPoints())
+            ]
+        elif distances is not None:
+            return [self.position_at(d, position_mode) for d in distances]
+        else:
+            raise ValueError("Either distances or deflection must be provided")
 
     def project(
         self, face: Face, direction: VectorLike, closest: bool = True
