@@ -89,8 +89,12 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
-from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
-from OCP.GCPnts import GCPnts_AbscissaPoint
+from OCP.GCPnts import (
+    GCPnts_AbscissaPoint,
+    GCPnts_QuasiUniformDeflection,
+    GCPnts_UniformDeflection,
+)
+from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
@@ -541,6 +545,31 @@ class Mixin1D(Shape[TOPODS]):
 
         return result
 
+    def discretize(self, deflection: float = 0.1, quasi=True) -> list[Vector]:
+        """Discretize the shape into a list of points"""
+        if self.wrapped is None:
+            raise ValueError("Cannot discretize an empty shape")
+        curve = self.geom_adaptor()
+        if quasi:
+            discretizer = GCPnts_QuasiUniformDeflection()
+        else:
+            discretizer = GCPnts_UniformDeflection()
+        discretizer.Initialize(
+            curve,
+            deflection,
+            curve.FirstParameter(),
+            curve.LastParameter(),
+        )
+
+        assert discretizer.IsDone()
+
+        return [
+            Vector(v.X(), v.Y(), v.Z())
+            for v in (
+                curve.Value(discretizer.Parameter(i))
+                for i in range(1, discretizer.NbPoints() + 1)
+            )
+        ]
     def curvature_comb(
         self, count: int = 100, max_tooth_size: float | None = None
     ) -> ShapeList[Edge]:
