@@ -373,10 +373,7 @@ class Mixin1D(Shape[TOPODS]):
     def _to_param(edge_wire: Mixin1D, value: float | VectorLike, name: str) -> float:
         """Convert a float or VectorLike into a curve parameter."""
         if isinstance(value, (int, float)):
-            if edge_wire.is_forward:
-                return float(value)
-            else:
-                return 1.0 - float(value)
+            return float(value)
         try:
             point = Vector(value)
         except TypeError as exc:
