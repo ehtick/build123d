@@ -373,7 +373,10 @@ class Mixin1D(Shape[TOPODS]):
     def _to_param(edge_wire: Mixin1D, value: float | VectorLike, name: str) -> float:
         """Convert a float or VectorLike into a curve parameter."""
         if isinstance(value, (int, float)):
-            return float(value)
+            if edge_wire.is_forward:
+                return float(value)
+            else:
+                return 1.0 - float(value)
         try:
             point = Vector(value)
         except TypeError as exc:
@@ -1209,7 +1212,9 @@ class Mixin1D(Shape[TOPODS]):
             curve: BRepAdaptor_Curve | BRepAdaptor_CompCurve = self.geom_adaptor()
             # GCPnts_UniformDeflection provides the best results but is limited
             if curve.Continuity() in (GeomAbs_C2, GeomAbs_C3, GeomAbs_CN):
-                discretizer = GCPnts_UniformDeflection()
+                discretizer: (
+                    GCPnts_UniformDeflection | GCPnts_QuasiUniformDeflection
+                ) = GCPnts_UniformDeflection()
             else:
                 discretizer = GCPnts_QuasiUniformDeflection()
 
