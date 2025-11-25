@@ -72,7 +72,7 @@ from anytree import NodeMixin, RenderTree
 from IPython.lib.pretty import RepresentationPrinter, pretty
 from OCP.Bnd import Bnd_Box, Bnd_OBB
 from OCP.BOPAlgo import BOPAlgo_GlueEnum
-from OCP.BRep import BRep_Tool
+from OCP.BRep import BRep_TEdge, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgoAPI import (
     BRepAlgoAPI_BooleanOperation,
@@ -105,7 +105,7 @@ from OCP.gce import gce_MakeLin
 from OCP.Geom import Geom_Line
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomLib import GeomLib_IsPlanarSurface
-from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
+from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec, gp_XYZ
 from OCP.GProp import GProp_GProps
 from OCP.ShapeAnalysis import ShapeAnalysis_Curve
 from OCP.ShapeCustom import ShapeCustom, ShapeCustom_RestrictionParameters
@@ -287,7 +287,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         color: ColorLike | None = None,
         parent: Compound | None = None,
     ):
-        self.wrapped: TOPODS | None = (
+        self._wrapped: TOPODS | None = (
             tcast(Optional[TOPODS], downcast(obj)) if obj is not None else None
         )
         self.for_construction = False
@@ -305,6 +305,18 @@ class Shape(NodeMixin, Generic[TOPODS]):
     # pylint: disable=too-many-instance-attributes, too-many-public-methods
 
     @property
+    def wrapped(self):
+        assert self._wrapped
+        return self._wrapped
+
+    @wrapped.setter
+    def wrapped(self, shape: TOPODS):
+        self._wrapped = shape
+
+    def __bool__(self):
+        return self._wrapped is not None
+
+    @property
     @abstractmethod
     def _dim(self) -> int | None:
         """Dimension of the object"""
@@ -312,7 +324,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     @property
     def area(self) -> float:
         """area -the surface area of all faces in this Shape"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return 0.0
         properties = GProp_GProps()
         BRepGProp.SurfaceProperties_s(self.wrapped, properties)
@@ -351,7 +363,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             GeomType: The geometry type of the shape
 
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot determine geometry type of an empty shape")
 
         shape: TopAbs_ShapeEnum = shapetype(self.wrapped)
@@ -380,7 +392,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             bool: is the shape manifold or water tight
         """
         # Extract one or more (if a Compound) shape from self
-        if self.wrapped is None:
+        if self._wrapped is None:
             return False
         shape_stack = get_top_level_topods_shapes(self.wrapped)
 
@@ -431,12 +443,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
         underlying shape with the potential to be given a location and an
         orientation.
         """
-        return self.wrapped is None or self.wrapped.IsNull()
+        return self._wrapped is None or self.wrapped.IsNull()
 
     @property
     def is_planar_face(self) -> bool:
         """Is the shape a planar face even though its geom_type may not be PLANE"""
-        if self.wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
+        if self._wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
             return False
         surface = BRep_Tool.Surface_s(self.wrapped)
         is_face_planar = GeomLib_IsPlanarSurface(surface, TOLERANCE)
@@ -448,7 +460,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         subshapes. See the OCCT docs on BRepCheck_Analyzer::IsValid for a full
         description of what is checked.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return True
         chk = BRepCheck_Analyzer(self.wrapped)
         chk.SetParallel(True)
@@ -472,10 +484,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return reduce(lambda loc, n: loc * n.location, self.path, Location())
 
     @property
-    def location(self) -> Location | None:
+    def location(self) -> Location:
         """Get this Shape's Location"""
-        if self.wrapped is None:
-            return None
+        if self._wrapped is None:
+            raise ValueError("Can't find the location of an empty shape")
         return Location(self.wrapped.Location())
 
     @location.setter
@@ -518,6 +530,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
             - It is commonly used in structural analysis, mechanical simulations,
               and physics-based motion calculations.
         """
+        if self._wrapped is None:
+            raise ValueError("Can't calculate matrix for empty shape")
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         inertia_matrix = properties.MatrixOfInertia()
@@ -527,10 +541,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return matrix
 
     @property
-    def orientation(self) -> Vector | None:
+    def orientation(self) -> Vector:
         """Get the orientation component of this Shape's Location"""
         if self.location is None:
-            return None
+            raise ValueError("Can't find the orientation of an empty shape")
         return self.location.orientation
 
     @orientation.setter
@@ -542,10 +556,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
             self.location = loc
 
     @property
-    def position(self) -> Vector | None:
+    def position(self) -> Vector:
         """Get the position component of this Shape's Location"""
-        if self.wrapped is None or self.location is None:
-            return None
+        if self._wrapped is None or self.location is None:
+            raise ValueError("Can't find the position of an empty shape")
         return self.location.position
 
     @position.setter
@@ -573,6 +587,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (Vector(0, 1, 0), 1000.0),
             (Vector(0, 0, 1), 300.0)]
         """
+        if self._wrapped is None:
+            raise ValueError("Can't calculate properties for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         principal_props = properties.PrincipalProperties()
@@ -610,6 +627,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (150.0, 200.0, 50.0)
 
         """
+        if self._wrapped is None:
+            raise ValueError("Can't calculate moments for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         return properties.StaticMoments()
@@ -777,7 +797,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if obj.wrapped is None:
+        if not obj:
             return 0.0
 
         properties = GProp_GProps()
@@ -797,7 +817,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         ],
     ) -> ShapeList:
         """Helper to extract entities of a specific type from a shape."""
-        if shape.wrapped is None:
+        if not shape:
             return ShapeList()
         shape_list = ShapeList(
             [shape.__class__.cast(i) for i in shape.entities(entity_type)]
@@ -851,7 +871,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if not all(summand._dim == addend_dim for summand in summands):
             raise ValueError("Only shapes with the same dimension can be added")
 
-        if self.wrapped is None:  # an empty object
+        if self._wrapped is None:  # an empty object
             if len(summands) == 1:
                 sum_shape = summands[0]
             else:
@@ -868,7 +888,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """intersect shape with self operator &"""
         others = other if isinstance(other, (list, tuple)) else [other]
 
-        if self.wrapped is None or (isinstance(other, Shape) and other.wrapped is None):
+        if not self or (isinstance(other, Shape) and not other):
             raise ValueError("Cannot intersect shape with empty compound")
         new_shape = self.intersect(*others)
 
@@ -940,7 +960,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def __hash__(self) -> int:
         """Return hash code"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return 0
         return hash(self.wrapped)
 
@@ -958,7 +978,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | ShapeList[Self]:
         """cut shape from self operator -"""
 
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot subtract shape from empty compound")
 
         # Convert `other` to list of base objects and filter out None values
@@ -1006,7 +1026,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             BoundBox: A box sized to contain this Shape
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return BoundBox(Bnd_Box())
         tolerance = TOLERANCE if tolerance is None else tolerance
         return BoundBox.from_topo_ds(self.wrapped, tolerance=tolerance, optimal=optimal)
@@ -1025,7 +1045,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: Original object with extraneous internal edges removed
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         upgrader = ShapeUpgrade_UnifySameDomain(self.wrapped, True, True, True)
         upgrader.AllowInternalEdges(False)
@@ -1104,7 +1124,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             raise ValueError("Cannot calculate distance to or from an empty shape")
 
         return BRepExtrema_DistShapeShape(self.wrapped, other.wrapped).Value()
@@ -1117,7 +1137,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         self, other: Shape | VectorLike
     ) -> tuple[float, Vector, Vector]:
         """Minimal distance between two shapes and the points on each shape"""
-        if self.wrapped is None or (isinstance(other, Shape) and other.wrapped is None):
+        if self._wrapped is None or (isinstance(other, Shape) and not other):
             raise ValueError("Cannot calculate distance to or from an empty shape")
 
         if isinstance(other, Shape):
@@ -1147,14 +1167,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot calculate distance to or from an empty shape")
 
         dist_calc = BRepExtrema_DistShapeShape()
         dist_calc.LoadS1(self.wrapped)
 
         for other_shape in others:
-            if other_shape.wrapped is None:
+            if not other_shape:
                 raise ValueError("Cannot calculate distance to or from an empty shape")
             dist_calc.LoadS2(other_shape.wrapped)
             dist_calc.Perform()
@@ -1173,7 +1193,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def entities(self, topo_type: Shapes) -> list[TopoDS_Shape]:
         """Return all of the TopoDS sub entities of the given type"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return []
         return _topods_entities(self.wrapped, topo_type)
 
@@ -1201,7 +1221,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             list[Face]: A list of intersected faces sorted by distance from axis.position
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return ShapeList()
 
         line = gce_MakeLin(axis.wrapped).Value()
@@ -1231,7 +1251,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def fix(self) -> Self:
         """fix - try to fix shape if not valid"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         if not self.is_valid:
             shape_copy: Shape = copy.deepcopy(self, None)
@@ -1273,7 +1293,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     #     self, child_type: Shapes, parent_type: Shapes
     # ) -> Dict[Shape, list[Shape]]:
     #     """This function is very slow on M1 macs and is currently unused"""
-    #     if self.wrapped is None:
+    #     if self._wrapped is None:
     #         return {}
 
     #     res = TopTools_IndexedDataMapOfShapeListOfShape()
@@ -1311,15 +1331,15 @@ class Shape(NodeMixin, Generic[TOPODS]):
             (e.g., edges, vertices) and other compounds, the method returns a list
             of only the simple shapes directly contained at the top level.
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return ShapeList()
         return ShapeList(
             self.__class__.cast(s) for s in get_top_level_topods_shapes(self.wrapped)
         )
 
     def intersect(
-        self, *to_intersect: Shape | Axis | Plane
-    ) -> None | Self | ShapeList[Self]:
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> None | ShapeList[Self]:
         """Intersection of the arguments and this shape
 
         Args:
@@ -1327,8 +1347,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 intersect with
 
         Returns:
-            Self | ShapeList[Self]: Resulting object may be of a different class than self
-                or a ShapeList if multiple non-Compound object created
+            None | ShapeList[Self]: Resulting ShapeList may contain different class
+                than self
         """
 
         def _to_vertex(vec: Vector) -> Vertex:
@@ -1372,15 +1392,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         # Find the shape intersections
         intersect_op = BRepAlgoAPI_Common()
-        shape_intersections = self._bool_op((self,), objs, intersect_op)
-        if isinstance(shape_intersections, ShapeList) and not shape_intersections:
-            return None
-        if (
-            not isinstance(shape_intersections, ShapeList)
-            and shape_intersections.is_null
-        ):
-            return None
-        return shape_intersections
+        intersections = self._bool_op((self,), objs, intersect_op)
+        if isinstance(intersections, ShapeList):
+            return intersections or None
+        if isinstance(intersections, Shape) and not intersections.is_null:
+            return ShapeList([intersections])
+        return None
 
     def is_equal(self, other: Shape) -> bool:
         """Returns True if two shapes are equal, i.e. if they share the same
@@ -1393,7 +1410,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return False
         return self.wrapped.IsEqual(other.wrapped)
 
@@ -1408,7 +1425,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return False
         return self.wrapped.IsSame(other.wrapped)
 
@@ -1421,7 +1438,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
         if loc.wrapped is None:
             raise ValueError("Cannot locate a shape at an empty location")
@@ -1440,7 +1457,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: copy of Shape at location
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
         if loc.wrapped is None:
             raise ValueError("Cannot locate a shape at an empty location")
@@ -1458,7 +1475,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot mesh an empty shape")
 
         if not BRepTools.Triangulation_s(self.wrapped, tolerance):
@@ -1479,7 +1496,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if not mirror_plane:
             mirror_plane = Plane.XY
 
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         transformation = gp_Trsf()
         transformation.SetMirror(
@@ -1497,7 +1514,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
 
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
         if loc.wrapped is None:
             raise ValueError("Cannot move a shape at an empty location")
@@ -1517,7 +1534,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: copy of Shape moved to relative location
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
         if loc.wrapped is None:
             raise ValueError("Cannot move a shape at an empty location")
@@ -1531,7 +1548,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             OrientedBoundBox: A box oriented and sized to contain this Shape
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return OrientedBoundBox(Bnd_OBB())
         return OrientedBoundBox(self)
 
@@ -1633,6 +1650,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             - The radius of gyration is computed based on the shape’s mass properties.
             - It is useful for evaluating structural stability and rotational behavior.
         """
+        if self._wrapped is None:
+            raise ValueError("Can't calculate radius of gyration for empty shape")
+
         properties = GProp_GProps()
         BRepGProp.VolumeProperties_s(self.wrapped, properties)
         return properties.RadiusOfGyration(axis.wrapped)
@@ -1649,7 +1669,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             DeprecationWarning,
             stacklevel=2,
         )
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot relocate an empty shape")
         if loc.wrapped is None:
             raise ValueError("Cannot relocate a shape at an empty location")
@@ -1844,7 +1864,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 "keep must be one of Keep.INSIDE, Keep.OUTSIDE, or Keep.BOTH"
             )
 
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot split an empty shape")
 
         # Process the perimeter
@@ -1852,12 +1872,16 @@ class Shape(NodeMixin, Generic[TOPODS]):
             raise ValueError("perimeter must be a closed Wire or Edge")
         perimeter_edges = TopTools_SequenceOfShape()
         for perimeter_edge in perimeter.edges():
+            if not perimeter_edge:
+                continue
             perimeter_edges.Append(perimeter_edge.wrapped)
 
         # Split the shells by the perimeter edges
         lefts: list[Shell] = []
         rights: list[Shell] = []
         for target_shell in self.shells():
+            if not target_shell:
+                continue
             constructor = BRepFeat_SplitShape(target_shell.wrapped)
             constructor.Add(perimeter_edges)
             constructor.Build()
@@ -1885,7 +1909,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         self, tolerance: float, angular_tolerance: float = 0.1
     ) -> tuple[list[Vector], list[tuple[int, int, int]]]:
         """General triangulated approximation"""
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot tessellate an empty shape")
 
         self.mesh(tolerance, angular_tolerance)
@@ -1947,7 +1971,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Self: Approximated shape
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             raise ValueError("Cannot approximate an empty shape")
 
         params = ShapeCustom_RestrictionParameters()
@@ -1984,7 +2008,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: a copy of the object, but with geometry transformed
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         new_shape = copy.deepcopy(self, None)
         transformed = downcast(
@@ -2007,7 +2031,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: copy of transformed shape with all objects keeping their type
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         new_shape = copy.deepcopy(self, None)
         transformed = downcast(
@@ -2080,7 +2104,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             Shape: copy of transformed Shape
         """
-        if self.wrapped is None:
+        if self._wrapped is None:
             return self
         shape_copy: Shape = copy.deepcopy(self, None)
         transformed_shape = BRepBuilderAPI_Transform(
@@ -2111,7 +2135,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args = list(args)
         tools = list(tools)
         # Find the highest order class from all the inputs Solid > Vertex
-        order_dict = {type(s): type(s).order for s in [self] + args + tools}
+        order_dict = {
+            type(s): type(s).order
+            for s in [self] + args + tools
+            if hasattr(type(s), "order")
+        }
         highest_order = sorted(order_dict.items(), key=lambda item: item[1])[-1]
 
         # The base of the operation
@@ -2185,7 +2213,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Returns:
             tuple[ShapeList[Vertex], ShapeList[Edge]]: section results
         """
-        if self.wrapped is None or other.wrapped is None:
+        if self._wrapped is None or not other:
             return (ShapeList(), ShapeList())
 
         section = BRepAlgoAPI_Section(self.wrapped, other.wrapped)
@@ -2531,9 +2559,9 @@ class ShapeList(list[T]):
 
         def plane_parallel_predicate(plane: Plane, tolerance: float):
             plane_axis = Axis(plane.origin, plane.z_dir)
-            plane_xyz = plane.z_dir.wrapped.XYZ()
 
             def pred(shape: Shape):
+
                 if shape.is_planar_face:
                     assert shape.wrapped is not None and isinstance(
                         shape.wrapped, TopoDS_Face
@@ -2550,7 +2578,16 @@ class ShapeList(list[T]):
                 if isinstance(shape.wrapped, TopoDS_Wire):
                     return all(pred(e) for e in shape.edges())
                 if isinstance(shape.wrapped, TopoDS_Edge):
-                    for curve in shape.wrapped.TShape().Curves():
+                    if shape.location is None:
+                        return False
+                    plane_xyz = tcast(
+                        gp_XYZ,
+                        (
+                            tcast(Plane, plane * Location(shape.location).inverse())
+                        ).z_dir.wrapped.XYZ(),
+                    )
+                    t_edge = tcast(BRep_TEdge, shape.wrapped.TShape())
+                    for curve in t_edge.Curves():
                         if curve.IsCurve3D():
                             return ShapeAnalysis_Curve.IsPlanar_s(
                                 curve.Curve3D(), plane_xyz, tolerance
@@ -2677,15 +2714,16 @@ class ShapeList(list[T]):
                     tol_digits,
                 )
 
-        elif hasattr(group_by, "wrapped"):
-            if group_by.wrapped is None:
-                raise ValueError("Cannot group by an empty object")
+        elif not group_by:
+            raise ValueError("Cannot group by an empty object")
 
-            if isinstance(group_by.wrapped, (TopoDS_Edge, TopoDS_Wire)):
+        elif hasattr(group_by, "wrapped") and isinstance(
+            group_by.wrapped, (TopoDS_Edge, TopoDS_Wire)
+        ):
 
-                def key_f(obj):
-                    pnt1, _pnt2 = group_by.closest_points(obj.center())
-                    return round(group_by.param_at_point(pnt1), tol_digits)
+            def key_f(obj):
+                pnt1, _pnt2 = group_by.closest_points(obj.center())
+                return round(group_by.param_at_point(pnt1), tol_digits)
 
         elif isinstance(group_by, SortBy):
             if group_by == SortBy.LENGTH:
@@ -2791,22 +2829,22 @@ class ShapeList(list[T]):
                 ).position.Z,
                 reverse=reverse,
             )
-        elif hasattr(sort_by, "wrapped"):
-            if sort_by.wrapped is None:
-                raise ValueError("Cannot sort by an empty object")
+        elif not sort_by:
+            raise ValueError("Cannot sort by an empty object")
+        elif hasattr(sort_by, "wrapped") and isinstance(
+            sort_by.wrapped, (TopoDS_Edge, TopoDS_Wire)
+        ):
 
-            if isinstance(sort_by.wrapped, (TopoDS_Edge, TopoDS_Wire)):
+            def u_of_closest_center(obj) -> float:
+                """u-value of closest point between object center and sort_by"""
+                assert not isinstance(sort_by, SortBy)
+                pnt1, _pnt2 = sort_by.closest_points(obj.center())
+                return sort_by.param_at_point(pnt1)
 
-                def u_of_closest_center(obj) -> float:
-                    """u-value of closest point between object center and sort_by"""
-                    assert not isinstance(sort_by, SortBy)
-                    pnt1, _pnt2 = sort_by.closest_points(obj.center())
-                    return sort_by.param_at_point(pnt1)
-
-                # pylint: disable=unnecessary-lambda
-                objects = sorted(
-                    self, key=lambda o: u_of_closest_center(o), reverse=reverse
-                )
+            # pylint: disable=unnecessary-lambda
+            objects = sorted(
+                self, key=lambda o: u_of_closest_center(o), reverse=reverse
+            )
 
         elif isinstance(sort_by, SortBy):
             if sort_by == SortBy.LENGTH:

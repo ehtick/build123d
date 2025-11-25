@@ -34,13 +34,14 @@ from __future__ import annotations
 # other pylint warning to temp remove:
 #   too-many-arguments, too-many-locals, too-many-public-methods,
 #   too-many-statements, too-many-instance-attributes, too-many-branches
+import colorsys
 import copy as copy_module
 import itertools
 import json
 import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from math import degrees, isclose, log10, pi, radians
+from math import degrees, isclose, log10, pi, radians, prod
 from typing import TYPE_CHECKING, Any, TypeAlias, overload
 
 import numpy as np
@@ -527,18 +528,22 @@ class Vector:
 
     @overload
     def intersect(self, location: Location) -> Vector | None:
-        """Find intersection of location and vector"""
+        """Find intersection of vector and location"""
 
     @overload
     def intersect(self, axis: Axis) -> Vector | None:
-        """Find intersection of axis and vector"""
+        """Find intersection of vector and axis"""
 
     @overload
     def intersect(self, plane: Plane) -> Vector | None:
-        """Find intersection of plane and vector"""
+        """Find intersection of vector and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of vector and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric objects and vector"""
+        """Find intersection of vector and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -691,7 +696,7 @@ class Axis(metaclass=AxisMeta):
         self.wrapped: gp_Ax1 = gp_ax1  # type: ignore[annotation-unchecked]
 
     @property
-    def position(self):
+    def position(self) -> Vector:
         """The position or origin of the Axis"""
         return Vector(self.wrapped.Location())
 
@@ -701,7 +706,7 @@ class Axis(metaclass=AxisMeta):
         self.wrapped.SetLocation(Vector(position).to_pnt())
 
     @property
-    def direction(self):
+    def direction(self) -> Vector:
         """The normalized direction of the Axis"""
         return Vector(self.wrapped.Direction())
 
@@ -906,22 +911,26 @@ class Axis(metaclass=AxisMeta):
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and axis"""
+        """Find intersection of axis and vector"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
-        """Find intersection of location and axis"""
+    def intersect(self, location: Location) -> Vector | Location | None:
+        """Find intersection of axis and location"""
 
     @overload
-    def intersect(self, axis: Axis) -> Axis | None:
+    def intersect(self, axis: Axis) -> Vector | Axis | None:
         """Find intersection of axis and axis"""
 
     @overload
-    def intersect(self, plane: Plane) -> Axis | None:
-        """Find intersection of plane and axis"""
+    def intersect(self, plane: Plane) -> Vector | Axis | None:
+        """Find intersection of axis and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of axis and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and axis"""
+        """Find intersection of axis and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -965,12 +974,12 @@ class Axis(metaclass=AxisMeta):
             # Find the "direction" of the location
             location_dir = Plane(location).z_dir
 
-            # Is the location on the axis with the same direction?
-            if (
-                self.intersect(location.position) is not None
-                and location_dir == self.direction
-            ):
-                return location
+            if self.intersect(location.position) is not None:
+                # Is the location on the axis with the same direction?
+                if location_dir == self.direction:
+                    return location
+                else:
+                    return location.position
 
         if shape is not None:
             return shape.intersect(self)
@@ -991,6 +1000,16 @@ class BoundBox:
         self.min = Vector(x_min, y_min, z_min)  #: location of minimum corner
         self.max = Vector(x_max, y_max, z_max)  #: location of maximum corner
         self.size = Vector(x_max - x_min, y_max - y_min, z_max - z_min)  #: overall size
+
+    @property
+    def measure(self) -> float:
+        """Return the overall Lebesgue measure of the bounding box.
+
+        - For 1D objects: length
+        - For 2D objects: area
+        - For 3D objects: volume
+        """
+        return prod([x for x in self.size if x > TOLERANCE])
 
     @property
     def diagonal(self) -> float:
@@ -1152,8 +1171,8 @@ class Color:
 
         Args:
             color_like (ColorLike):
-                name, ex: "red",
-                name + alpha, ex: ("red", 0.5),
+                name, ex: "red" or "#ff0000",
+                name + alpha, ex: ("red", 0.5) or "#ff000080",
                 rgb, ex: (1., 0., 0.),
                 rgb + alpha, ex: (1., 0., 0., 0.5),
                 hex, ex: 0xff0000,
@@ -1164,7 +1183,7 @@ class Color:
 
     @overload
     def __init__(self, name: str, alpha: float = 1.0):
-        """Color from name
+        """Color from name or hexadecimal string
 
         `CSS3 Color Names
             <https://en.wikipedia.org/wiki/Web_colors#Extended_colors>`
@@ -1172,8 +1191,10 @@ class Color:
         `OCCT Color Names
             <https://dev.opencascade.org/doc/refman/html/_quantity___name_of_color_8hxx.html>`_
 
+        Hexadecimal string may be RGB or RGBA format with leading "#"
+
         Args:
-            name (str): color, e.g. "blue"
+            name (str): color, e.g. "blue" or "#0000ff""
             alpha (float, optional): 0.0 <= alpha <= 1.0. Defaults to 1.0
         """
 
@@ -1229,6 +1250,27 @@ class Color:
                         return
                     case str():
                         name, alpha = fill_defaults(args, (name, alpha))
+                        name = name.strip()
+                        if "#" in name:
+                            # extract alpha from hex string
+                            hex_a = format(int(alpha * 255), "x")
+                            if len(name) == 5:
+                                hex_a = name[4] * 2
+                                name = name[:4]
+                            elif len(name) == 9:
+                                hex_a = name[7:9]
+                                name = name[:7]
+                            elif len(name) not in [4, 5, 7, 9]:
+                                raise ValueError(
+                                    f'"{name}" is not a valid hexadecimal color value.'
+                                )
+                            try:
+                                if hex_a:
+                                    alpha = int(hex_a, 16) / 0xFF
+                            except ValueError as ex:
+                                raise ValueError(
+                                    f"Invald alpha hex string: {hex_a}"
+                                ) from ex
                     case int():
                         color_code, alpha = fill_defaults(args, (color_code, alpha))
                     case float():
@@ -1288,16 +1330,6 @@ class Color:
         self.iter_index += 1
         return value
 
-    def to_tuple(self):
-        """Value as tuple"""
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'tuple(Color)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return tuple(self)
-
     def __copy__(self) -> Color:
         """Return copy of self"""
         return Color(*tuple(self))
@@ -1324,6 +1356,74 @@ class Color:
         """Color repr"""
         return f"Color{str(tuple(self))}"
 
+    @classmethod
+    def categorical_set(
+        cls,
+        color_count: int,
+        starting_hue: ColorLike | float = 0.0,
+        alpha: float | Iterable[float] = 1.0,
+    ) -> list[Color]:
+        """Generate a palette of evenly spaced colors.
+
+        Creates a list of visually distinct colors suitable for representing
+        discrete categories (such as different parts, assemblies, or data
+        series). Colors are evenly spaced around the hue circle and share
+        consistent lightness and saturation levels, resulting in balanced
+        perceptual contrast across all hues.
+
+        Produces palettes similar in appearance to the **Tableau 10** and **D3
+        Category10** color sets—both widely recognized standards in data
+        visualization for their clarity and accessibility. These values have
+        been empirically chosen to maintain consistent perceived brightness
+        across hues while avoiding overly vivid or dark colors.
+
+        Args:
+            color_count (int): Number of colors to generate.
+            starting_hue (ColorLike | float): Either a Color-like object or
+                a hue value in the range [0.0, 1.0] that defines the starting color.
+            alpha (float | Iterable[float]): Alpha value(s) for the colors. Can be a
+                single float or an iterable of length `color_count`.
+
+        Returns:
+            list[Color]: List of generated colors.
+
+        Raises:
+            ValueError: If starting_hue is out of range or alpha length mismatch.
+        """
+
+        # --- Determine starting hue ---
+        if isinstance(starting_hue, float):
+            if not (0.0 <= starting_hue <= 1.0):
+                raise ValueError("Starting hue must be within range 0.0–1.0")
+        elif isinstance(starting_hue, int):
+            if starting_hue < 0:
+                raise ValueError("Starting color integer must be non-negative")
+            rgb = tuple(Color(starting_hue))[:3]
+            starting_hue = colorsys.rgb_to_hls(*rgb)[0]
+        else:
+            raise TypeError(
+                "Starting hue must be a float in [0,1] or an integer color literal"
+            )
+
+        # --- Normalize alpha values ---
+        if isinstance(alpha, (float, int)):
+            alphas = [float(alpha)] * color_count
+        else:
+            alphas = list(alpha)
+            if len(alphas) != color_count:
+                raise ValueError("Number of alpha values must match color_count")
+
+        # --- Generate color list ---
+        hues = np.linspace(
+            starting_hue, starting_hue + 1.0, color_count, endpoint=False
+        )
+        colors = [
+            cls(*colorsys.hls_to_rgb(h % 1.0, 0.55, 0.9), a)
+            for h, a in zip(hues, alphas)
+        ]
+
+        return colors
+
     @staticmethod
     def _rgb_from_int(triplet: int) -> tuple[float, float, float]:
         red, remainder = divmod(triplet, 256**2)
@@ -1332,7 +1432,6 @@ class Color:
 
     @staticmethod
     def _rgb_from_str(name: str) -> tuple:
-        name = name.strip()
         if "#" not in name:
             try:
                 # Use css3 color names by default
@@ -1929,22 +2028,26 @@ class Location:
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and location"""
+        """Find intersection of location and vector"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
+    def intersect(self, location: Location) -> Vector | Location | None:
         """Find intersection of location and location"""
 
     @overload
-    def intersect(self, axis: Axis) -> Location | None:
-        """Find intersection of axis and location"""
+    def intersect(self, axis: Axis) -> Vector | Location | None:
+        """Find intersection of location and axis"""
 
     @overload
-    def intersect(self, plane: Plane) -> Location | None:
-        """Find intersection of plane and location"""
+    def intersect(self, plane: Plane) -> Vector | Location | None:
+        """Find intersection of location and plane"""
+
+    @overload
+    def intersect(self, shape: Shape) -> Shape | None:
+        """Find intersection of location and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and location"""
+        """Find intersection of location and geometric object or shape"""
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
         if axis is not None:
@@ -1956,8 +2059,11 @@ class Location:
         if vector is not None and self.position == vector:
             return vector
 
-        if location is not None and self == location:
-            return self
+        if location is not None:
+            if self == location:
+                return self
+            elif self.position == location.position:
+                return self.position
 
         if shape is not None:
             return shape.intersect(self)
@@ -3128,18 +3234,18 @@ class Plane(metaclass=PlaneMeta):
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
-        """Find intersection of vector and plane"""
+        """Find intersection of plane and vector"""
 
     @overload
-    def intersect(self, location: Location) -> Location | None:
-        """Find intersection of location and plane"""
+    def intersect(self, location: Location) -> Vector | Location | None:
+        """Find intersection of plane and location"""
 
     @overload
-    def intersect(self, axis: Axis) -> Axis | Vector | None:
-        """Find intersection of axis and plane"""
+    def intersect(self, axis: Axis) -> Vector | Axis | None:
+        """Find intersection of plane and axis"""
 
     @overload
-    def intersect(self, plane: Plane) -> Axis | None:
+    def intersect(self, plane: Plane) -> Axis | Plane | None:
         """Find intersection of plane and plane"""
 
     @overload
@@ -3147,7 +3253,7 @@ class Plane(metaclass=PlaneMeta):
         """Find intersection of plane and shape"""
 
     def intersect(self, *args, **kwargs):
-        """Find intersection of geometric object and shape"""
+        """Find intersection of plane and geometric object or shape"""
 
         axis, plane, vector, location, shape = _parse_intersect_args(*args, **kwargs)
 
@@ -3172,6 +3278,9 @@ class Plane(metaclass=PlaneMeta):
             return intersection_point
 
         if plane is not None:
+            if self.contains(plane.origin) and self.z_dir == plane.z_dir:
+                return self
+
             surface1 = Geom_Plane(self.wrapped)
             surface2 = Geom_Plane(plane.wrapped)
             intersector = GeomAPI_IntSS(surface1, surface2, TOLERANCE)
@@ -3187,8 +3296,11 @@ class Plane(metaclass=PlaneMeta):
 
         if location is not None:
             pln = Plane(location)
-            if pln.origin == self.origin and pln.z_dir == self.z_dir:
-                return location
+            if self.contains(pln.origin):
+                if self.z_dir == pln.z_dir:
+                    return location
+                else:
+                    return pln.origin
 
         if shape is not None:
             return shape.intersect(self)

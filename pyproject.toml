@@ -24,7 +24,7 @@ keywords = [
     "brep",
     "cad",
     "cadquery",
-    "opencscade",
+    "opencascade",
     "python",
 ]
 license = {text = "Apache-2.0"}
@@ -44,6 +44,7 @@ dependencies = [
     "ipython >= 8.0.0, < 10",
     "lib3mf >= 2.4.1",
     "ocpsvg >= 0.5, < 0.6",
+    "ocp_gordon >= 0.1.17",
     "trianglesolver",
     "sympy",
     "scipy",
@@ -67,7 +68,7 @@ development = [
     "black",
     "mypy",
     "pylint",
-    "pytest",
+    "pytest==8.4.2", # TODO: unpin on resolution of pytest-dev/pytest-xdist/issues/1273
     "pytest-benchmark",
     "pytest-cov",
     "pytest-xdist",

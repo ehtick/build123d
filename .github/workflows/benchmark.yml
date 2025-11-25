@@ -12,7 +12,7 @@ jobs:
           # "3.11",
           "3.12",
           ]
-        os: [macos-13, macos-14, ubuntu-latest, windows-latest]
+        os: [macos-15-intel, macos-14, ubuntu-latest, windows-latest]
 
     runs-on: ${{ matrix.os }}
     steps:

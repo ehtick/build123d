@@ -7,7 +7,7 @@ For example, a :class:`~objects_part.Torus` is defined by a major and minor radi
 Builder mode, objects are positioned with ``Locations`` while in Algebra mode, objects
 are positioned with the ``*`` operator and shown in these examples:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildPart() as disk:
         with BuildSketch():
@@ -18,7 +18,7 @@ are positioned with the ``*`` operator and shown in these examples:
                 Circle(d, mode=Mode.SUBTRACT)
         extrude(amount=c)
 
-.. code-block:: python
+.. code-block:: build123d
 
     sketch = Circle(a) - Pos(b, 0.0) * Rectangle(c, c) - Pos(0.0, b) * Circle(d)
     disk = extrude(sketch, c)
@@ -36,7 +36,7 @@ right or left of each Axis. The following diagram shows how this alignment works
 
 For example:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildSketch():
         Circle(1, align=(Align.MIN, Align.MIN))
@@ -49,7 +49,7 @@ In 3D the ``align`` parameter also contains a Z align value but otherwise works 
 Note that the ``align`` will also accept a single ``Align`` value which will be used on all axes -
 as shown here:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildSketch():
         Circle(1, align=Align.MIN)
@@ -76,12 +76,26 @@ The following objects all can be used in BuildLine contexts. Note that
 
 .. grid:: 3
 
+    .. grid-item-card:: :class:`~objects_curve.Airfoil`
+
+        .. image:: assets/example_airfoil.svg
+
+        +++
+        Airfoil described by 4 digit NACA profile
+
     .. grid-item-card:: :class:`~objects_curve.Bezier`
 
         .. image:: assets/bezier_curve_example.svg
 
         +++
         Curve defined by control points and weights
+
+    .. grid-item-card:: :class:`~objects_curve.BlendCurve`
+
+        .. image:: assets/example_blend_curve.svg
+
+        +++
+        Curve blending curvature of two curves
 
     .. grid-item-card:: :class:`~objects_curve.CenterArc`
 
@@ -158,14 +172,14 @@ The following objects all can be used in BuildLine contexts. Note that
         .. image:: assets/radius_arc_example.svg
 
         +++
-        Arc define by two points and a radius
+        Arc defined by two points and a radius
 
     .. grid-item-card:: :class:`~objects_curve.SagittaArc`
 
         .. image:: assets/sagitta_arc_example.svg
 
         +++
-        Arc define by two points and a sagitta
+        Arc defined by two points and a sagitta
 
     .. grid-item-card:: :class:`~objects_curve.Spline`
 
@@ -179,14 +193,14 @@ The following objects all can be used in BuildLine contexts. Note that
         .. image:: assets/tangent_arc_example.svg
 
         +++
-        Curve define by two points and a tangent
+        Arc defined by two points and a tangent
 
     .. grid-item-card:: :class:`~objects_curve.ThreePointArc`
 
         .. image:: assets/three_point_arc_example.svg
 
         +++
-        Curve define by three points
+        Arc defined by three points
 
     .. grid-item-card:: :class:`~objects_curve.ArcArcTangentLine`
 
@@ -221,7 +235,9 @@ Reference
 .. py:module:: objects_curve
 
 .. autoclass:: BaseLineObject
+.. autoclass:: Airfoil
 .. autoclass:: Bezier
+.. autoclass:: BlendCurve
 .. autoclass:: CenterArc
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
@@ -503,6 +519,7 @@ Here is an example of a custom sketch object specially created as part of the de
 this playing card storage box (:download:`see the playing_cards.py example <../examples/playing_cards.py>`):
 
 .. literalinclude:: ../examples/playing_cards.py
+    :language: build123d
     :start-after: [Club]
     :end-before: [Club]
 

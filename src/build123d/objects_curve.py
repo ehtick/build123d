@@ -29,14 +29,19 @@ license:
 from __future__ import annotations
 
 import copy as copy_module
+import warnings
+import numpy as np
+import sympy  # type: ignore
 from collections.abc import Iterable
+from itertools import product
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
-import sympy  # type: ignore
+from typing import overload, Literal
 
 from build123d.build_common import WorkplaneList, flatten_sequence, validate_inputs
 from build123d.build_enums import (
     AngularDirection,
+    ContinuityLevel,
     GeomType,
     LengthMode,
     Keep,
@@ -78,7 +83,8 @@ class BaseLineObject(Wire):
     def __init__(self, curve: Wire, mode: Mode = Mode.ADD):
         # Use the helper function to handle adding the curve to the context
         _add_curve_to_context(curve, mode)
-        super().__init__(curve.wrapped)
+        if curve.wrapped is not None:
+            super().__init__(curve.wrapped)
 
 
 class BaseEdgeObject(Edge):
@@ -95,6 +101,129 @@ class BaseEdgeObject(Edge):
         # Use the helper function to handle adding the curve to the context
         _add_curve_to_context(curve, mode)
         super().__init__(curve.wrapped)
+
+
+class Airfoil(BaseLineObject):
+    """
+    Create an airfoil described by a 4-digit (or fractional) NACA airfoil
+    (e.g. '2412' or '2213.323').
+
+    The NACA four-digit wing sections define the airfoil_code by:
+    - First digit describing maximum camber as percentage of the chord.
+    - Second digit describing the distance of maximum camber from the airfoil leading edge
+    in tenths of the chord.
+    - Last two digits describing maximum thickness of the airfoil as percent of the chord.
+
+    Args:
+        airfoil_code : str
+            The NACA 4-digit (or fractional) airfoil code (e.g. '2213.323').
+        n_points : int
+            Number of points per upper/lower surface.
+        finite_te : bool
+            If True, enforces a finite trailing edge (default False).
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    @staticmethod
+    def parse_naca4(value: str | float) -> tuple[float, float, float]:
+        """
+        Parse NACA 4-digit (or fractional) airfoil code into parameters.
+        """
+        s = str(value).replace("NACA", "").strip()
+        if "." in s:
+            int_part, frac_part = s.split(".", 1)
+            m = int(int_part[0]) / 100
+            p = int(int_part[1]) / 10
+            t = float(f"{int(int_part[2:]):02}.{frac_part}") / 100
+        else:
+            m = int(s[0]) / 100
+            p = int(s[1]) / 10
+            t = int(s[2:]) / 100
+        return m, p, t
+
+    def __init__(
+        self,
+        airfoil_code: str,
+        n_points: int = 50,
+        finite_te: bool = False,
+        mode: Mode = Mode.ADD,
+    ):
+
+        # Airfoil thickness distribution equation:
+        #
+        # yₜ=5t[0.2969√x-0.1260x-0.3516x²+0.2843x³-0.1015x⁴]
+        #
+        # where:
+        # - x is the distance along the chord (0 at the leading edge, 1 at the trailing edge),
+        # - t is the maximum thickness as a fraction of the chord (e.g. 0.12 for a NACA 2412),
+        # - yₜ gives the half-thickness at each chordwise location.
+
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        m, p, t = Airfoil.parse_naca4(airfoil_code)
+
+        # Cosine-spaced x values for better nose resolution
+        beta = np.linspace(0.0, np.pi, n_points)
+        x = (1 - np.cos(beta)) / 2
+
+        # Thickness distribution
+        a0, a1, a2, a3 = 0.2969, -0.1260, -0.3516, 0.2843
+        a4 = -0.1015 if finite_te else -0.1036
+        yt = 5 * t * (a0 * np.sqrt(x) + a1 * x + a2 * x**2 + a3 * x**3 + a4 * x**4)
+
+        # Camber line and slope
+        if m == 0 or p == 0 or p == 1:
+            yc = np.zeros_like(x)
+            dyc_dx = np.zeros_like(x)
+        else:
+            yc = np.empty_like(x)
+            dyc_dx = np.empty_like(x)
+            mask = x < p
+            yc[mask] = m / p**2 * (2 * p * x[mask] - x[mask] ** 2)
+            yc[~mask] = (
+                m / (1 - p) ** 2 * ((1 - 2 * p) + 2 * p * x[~mask] - x[~mask] ** 2)
+            )
+            dyc_dx[mask] = 2 * m / p**2 * (p - x[mask])
+            dyc_dx[~mask] = 2 * m / (1 - p) ** 2 * (p - x[~mask])
+
+        theta = np.arctan(dyc_dx)
+        self._camber_points = [Vector(xi, yi) for xi, yi in zip(x, yc)]
+
+        # Upper and lower surfaces
+        xu = x - yt * np.sin(theta)
+        yu = yc + yt * np.cos(theta)
+        xl = x + yt * np.sin(theta)
+        yl = yc - yt * np.cos(theta)
+
+        upper_pnts = [Vector(x, y) for x, y in zip(xu, yu)]
+        lower_pnts = [Vector(x, y) for x, y in zip(xl, yl)]
+        unique_points: list[
+            Vector | tuple[float, float] | tuple[float, float, float]
+        ] = list(dict.fromkeys(upper_pnts[::-1] + lower_pnts))
+        surface = Edge.make_spline(unique_points, periodic=not finite_te)  # type: ignore[arg-type]
+        if finite_te:
+            trailing_edge = Edge.make_line(surface @ 0, surface @ 1)
+            airfoil_profile = Wire([surface, trailing_edge])
+        else:
+            airfoil_profile = Wire([surface])
+
+        super().__init__(airfoil_profile, mode=mode)
+
+        # Store metadata
+        self.code: str = airfoil_code  #: NACA code string (e.g. "2412")
+        self.max_camber: float = m  #: Maximum camber as fraction of chord
+        self.camber_pos: float = p  #: Chordwise position of max camber (0–1)
+        self.thickness: float = t  #: Maximum thickness as fraction of chord
+        self.finite_te: bool = finite_te  #: If True, trailing edge is finite
+
+    @property
+    def camber_line(self) -> Edge:
+        """Camber line of the airfoil as an Edge."""
+        return Edge.make_spline(self._camber_points)  # type: ignore[arg-type]
 
 
 class Bezier(BaseEdgeObject):
@@ -126,6 +255,169 @@ class Bezier(BaseEdgeObject):
         curve = Edge.make_bezier(*polls, weights=weights)
 
         super().__init__(curve, mode=mode)
+
+
+class BlendCurve(BaseEdgeObject):
+    """Line Object: BlendCurve
+
+    Create a smooth Bézier-based transition curve between two existing edges.
+
+    The blend is constructed as a cubic (C1) or quintic (C2) Bézier curve
+    whose control points are determined from the position, first derivative,
+    and (for C2) second derivative of the input curves at the chosen endpoints.
+    Optional scalar multipliers can be applied to the endpoint tangents to
+    control the "tension" of the blend.
+
+    Args:
+        curve0 (Edge): First curve to blend from.
+        curve1 (Edge): Second curve to blend to.
+        continuity (ContinuityLevel, optional):
+            Desired geometric continuity at the join:
+            - ContinuityLevel.C0: position match only (straight line)
+            - ContinuityLevel.C1: match position and tangent direction (cubic Bézier)
+            - ContinuityLevel.C2: match position, tangent, and curvature (quintic Bézier)
+            Defaults to ContinuityLevel.C2.
+        end_points (tuple[VectorLike, VectorLike] | None, optional):
+            Pair of points specifying the connection points on `curve0` and `curve1`.
+            Each must coincide (within TOLERANCE) with the start or end of the
+            respective curve. If None, the closest pair of endpoints is chosen.
+            Defaults to None.
+        tangent_scalars (tuple[float, float] | None, optional):
+            Scalar multipliers applied to the first derivatives at the start
+            of `curve0` and the end of `curve1` before computing control points.
+            Useful for adjusting the pull/tension of the blend without altering
+            the base curves. Defaults to (1.0, 1.0).
+        mode (Mode, optional): Boolean operation mode when used in a
+            BuildLine context. Defaults to Mode.ADD.
+
+    Raises:
+        ValueError: `tangent_scalars` must be a pair of float values.
+        ValueError: If specified `end_points` are not coincident with the start
+            or end of their respective curves.
+
+    Example:
+        >>> blend = BlendCurve(curve_a, curve_b, ContinuityLevel.C1, tangent_scalars=(1.2, 0.8))
+        >>> show(blend)
+    """
+
+    def __init__(
+        self,
+        curve0: Edge,
+        curve1: Edge,
+        continuity: ContinuityLevel = ContinuityLevel.C2,
+        end_points: tuple[VectorLike, VectorLike] | None = None,
+        tangent_scalars: tuple[float, float] | None = None,
+        mode: Mode = Mode.ADD,
+    ):
+        #
+        # Process the inputs
+
+        tan_scalars = (1.0, 1.0) if tangent_scalars is None else tangent_scalars
+        if len(tan_scalars) != 2:
+            raise ValueError("tangent_scalars must be a (start, end) pair")
+
+        # Find the vertices that will be connected using closest if None
+        end_pnts = (
+            min(
+                product(curve0.vertices(), curve1.vertices()),
+                key=lambda pair: pair[0].distance_to(pair[1]),
+            )
+            if end_points is None
+            else end_points
+        )
+
+        # Find the Edge parameter that matches the end points
+        curves: tuple[Edge, Edge] = (curve0, curve1)
+        end_params = [0, 0]
+        for i, end_pnt in enumerate(end_pnts):
+            curve_start_pnt = curves[i].position_at(0)
+            curve_end_pnt = curves[i].position_at(1)
+            given_end_pnt = Vector(end_pnt)
+            if (given_end_pnt - curve_start_pnt).length < TOLERANCE:
+                end_params[i] = 0
+            elif (given_end_pnt - curve_end_pnt).length < TOLERANCE:
+                end_params[i] = 1
+            else:
+                raise ValueError(
+                    "end_points must be at either the start or end of a curve"
+                )
+
+        #
+        # Bézier endpoint derivative constraints (degree n=5 case)
+        #
+        # For a degree-n Bézier curve:
+        #   B(t)   = Σ_{i=0}^n binom(n,i) (1-t)^(n-i) t^i  P_i
+        #   B'(t)  = n(P_1 - P_0) at t=0
+        #            n(P_n - P_{n-1}) at t=1
+        #   B''(t) = n(n-1)(P_2 - 2P_1 + P_0) at t=0
+        #            n(n-1)(P_{n-2} - 2P_{n-1} + P_n) at t=1
+        #
+        # Matching a desired start derivative D0 and curvature vector K0:
+        #   P1 = P0 + (1/n) * D0
+        #   P2 = P0 + (2/n) * D0 + (1/(n*(n-1))) * K0
+        #
+        # Matching a desired end derivative D1 and curvature vector K1:
+        #   P_{n-1} = P_n - (1/n) * D1
+        #   P_{n-2} = P_n - (2/n) * D1 + (1/(n*(n-1))) * K1
+        #
+        # For n=5 specifically:
+        #   P1 = P0 + D0 / 5
+        #   P2 = P0 + (2*D0)/5 + K0/20
+        #   P4 = P5 - D1 / 5
+        #   P3 = P5 - (2*D1)/5 + K1/20
+        #
+        # D0, D1 are first derivatives at endpoints (can be scaled for tension).
+        # K0, K1 are second derivatives at endpoints (for C² continuity).
+        # Works in any dimension; P_i are vectors in ℝ² or ℝ³.
+
+        #
+        # | Math symbol | Meaning in code            | Python name  |
+        # | ----------- | -------------------------- | ------------ |
+        # | P_0         | start position             | start_pos    |
+        # | P_1         | 1st control pt after start | ctrl_pnt1    |
+        # | P_2         | 2nd control pt after start | ctrl_pnt2    |
+        # | P_{n-2}     | 2nd control pt before end  | ctrl_pnt3    |
+        # | P_{n-1}     | 1st control pt before end  | ctrl_pnt4    |
+        # | P_n         | end position               | end_pos      |
+        # | D_0         | derivative at start        | start_deriv  |
+        # | D_1         | derivative at end          | end_deriv    |
+        # | K_0         | curvature vec at start     | start_curv   |
+        # | K_1         | curvature vec at end       | end_curv     |
+
+        start_pos = curve0.position_at(end_params[0])
+        end_pos = curve1.position_at(end_params[1])
+
+        # Note: derivative_at(..,1) is being used instead of tangent_at as
+        # derivate_at isn't normalized which allows for a natural "speed" to be used
+        # if no scalar is provided.
+        start_deriv = curve0.derivative_at(end_params[0], 1) * tan_scalars[0]
+        end_deriv = curve1.derivative_at(end_params[1], 1) * tan_scalars[1]
+
+        if continuity == ContinuityLevel.C0:
+            joining_curve = Line(start_pos, end_pos)
+        elif continuity == ContinuityLevel.C1:
+            cntl_pnt1 = start_pos + start_deriv / 3
+            cntl_pnt4 = end_pos - end_deriv / 3
+            cntl_pnts = [start_pos, cntl_pnt1, cntl_pnt4, end_pos]  # degree-3 Bézier
+            joining_curve = Bezier(*cntl_pnts)
+        else:  # C2
+            start_curv = curve0.derivative_at(end_params[0], 2)
+            end_curv = curve1.derivative_at(end_params[1], 2)
+            cntl_pnt1 = start_pos + start_deriv / 5
+            cntl_pnt2 = start_pos + (2 * start_deriv) / 5 + start_curv / 20
+            cntl_pnt4 = end_pos - end_deriv / 5
+            cntl_pnt3 = end_pos - (2 * end_deriv) / 5 + end_curv / 20
+            cntl_pnts = [
+                start_pos,
+                cntl_pnt1,
+                cntl_pnt2,
+                cntl_pnt3,
+                cntl_pnt4,
+                end_pos,
+            ]  # degree-5 Bézier
+            joining_curve = Bezier(*cntl_pnts)
+
+        super().__init__(joining_curve, mode=mode)
 
 
 class CenterArc(BaseEdgeObject):
@@ -501,7 +793,7 @@ class FilletPolyline(BaseLineObject):
 
     Args:
         pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
-        radius (float): fillet radius
+        radius (float | Iterable[float]): radius to fillet at each vertex or a single value for all vertices
         close (bool, optional): close end points with extra Edge and corner fillets.
             Defaults to False
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -516,7 +808,7 @@ class FilletPolyline(BaseLineObject):
     def __init__(
         self,
         *pts: VectorLike | Iterable[VectorLike],
-        radius: float,
+        radius: float | Iterable[float],
         close: bool = False,
         mode: Mode = Mode.ADD,
     ):
@@ -527,8 +819,18 @@ class FilletPolyline(BaseLineObject):
 
         if len(points) < 2:
             raise ValueError("FilletPolyline requires two or more pts")
-        if radius <= 0:
-            raise ValueError("radius must be positive")
+
+        if isinstance(radius, (int, float)):
+            radius_list = [radius] * len(points)  # Single radius for all points
+        else:
+            radius_list = list(radius)
+            if len(radius_list) != len(points) - int(not close) * 2:
+                raise ValueError(
+                    f"radius list length ({len(radius_list)}) must match angle count ({ len(points) - int(not close) * 2})"
+                )
+        for r in radius_list:
+            if r <= 0:
+                raise ValueError(f"radius {r} must be positive")
 
         lines_pts = WorkplaneList.localize(*points)
 
@@ -560,12 +862,14 @@ class FilletPolyline(BaseLineObject):
 
         # For each corner vertex create a new fillet Edge
         fillets = []
-        for vertex, edges in vertex_to_edges.items():
+        for i, (vertex, edges) in enumerate(vertex_to_edges.items()):
             if len(edges) != 2:
                 continue
             other_vertices = {ve for e in edges for ve in e.vertices() if ve != vertex}
             third_edge = Edge.make_line(*[v for v in other_vertices])
-            fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(radius, [vertex])
+            fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(
+                radius_list[i - int(not close)], [vertex]
+            )
             fillets.append(fillet_face.edges().filter_by(GeomType.CIRCLE)[0])
 
         # Create the Edges that join the fillets
@@ -1071,6 +1375,12 @@ class PointArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
+    warnings.warn(
+        "The 'PointArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -1149,6 +1459,12 @@ class PointArcTangentArc(BaseEdgeObject):
         ValueError: Point is already tangent to arc
         RuntimeError: No tangent arc found
     """
+
+    warnings.warn(
+        "The 'PointArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 
@@ -1294,6 +1610,12 @@ class ArcArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
+    warnings.warn(
+        "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -1393,6 +1715,12 @@ class ArcArcTangentArc(BaseEdgeObject):
             chord), else the long sagitta crossing the center. Defaults to True
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
+
+    warnings.warn(
+        "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     _applies_to = [BuildLine._tag]
 

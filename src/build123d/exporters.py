@@ -34,6 +34,7 @@ import math
 import xml.etree.ElementTree as ET
 from copy import copy
 from enum import Enum, auto
+from io import BytesIO
 from os import PathLike, fsdecode
 from typing import Any, TypeAlias
 from warnings import warn
@@ -636,13 +637,13 @@ class ExportDXF(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def write(self, file_name: PathLike | str | bytes):
+    def write(self, file_name: PathLike | str | bytes | BytesIO):
         """write
 
         Writes the DXF data to the specified file name.
 
         Args:
-            file_name (PathLike |  str |  bytes): The file name (including path) where
+            file_name (PathLike |  str |  bytes | BytesIO): The file name (including path) where
                 the DXF data will be written.
         """
         # Reset the main CAD viewport of the model space to the
@@ -650,7 +651,12 @@ class ExportDXF(Export2D):
         # https://github.com/gumyr/build123d/issues/382 tracks
         # exposing viewport control to the user.
         zoom.extents(self._modelspace)
-        self._document.saveas(fsdecode(file_name))
+
+        if not isinstance(file_name, BytesIO):
+            file_name = fsdecode(file_name)
+            self._document.saveas(file_name)
+        else:
+            self._document.write(file_name, fmt="bin")
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -758,7 +764,7 @@ class ExportDXF(Export2D):
         )
 
         # need to apply the transform on the geometry level
-        if edge.wrapped is None or edge.location is None:
+        if not edge or edge.location is None:
             raise ValueError(f"Edge is empty {edge}.")
         t = edge.location.wrapped.Transformation()
         spline.Transform(t)
@@ -1345,7 +1351,7 @@ class ExportSVG(Export2D):
         u2 = adaptor.LastParameter()
 
         # Apply the shape location to the geometry.
-        if edge.wrapped is None or edge.location is None:
+        if not edge or edge.location is None:
             raise ValueError(f"Edge is empty {edge}.")
         t = edge.location.wrapped.Transformation()
         spline.Transform(t)
@@ -1411,7 +1417,7 @@ class ExportSVG(Export2D):
     }
 
     def _edge_segments(self, edge: Edge, reverse: bool) -> list[PathSegment]:
-        if edge.wrapped is None:
+        if not edge:
             raise ValueError(f"Edge is empty {edge}.")
         edge_reversed = edge.wrapped.Orientation() == TopAbs_Orientation.TopAbs_REVERSED
         geom_type = edge.geom_type
@@ -1497,13 +1503,13 @@ class ExportSVG(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def write(self, path: PathLike | str | bytes):
+    def write(self, path: PathLike | str | bytes | BytesIO):
         """write
 
         Writes the SVG data to the specified file path.
 
         Args:
-            path (PathLike |  str |  bytes): The file path where the SVG data will be written.
+            path (PathLike | str | bytes | BytesIO): The file path where the SVG data will be written.
         """
         # pylint: disable=too-many-locals
         bb = self._bounds
@@ -1549,5 +1555,9 @@ class ExportSVG(Export2D):
 
         xml = ET.ElementTree(svg)
         ET.indent(xml, "  ")
+
+        if not isinstance(path, BytesIO):
+            path = fsdecode(path)
+
         # xml.write(path, encoding="utf-8", xml_declaration=True, default_namespace=False)
         xml.write(path, encoding="utf-8", xml_declaration=True, default_namespace=None)

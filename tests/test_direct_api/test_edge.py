@@ -37,7 +37,7 @@ from build123d.geometry import Axis, Plane, Vector
 from build123d.objects_curve import CenterArc, EllipticalCenterArc
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import sweep
-from build123d.topology import Edge, Face, Wire
+from build123d.topology import Edge, Face, Wire, Vertex
 from OCP.GeomProjLib import GeomProjLib
 
 
@@ -161,6 +161,10 @@ class TestEdge(unittest.TestCase):
         with self.assertRaises(ValueError):
             line.find_intersection_points(Plane.YZ)
 
+        circle.wrapped = None
+        with self.assertRaises(ValueError):
+            circle.find_intersection_points(line)
+
     # def test_intersections_tolerance(self):
 
     # Multiple operands not currently supported
@@ -179,8 +183,27 @@ class TestEdge(unittest.TestCase):
         line = Edge.make_line((-2, 0), (2, 0))
         self.assertAlmostEqual(line.trim(0.25, 0.75).position_at(0), (-1, 0, 0), 5)
         self.assertAlmostEqual(line.trim(0.25, 0.75).position_at(1), (1, 0, 0), 5)
+
+        l1 = CenterArc((0, 0), 1, 0, 180)
+        l2 = l1.trim(0, l1 @ 0.5)
+        self.assertAlmostEqual(l2 @ 0, (1, 0, 0), 5)
+        self.assertAlmostEqual(l2 @ 1, (0, 1, 0), 5)
+
+        l3 = l1.trim((1, 0), (0, 1))
+        self.assertAlmostEqual(l3 @ 0, (1, 0, 0), 5)
+        self.assertAlmostEqual(l3 @ 1, (0, 1, 0), 5)
+
+        l4 = l1.trim(0.5, (-1, 0))
+        self.assertAlmostEqual(l4 @ 0, (0, 1, 0), 5)
+        self.assertAlmostEqual(l4 @ 1, (-1, 0, 0), 5)
+
+        l5 = l1.trim(0.5, Vertex(-1, 0))
+        self.assertAlmostEqual(l5 @ 0, (0, 1, 0), 5)
+        self.assertAlmostEqual(l5 @ 1, (-1, 0, 0), 5)
+
+        line.wrapped = None
         with self.assertRaises(ValueError):
-            line.trim(0.75, 0.25)
+            line.trim(0.1, 0.9)
 
     def test_trim_to_length(self):
 
@@ -204,6 +227,14 @@ class TestEdge(unittest.TestCase):
         a4 = Axis((0, 0, 0), (1, 1, 1))
         e4_trim = Edge(a4).trim_to_length(0.5, 2)
         self.assertAlmostEqual(e4_trim.length, 2, 5)
+
+        e5 = e1.trim_to_length((5, 5), 1)
+        self.assertAlmostEqual(e5 @ 0, (5, 5), 5)
+        self.assertAlmostEqual(e5.length, 1, 5)
+
+        e1.wrapped = None
+        with self.assertRaises(ValueError):
+            e1.trim_to_length(0.1, 2)
 
     def test_bezier(self):
         with self.assertRaises(ValueError):
@@ -273,6 +304,10 @@ class TestEdge(unittest.TestCase):
         with self.assertRaises(ValueError):
             edge.param_at_point((-1, 1))
 
+        ea.wrapped = None
+        with self.assertRaises(ValueError):
+            ea.param_at_point((15, 5))
+
     def test_param_at_point_bspline(self):
         # Define a complex spline with inflections and non-monotonic behavior
         curve = Edge.make_spline(
@@ -309,6 +344,10 @@ class TestEdge(unittest.TestCase):
 
         e2r = e2.reversed(reconstruct=True)
         self.assertAlmostEqual((e2 @ 0.1).X, -(e2r @ 0.1).X, 5)
+
+        e2.wrapped = None
+        with self.assertRaises(ValueError):
+            e2.reversed()
 
     def test_init(self):
         with self.assertRaises(TypeError):
@@ -386,6 +425,10 @@ class TestEdge(unittest.TestCase):
         geom_surface = Face.make_rect(4, 4).geom_adaptor()
         with self.assertRaises(TypeError):
             Edge.make_line((0, 0), (1, 0))._extend_spline(True, geom_surface)
+        spline = Edge.make_spline([(0, 0), (1,), (2, 0)])
+        spline.wrapped = None
+        with self.assertRaises(ValueError):
+            spline._extend_spline(True, geom_surface)
 
     @patch.object(GeomProjLib, "Project_s", return_value=None)
     def test_extend_spline_failed_snap(self, mock_is_valid):
@@ -393,6 +436,12 @@ class TestEdge(unittest.TestCase):
         spline = Edge.make_spline([(0, 0), (1, 0), (2, 0)])
         with self.assertRaises(RuntimeError):
             spline._extend_spline(True, geom_surface)
+
+    def test_geom_adaptor(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        line.wrapped = None
+        with self.assertRaises(ValueError):
+            line.geom_adaptor()
 
 
 if __name__ == "__main__":

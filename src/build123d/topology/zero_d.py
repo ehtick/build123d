@@ -59,6 +59,7 @@ import warnings
 from typing import overload, TYPE_CHECKING
 
 from collections.abc import Iterable
+from typing_extensions import Self
 
 import OCP.TopAbs as ta
 from OCP.BRep import BRep_Tool
@@ -66,8 +67,7 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Shape, TopoDS_Vertex, TopoDS_Edge
 from OCP.gp import gp_Pnt
-from build123d.geometry import Matrix, Vector, VectorLike
-from typing_extensions import Self
+from build123d.geometry import Matrix, Vector, VectorLike, Location, Axis, Plane
 
 from .shape_core import Shape, ShapeList, downcast, shapetype
 
@@ -167,6 +167,45 @@ class Vertex(Shape[TopoDS_Vertex]):
     def extrude(cls, obj: Shape, direction: VectorLike) -> Vertex:
         """extrude - invalid operation for Vertex"""
         raise NotImplementedError("Vertices can't be created by extrusion")
+
+    def intersect(
+        self, *to_intersect: Shape | Vector | Location | Axis | Plane
+    ) -> ShapeList[Vertex] | None:
+        """Intersection of vertex and geometric objects or shapes.
+
+        Args:
+            to_intersect (sequence of [Shape | Vector | Location | Axis | Plane]):
+                Objects(s) to intersect with
+
+        Returns:
+            ShapeList[Vertex] | None: Vertex intersection in a ShapeList or None
+        """
+        common = Vector(self)
+        result: Shape | ShapeList[Shape] | Vector | None
+        for obj in to_intersect:
+            # Treat as Vector, otherwise call intersection from Shape
+            match obj:
+                case Vertex():
+                    result = common.intersect(Vector(obj))
+                case Vector() | Location() | Axis() | Plane():
+                    result = obj.intersect(common)
+                case _ if issubclass(type(obj), Shape):
+                    result = obj.intersect(self)
+                case _:
+                    raise ValueError(f"Unsupported type to_intersect:: {type(obj)}")
+
+            if isinstance(result, Vector) and result == common:
+                pass
+            elif (
+                isinstance(result, list)
+                and len(result) == 1
+                and Vector(result[0]) == common
+            ):
+                pass
+            else:
+                return None
+
+        return ShapeList([self])
 
     # ---- Instance Methods ----
 
