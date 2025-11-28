@@ -89,6 +89,7 @@ __all__ = [
     "EllipticalCenterArc",
     "EllipticalStartArc",
     "ParabolicCenterArc",
+    "HyperbolicCenterArc",
     "FilletPolyline",
     "Helix",
     "IntersectingLine",

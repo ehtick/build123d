@@ -125,6 +125,13 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Parabolic arc defined by vertex, focal length & angles
 
+    .. grid-item-card:: :class:`~objects_curve.HyperbolicCenterArc`
+
+        .. image:: assets/hyperbolic_center_arc_example.svg
+
+        +++
+        Hyperbolic arc defined by center, radii & angles
+
     .. grid-item-card:: :class:`~objects_curve.FilletPolyline`
 
         .. image:: assets/filletpolyline_example.svg
@@ -249,6 +256,7 @@ Reference
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
 .. autoclass:: ParabolicCenterArc
+.. autoclass:: HyperbolicCenterArc
 .. autoclass:: FilletPolyline
 .. autoclass:: Helix
 .. autoclass:: IntersectingLine

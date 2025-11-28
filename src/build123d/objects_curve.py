@@ -796,6 +796,64 @@ class ParabolicCenterArc(BaseEdgeObject):
         super().__init__(curve, mode=mode)
 
 
+class HyperbolicCenterArc(BaseEdgeObject):
+    """Line Object: Hyperbolic Center Arc
+
+    Create a hyperbolic arc defined by a center point and focal length (distance from focus to vertex).
+
+    Args:
+        center (VectorLike): hyperbola center
+        x_radius (float): x radius of the ellipse (along the x-axis of plane)
+        y_radius (float): y radius of the ellipse (along the y-axis of plane)
+        start_angle (float, optional): arc start angle from x-axis.
+            Defaults to 0.0
+        end_angle (float, optional): arc end angle from x-axis.
+            Defaults to 90.0
+        rotation (float, optional): angle to rotate arc. Defaults to 0.0
+        angular_direction (AngularDirection, optional): arc direction.
+            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        plane (Plane, optional): base plane. Defaults to Plane.XY
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    def __init__(
+        self,
+        center: VectorLike,
+        x_radius: float,
+        y_radius: float,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        rotation: float = 0.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+        mode: Mode = Mode.ADD,
+    ):
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        center_pnt = WorkplaneList.localize(center)
+        if context is None:
+            hyperbola_workplane = Plane.XY
+        else:
+            hyperbola_workplane = copy_module.copy(
+                WorkplaneList._get_context().workplanes[0]
+            )
+        hyperbola_workplane.origin = center_pnt
+        curve = Edge.make_hyperbola(
+            x_radius=x_radius,
+            y_radius=y_radius,
+            plane=hyperbola_workplane,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            angular_direction=angular_direction,
+        ).rotate(
+            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()), rotation
+        )
+
+        super().__init__(curve, mode=mode)
+
+
 class Helix(BaseEdgeObject):
     """Line Object: Helix
 

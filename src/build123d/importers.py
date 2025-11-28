@@ -288,6 +288,7 @@ def import_svg_as_buildline_code(
         "Arc": [
             "EllipticalCenterArc",
             "ParabolicCenterArc",
+            "HyperbolicCenterArc",
             # "EllipticalStartArc",
             "start",
             "end",
