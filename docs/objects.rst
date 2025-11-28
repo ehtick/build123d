@@ -118,6 +118,13 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Elliptical arc defined by center,  radii & angles
 
+    .. grid-item-card:: :class:`~objects_curve.ParabolicCenterArc`
+
+        .. image:: assets/parabolic_center_arc_example.svg
+
+        +++
+        Parabolic arc defined by vertex, focal length & angles
+
     .. grid-item-card:: :class:`~objects_curve.FilletPolyline`
 
         .. image:: assets/filletpolyline_example.svg

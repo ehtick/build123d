@@ -741,6 +741,61 @@ class EllipticalCenterArc(BaseEdgeObject):
         super().__init__(curve, mode=mode)
 
 
+class ParabolicCenterArc(BaseEdgeObject):
+    """Line Object: Parabolic Center Arc
+
+    Create a parabolic arc defined by a vertex point and focal length (distance from focus to vertex).
+
+    Args:
+        vertex (VectorLike): parabola vertex
+        focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+        start_angle (float, optional): arc start angle.
+            Defaults to 0.0
+        end_angle (float, optional): arc end angle.
+            Defaults to 90.0
+        rotation (float, optional): angle to rotate arc. Defaults to 0.0
+        angular_direction (AngularDirection, optional): arc direction.
+            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        plane (Plane, optional): base plane. Defaults to Plane.XY
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    def __init__(
+        self,
+        vertex: VectorLike,
+        focal_length: float,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        rotation: float = 0.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+        mode: Mode = Mode.ADD,
+    ):
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        vertex_pnt = WorkplaneList.localize(vertex)
+        if context is None:
+            parabola_workplane = Plane.XY
+        else:
+            parabola_workplane = copy_module.copy(
+                WorkplaneList._get_context().workplanes[0]
+            )
+        parabola_workplane.origin = vertex_pnt
+        curve = Edge.make_parabola(
+            focal_length=focal_length,
+            plane=parabola_workplane,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            angular_direction=angular_direction,
+        ).rotate(
+            Axis(parabola_workplane.origin, parabola_workplane.z_dir.to_dir()), rotation
+        )
+
+        super().__init__(curve, mode=mode)
+
+
 class Helix(BaseEdgeObject):
     """Line Object: Helix
 

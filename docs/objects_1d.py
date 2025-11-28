@@ -125,6 +125,14 @@ svg.add_shape(elliptical_center_arc.line)
 svg.add_shape(dot.moved(Location(Vector((0, 0)))))
 svg.write("assets/elliptical_center_arc_example.svg")
 
+with BuildLine() as parabolic_center_arc:
+    ParabolicCenterArc((0, 0), 0.5, 60, 0)
+s = 100 / max(*parabolic_center_arc.line.bounding_box().size)
+svg = ExportSVG(scale=s)
+svg.add_shape(parabolic_center_arc.line)
+svg.add_shape(dot.moved(Location(Vector((0, 0)))))
+svg.write("assets/parabolic_center_arc_example.svg")
+
 with BuildLine() as helix:
     Helix(1, 3, 1)
 scene = Compound(helix.line) + Compound.make_triad(0.5)
