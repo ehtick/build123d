@@ -195,7 +195,6 @@ class BuildLineTests(unittest.TestCase):
         self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 3)
         self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 4)
 
-
         with self.assertRaises(ValueError):
             p = FilletPolyline(
                 (0, 0),
@@ -252,6 +251,33 @@ class BuildLineTests(unittest.TestCase):
             FilletPolyline((0, 0), radius=0.1)
         with self.assertRaises(ValueError):
             FilletPolyline((0, 0), (1, 0), (1, 1), radius=-1)
+
+        # test filletpolyline curr_fillet None
+        # Middle corner radius = 0 → curr_fillet is None
+        with BuildLine():
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (20, 10),
+                radius=(0, 1),  # middle corner is sharp
+                close=False,
+            )
+        # 1 circular fillet, 3 line fillets
+        assert len(p.edges().filter_by(GeomType.CIRCLE)) == 1
+
+        # test filletpolyline next_fillet None:
+        # Second corner is sharp (radius 0) → next_fillet is None
+        with BuildLine():
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 0),  # next_fillet is None at last interior corner
+                close=False,
+            )
+        assert len(p.edges()) > 0
 
     def test_intersecting_line(self):
         with BuildLine():
@@ -861,9 +887,9 @@ class BuildLineTests(unittest.TestCase):
             min_r = 0 if case[2][0] is None else (flip_min * case[0] + case[2][0]) / 2
             max_r = 1e6 if case[2][1] is None else (flip_max * case[0] + case[2][1]) / 2
 
-            print(case[1], min_r, max_r, case[0])
-            print(min_r + 0.01, min_r * 0.99, max_r - 0.01, max_r + 0.01)
-            print((case[0] - 1 * (r1 + r2)) / 2)
+            # print(case[1], min_r, max_r, case[0])
+            # print(min_r + 0.01, min_r * 0.99, max_r - 0.01, max_r + 0.01)
+            # print((case[0] - 1 * (r1 + r2)) / 2)
 
             # Greater than min
             l1 = ArcArcTangentArc(start_arc, end_arc, min_r + 0.01, keep=case[1])

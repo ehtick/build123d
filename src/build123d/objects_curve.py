@@ -50,7 +50,7 @@ from build123d.build_enums import (
 )
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Plane, Vector, VectorLike, TOLERANCE
-from build123d.topology import Edge, Face, Wire, Curve
+from build123d.topology import Curve, Edge, Face, Vertex, Wire
 from build123d.topology.shape_core import ShapeList
 
 
@@ -851,7 +851,7 @@ class FilletPolyline(BaseLineObject):
 
         # Create a list of vertices from wire_of_lines in the same order as
         # the original points so the resulting fillet edges are ordered
-        ordered_vertices = []
+        ordered_vertices: list[Vertex] = []
 
         for pnts in lines_pts:
             distance = {
@@ -867,7 +867,7 @@ class FilletPolyline(BaseLineObject):
         }
 
         # For each corner vertex create a new fillet Edge (or keep as vertex if radius is 0)
-        fillets = []
+        fillets: list[None | Edge] = []
 
         for i, (vertex, edges) in enumerate(vertex_to_edges.items()):
             if len(edges) != 2:
@@ -879,7 +879,9 @@ class FilletPolyline(BaseLineObject):
                 fillets.append(None)
 
             else:
-                other_vertices = {ve for e in edges for ve in e.vertices() if ve != vertex}
+                other_vertices = {
+                    ve for e in edges for ve in e.vertices() if ve != vertex
+                }
                 third_edge = Edge.make_line(*[v for v in other_vertices])
                 fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(
                     current_radius, [vertex]
@@ -891,18 +893,20 @@ class FilletPolyline(BaseLineObject):
             interior_edges = []
 
             for i in range(len(fillets)):
+                prev_fillet = fillets[i - 1]
+                curr_fillet = fillets[i]
                 prev_idx = i - 1
                 curr_idx = i
                 # Determine start and end points
-                if fillets[prev_idx] is None:
-                    start_pt = ordered_vertices[prev_idx]
+                if prev_fillet is None:
+                    start_pt: Vertex | Vector = ordered_vertices[prev_idx]
                 else:
-                    start_pt = fillets[prev_idx] @ 1
+                    start_pt = prev_fillet @ 1
 
-                if fillets[curr_idx] is None:
-                    end_pt = ordered_vertices[curr_idx]
+                if curr_fillet is None:
+                    end_pt: Vertex | Vector = ordered_vertices[curr_idx]
                 else:
-                    end_pt = fillets[curr_idx] @ 0
+                    end_pt = curr_fillet @ 0
                 interior_edges.append(Edge.make_line(start_pt, end_pt))
 
             end_edges = []
@@ -910,18 +914,22 @@ class FilletPolyline(BaseLineObject):
         else:
             interior_edges = []
             for i in range(len(fillets) - 1):
+                next_fillet = fillets[i + 1]
+                curr_fillet = fillets[i]
                 curr_idx = i
                 next_idx = i + 1
                 # Determine start and end points
-                if fillets[curr_idx] is None:
-                    start_pt = ordered_vertices[curr_idx + 1]  # +1 because first vertex has no fillet
+                if curr_fillet is None:
+                    start_pt = ordered_vertices[
+                        curr_idx + 1
+                    ]  # +1 because first vertex has no fillet
                 else:
-                    start_pt = fillets[curr_idx] @ 1
+                    start_pt = curr_fillet @ 1
 
-                if fillets[next_idx] is None:
+                if next_fillet is None:
                     end_pt = ordered_vertices[next_idx + 1]
                 else:
-                    end_pt = fillets[next_idx] @ 0
+                    end_pt = next_fillet @ 0
                 interior_edges.append(Edge.make_line(start_pt, end_pt))
 
             # Handle end edges
@@ -941,7 +949,6 @@ class FilletPolyline(BaseLineObject):
         new_wire = Wire(end_edges + interior_edges + actual_fillets)
 
         super().__init__(new_wire, mode=mode)
-
 
 
 class JernArc(BaseEdgeObject):
