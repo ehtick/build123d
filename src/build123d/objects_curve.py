@@ -756,7 +756,6 @@ class ParabolicCenterArc(BaseEdgeObject):
         rotation (float, optional): angle to rotate arc. Defaults to 0.0
         angular_direction (AngularDirection, optional): arc direction.
             Defaults to AngularDirection.COUNTER_CLOCKWISE
-        plane (Plane, optional): base plane. Defaults to Plane.XY
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -812,7 +811,6 @@ class HyperbolicCenterArc(BaseEdgeObject):
         rotation (float, optional): angle to rotate arc. Defaults to 0.0
         angular_direction (AngularDirection, optional): arc direction.
             Defaults to AngularDirection.COUNTER_CLOCKWISE
-        plane (Plane, optional): base plane. Defaults to Plane.XY
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 

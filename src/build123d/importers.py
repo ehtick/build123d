@@ -287,8 +287,6 @@ def import_svg_as_buildline_code(
         "QuadraticBezier": ["Bezier", "start", "control", "end"],
         "Arc": [
             "EllipticalCenterArc",
-            "ParabolicCenterArc",
-            "HyperbolicCenterArc",
             # "EllipticalStartArc",
             "start",
             "end",
