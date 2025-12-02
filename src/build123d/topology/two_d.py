@@ -145,6 +145,7 @@ from .shape_core import (
     ShapeList,
     SkipClean,
     _sew_topods_faces,
+    _topods_bool_op,
     _topods_entities,
     _topods_face_normal_at,
     downcast,
@@ -155,7 +156,6 @@ from .utils import (
     _extrude_topods_shape,
     _make_loft,
     _make_topods_face_from_wires,
-    _topods_bool_op,
     find_max_dimension,
 )
 from .zero_d import Vertex
@@ -171,7 +171,6 @@ class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
     project_to_viewport = Mixin1D.project_to_viewport
-    split = Mixin1D.split
 
     vertices = Mixin1D.vertices
     vertex = Mixin1D.vertex
