@@ -60,6 +60,8 @@ import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
+from typing import TypeVar
+
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -164,7 +166,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             parent (Compound, optional): assembly parent. Defaults to None.
             children (Sequence[Shape], optional): assembly children. Defaults to None.
         """
-
+        topods_compound: TopoDS_Compound | None
         if isinstance(obj, Iterable):
             topods_compound = _make_topods_compound_from_shapes(
                 [s.wrapped for s in obj]
@@ -376,8 +378,14 @@ class Compound(Mixin3D[TopoDS_Compound]):
         )
 
         text_flat = Compound(
-            builder.Perform(
-                font_i, NCollection_Utf8String(txt), gp_Ax3(), horiz_align, vert_align
+            TopoDS.Compound_s(
+                builder.Perform(
+                    font_i,
+                    NCollection_Utf8String(txt),
+                    gp_Ax3(),
+                    horiz_align,
+                    vert_align,
+                )
             )
         )
 
@@ -504,6 +512,8 @@ class Compound(Mixin3D[TopoDS_Compound]):
     def __and__(self, other: Shape | Iterable[Shape]) -> Compound:
         """Intersect other to self `&` operator"""
         intersection = Shape.__and__(self, other)
+        if intersection is None:
+            return Compound()
         intersection = Compound(
             intersection if isinstance(intersection, list) else [intersection]
         )
@@ -700,7 +710,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             while iterator.More():
                 child = iterator.Value()
                 if child.ShapeType() == type_map[obj_type]:
-                    results.append(obj_type(downcast(child)))
+                    results.append(obj_type(downcast(child)))  # type: ignore
                 iterator.Next()
 
         return results
@@ -802,7 +812,9 @@ class Compound(Mixin3D[TopoDS_Compound]):
                     target = ShapeList([target])
                 result = ShapeList()
                 for t in target:
-                    operation = BRepAlgoAPI_Section()
+                    operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common = (
+                        BRepAlgoAPI_Section()
+                    )
                     result.extend(bool_op((obj,), (t,), operation))
                     if (
                         not isinstance(obj, Edge | Wire)
@@ -900,8 +912,8 @@ class Compound(Mixin3D[TopoDS_Compound]):
             parent.wrapped = _make_topods_compound_from_shapes(
                 [c.wrapped for c in parent.children]
             )
-        else:
-            parent.wrapped = None
+        # else:
+        #     parent.wrapped = None
 
     def _post_detach_children(self, children):
         """Method call before detaching `children`."""
