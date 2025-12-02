@@ -963,9 +963,9 @@ def split(
     for obj in object_list:
         bottom = None
         if keep == Keep.BOTH:
-            top, bottom = obj.split(bisect_by, keep)
+            top, bottom = obj.split(bisect_by, keep)  # type: ignore[arg-type]
         else:
-            top = obj.split(bisect_by, keep)
+            top = obj.split(bisect_by, keep)  # type: ignore[arg-type]
         for subpart in [top, bottom]:
             if isinstance(subpart, Iterable):
                 new_objects.extend(subpart)

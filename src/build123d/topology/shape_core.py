@@ -163,6 +163,7 @@ if TYPE_CHECKING:  # pragma: no cover
 Shapes = Literal["Vertex", "Edge", "Wire", "Face", "Shell", "Solid", "Compound"]
 TrimmingTool = Union[Plane, "Shell", "Face"]
 TOPODS = TypeVar("TOPODS", bound=TopoDS_Shape)
+CalcFn = Callable[[TopoDS_Shape, GProp_GProps], None]
 
 
 class Shape(NodeMixin, Generic[TOPODS]):
@@ -197,7 +198,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         ta.TopAbs_COMPSOLID: "CompSolid",
     }
 
-    shape_properties_LUT: dict[TopAbs_ShapeEnum:function] = {
+    shape_properties_LUT: dict[TopAbs_ShapeEnum, CalcFn | None] = {
         ta.TopAbs_VERTEX: None,
         ta.TopAbs_EDGE: BRepGProp.LinearProperties_s,
         ta.TopAbs_WIRE: BRepGProp.LinearProperties_s,
@@ -804,7 +805,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         properties = GProp_GProps()
         calc_function = Shape.shape_properties_LUT[shapetype(obj.wrapped)]
 
-        if not calc_function:
+        if calc_function is None:
             raise NotImplementedError
 
         calc_function(obj.wrapped, properties)

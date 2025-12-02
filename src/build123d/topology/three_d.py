@@ -212,6 +212,7 @@ class Mixin3D(Shape[TOPODS]):
         if center_of == CenterOf.MASS:
             properties = GProp_GProps()
             calc_function = Shape.shape_properties_LUT[shapetype(self.wrapped)]
+            assert calc_function is not None
             calc_function(self.wrapped, properties)
             middle = Vector(properties.CentreOfMass())
         elif center_of == CenterOf.BOUNDING_BOX:
