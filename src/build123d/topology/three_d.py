@@ -56,8 +56,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from math import radians, cos, tan
-from typing import TYPE_CHECKING, Literal, overload
-from typing import cast as tcast
+from typing import TYPE_CHECKING, Literal
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -118,7 +117,6 @@ from .shape_core import (
     Shape,
     ShapeList,
     Joint,
-    TrimmingTool,
     downcast,
     shapetype,
     _sew_topods_faces,
@@ -137,7 +135,7 @@ from .zero_d import Vertex
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .composite import Compound, Curve, Sketch, Part  # pylint: disable=R0801
+    from .composite import Compound  # pylint: disable=R0801
 
 
 class Mixin3D(Shape[TOPODS]):
