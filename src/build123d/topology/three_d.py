@@ -144,16 +144,6 @@ class Mixin3D(Shape[TOPODS]):
     project_to_viewport = Mixin1D.project_to_viewport
     find_intersection_points = Mixin2D.find_intersection_points
 
-    vertices = Mixin1D.vertices
-    vertex = Mixin1D.vertex
-    edges = Mixin1D.edges
-    edge = Mixin1D.edge
-    wires = Mixin1D.wires
-    wire = Mixin1D.wire
-    faces = Mixin2D.faces
-    face = Mixin2D.face
-    shells = Mixin2D.shells
-    shell = Mixin2D.shell
     # ---- Properties ----
 
     @property
@@ -725,13 +715,13 @@ class Mixin3D(Shape[TOPODS]):
 
         return offset_solid
 
-    def solid(self) -> Solid | None:
-        """Return the Solid"""
-        return Shape.get_single_shape(self, "Solid")
+    # def solid(self) -> Solid | None:
+    #     """Return the Solid"""
+    #     return Shape.get_single_shape(self, "Solid")
 
-    def solids(self) -> ShapeList[Solid]:
-        """solids - all the solids in this Shape"""
-        return Shape.get_shape_list(self, "Solid")
+    # def solids(self) -> ShapeList[Solid]:
+    #     """solids - all the solids in this Shape"""
+    #     return Shape.get_shape_list(self, "Solid")
 
 
 class Solid(Mixin3D[TopoDS_Solid]):

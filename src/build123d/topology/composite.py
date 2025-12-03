@@ -600,7 +600,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         """Return the Compound"""
         shape_list = self.compounds()
         entity_count = len(shape_list)
-        if entity_count != 1:
+        if entity_count > 1:
             warnings.warn(
                 f"Found {entity_count} compounds, returning first",
                 stacklevel=2,

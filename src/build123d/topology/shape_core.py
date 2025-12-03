@@ -101,7 +101,7 @@ from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
-from OCP.BRepTools import BRepTools
+from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.gce import gce_MakeLin
 from OCP.Geom import Geom_Line
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
@@ -839,7 +839,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
         with a warning if count != 1."""
         shape_list = Shape.get_shape_list(shape, entity_type)
         entity_count = len(shape_list)
-        if entity_count != 1:
+        if entity_count == 0:
+            return None
+        elif entity_count > 1:
             warnings.warn(
                 f"Found {entity_count} {entity_type.lower()}s, returning first",
                 stacklevel=3,
@@ -1185,13 +1187,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def edge(self) -> Edge | None:
         """Return the Edge"""
-        return None
-
-    # Note all sub-classes have vertices and vertex methods
+        return Shape.get_single_shape(self, "Edge")
 
     def edges(self) -> ShapeList[Edge]:
         """edges - all the edges in this Shape - subclasses may override"""
-        return ShapeList()
+        edge_list = Shape.get_shape_list(self, "Edge")
+        return edge_list.filter_by(
+            lambda e: BRep_Tool.Degenerated_s(e.wrapped), reverse=True
+        )
 
     def entities(self, topo_type: Shapes) -> list[TopoDS_Shape]:
         """Return all of the TopoDS sub entities of the given type"""
@@ -1201,11 +1204,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def face(self) -> Face | None:
         """Return the Face"""
-        return None
+        return Shape.get_single_shape(self, "Face")
 
     def faces(self) -> ShapeList[Face]:
         """faces - all the faces in this Shape"""
-        return ShapeList()
+        return Shape.get_shape_list(self, "Face")
 
     def faces_intersected_by_axis(
         self,
@@ -1724,11 +1727,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def shell(self) -> Shell | None:
         """Return the Shell"""
-        return None
+        return Shape.get_single_shape(self, "Shell")
 
     def shells(self) -> ShapeList[Shell]:
         """shells - all the shells in this Shape"""
-        return ShapeList()
+        return Shape.get_shape_list(self, "Shell")
 
     def show_topology(
         self,
@@ -1782,11 +1785,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def solid(self) -> Solid | None:
         """Return the Solid"""
-        return None
+        return Shape.get_single_shape(self, "Solid")
 
     def solids(self) -> ShapeList[Solid]:
         """solids - all the solids in this Shape"""
-        return ShapeList()
+        return Shape.get_shape_list(self, "Solid")
 
     @overload
     def split(
@@ -2235,11 +2238,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def wire(self) -> Wire | None:
         """Return the Wire"""
-        return None
+        return Shape.get_single_shape(self, "Wire")
 
     def wires(self) -> ShapeList[Wire]:
         """wires - all the wires in this Shape"""
-        return ShapeList()
+        return Shape.get_shape_list(self, "Wire")
 
     def _apply_transform(self, transformation: gp_Trsf) -> Self:
         """Private Apply Transform
@@ -2394,6 +2397,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
         from build123d.jupyter_tools import shape_to_html
 
         return shape_to_html(self)._repr_html_()
+
+    def vertex(self) -> Vertex | None:
+        """Return the Vertex"""
+        return Shape.get_single_shape(self, "Vertex")
+
+    def vertices(self) -> ShapeList[Vertex]:
+        """vertices - all the vertices in this Shape"""
+        return Shape.get_shape_list(self, "Vertex")
 
 
 class Comparable(ABC):

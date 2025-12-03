@@ -556,7 +556,7 @@ class Mixin1D(Shape[TOPODS]):
 
         A curvature comb is a set of short line segments (“teeth”) erected
         perpendicular to the curve that visualize the signed curvature κ(u).
-        Tooth length is proportional to \|κ\| and the direction encodes the sign
+        Tooth length is proportional to |κ| and the direction encodes the sign
         (left normal for κ>0, right normal for κ<0). This is useful for inspecting
         fairness and continuity (C0/C1/C2) of edges and wires.
 
@@ -684,30 +684,30 @@ class Mixin1D(Shape[TOPODS]):
 
         return derivative
 
-    def edge(self) -> Edge | None:
-        """Return the Edge"""
-        return Shape.get_single_shape(self, "Edge")
+    # def edge(self) -> Edge | None:
+    #     """Return the Edge"""
+    #     return Shape.get_single_shape(self, "Edge")
 
-    def edges(self) -> ShapeList[Edge]:
-        """edges - all the edges in this Shape"""
-        if isinstance(self, Wire) and self.wrapped is not None:
-            # The WireExplorer is a tool to explore the edges of a wire in a connection order.
-            explorer = BRepTools_WireExplorer(self.wrapped)
+    # def edges(self) -> ShapeList[Edge]:
+    #     """edges - all the edges in this Shape"""
+    #     if isinstance(self, Wire) and self.wrapped is not None:
+    #         # The WireExplorer is a tool to explore the edges of a wire in a connection order.
+    #         explorer = BRepTools_WireExplorer(self.wrapped)
 
-            edge_list: ShapeList[Edge] = ShapeList()
-            while explorer.More():
-                next_edge = Edge(explorer.Current())
-                next_edge.topo_parent = (
-                    self if self.topo_parent is None else self.topo_parent
-                )
-                edge_list.append(next_edge)
-                explorer.Next()
-            return edge_list
+    #         edge_list: ShapeList[Edge] = ShapeList()
+    #         while explorer.More():
+    #             next_edge = Edge(explorer.Current())
+    #             next_edge.topo_parent = (
+    #                 self if self.topo_parent is None else self.topo_parent
+    #             )
+    #             edge_list.append(next_edge)
+    #             explorer.Next()
+    #         return edge_list
 
-        edge_list = Shape.get_shape_list(self, "Edge")
-        return edge_list.filter_by(
-            lambda e: BRep_Tool.Degenerated_s(e.wrapped), reverse=True
-        )
+    #     edge_list = Shape.get_shape_list(self, "Edge")
+    #     return edge_list.filter_by(
+    #         lambda e: BRep_Tool.Degenerated_s(e.wrapped), reverse=True
+    #     )
 
     def end_point(self) -> Vector:
         """The end point of this edge.
@@ -1431,21 +1431,21 @@ class Mixin1D(Shape[TOPODS]):
         """
         return self.derivative_at(position, 1, position_mode).normalized()
 
-    def vertex(self) -> Vertex | None:
-        """Return the Vertex"""
-        return Shape.get_single_shape(self, "Vertex")
+    # def vertex(self) -> Vertex | None:
+    #     """Return the Vertex"""
+    #     return Shape.get_single_shape(self, "Vertex")
 
-    def vertices(self) -> ShapeList[Vertex]:
-        """vertices - all the vertices in this Shape"""
-        return Shape.get_shape_list(self, "Vertex")
+    # def vertices(self) -> ShapeList[Vertex]:
+    #     """vertices - all the vertices in this Shape"""
+    #     return Shape.get_shape_list(self, "Vertex")
 
-    def wire(self) -> Wire | None:
-        """Return the Wire"""
-        return Shape.get_single_shape(self, "Wire")
+    # def wire(self) -> Wire | None:
+    #     """Return the Wire"""
+    #     return Shape.get_single_shape(self, "Wire")
 
-    def wires(self) -> ShapeList[Wire]:
-        """wires - all the wires in this Shape"""
-        return Shape.get_shape_list(self, "Wire")
+    # def wires(self) -> ShapeList[Wire]:
+    #     """wires - all the wires in this Shape"""
+    #     return Shape.get_shape_list(self, "Wire")
 
 
 class Edge(Mixin1D[TopoDS_Edge]):
@@ -3560,6 +3560,21 @@ class Wire(Mixin1D[TopoDS_Wire]):
             return_value = self
 
         return return_value
+
+    def edges(self) -> ShapeList[Edge]:
+        """edges - all the edges in this Shape"""
+        # The WireExplorer is a tool to explore the edges of a wire in a connection order.
+        explorer = BRepTools_WireExplorer(self.wrapped)
+
+        edge_list: ShapeList[Edge] = ShapeList()
+        while explorer.More():
+            next_edge = Edge(explorer.Current())
+            next_edge.topo_parent = (
+                self if self.topo_parent is None else self.topo_parent
+            )
+            edge_list.append(next_edge)
+            explorer.Next()
+        return edge_list
 
     def fillet_2d(self, radius: float, vertices: Iterable[Vertex]) -> Wire:
         """fillet_2d

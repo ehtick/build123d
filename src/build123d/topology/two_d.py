@@ -174,11 +174,6 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
     project_to_viewport = Mixin1D.project_to_viewport
 
-    vertices = Mixin1D.vertices
-    vertex = Mixin1D.vertex
-    edges = Mixin1D.edges
-    edge = Mixin1D.edge
-    wires = Mixin1D.wires
     # ---- Properties ----
 
     @property
@@ -226,13 +221,13 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         return new_surface
 
-    def face(self) -> Face | None:
-        """Return the Face"""
-        return Shape.get_single_shape(self, "Face")
+    # def face(self) -> Face | None:
+    #     """Return the Face"""
+    #     return Shape.get_single_shape(self, "Face")
 
-    def faces(self) -> ShapeList[Face]:
-        """faces - all the faces in this Shape"""
-        return Shape.get_shape_list(self, "Face")
+    # def faces(self) -> ShapeList[Face]:
+    #     """faces - all the faces in this Shape"""
+    #     return Shape.get_shape_list(self, "Face")
 
     def find_intersection_points(
         self, other: Axis, tolerance: float = TOLERANCE
@@ -412,13 +407,13 @@ class Mixin2D(ABC, Shape[TOPODS]):
         """Return a copy of self moved along the normal by amount"""
         return copy.deepcopy(self).moved(Location(self.normal_at() * amount))
 
-    def shell(self) -> Shell | None:
-        """Return the Shell"""
-        return Shape.get_single_shape(self, "Shell")
+    # def shell(self) -> Shell | None:
+    #     """Return the Shell"""
+    #     return Shape.get_single_shape(self, "Shell")
 
-    def shells(self) -> ShapeList[Shell]:
-        """shells - all the shells in this Shape"""
-        return Shape.get_shape_list(self, "Shell")
+    # def shells(self) -> ShapeList[Shell]:
+    #     """shells - all the shells in this Shape"""
+    #     return Shape.get_shape_list(self, "Shell")
 
     def _wrap_edge(
         self,
