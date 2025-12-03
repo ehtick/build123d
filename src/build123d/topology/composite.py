@@ -141,7 +141,6 @@ class Compound(Mixin3D[TopoDS_Compound]):
 
     order = 4.0
 
-    project_to_viewport = Mixin1D.project_to_viewport
     # ---- Constructor ----
 
     def __init__(
@@ -857,6 +856,33 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 return None
 
         return ShapeList(common_set)
+
+    def project_to_viewport(
+        self,
+        viewport_origin: VectorLike,
+        viewport_up: VectorLike = (0, 0, 1),
+        look_at: VectorLike | None = None,
+        focus: float | None = None,
+    ) -> tuple[ShapeList[Edge], ShapeList[Edge]]:
+        """project_to_viewport
+
+        Project a shape onto a viewport returning visible and hidden Edges.
+
+        Args:
+            viewport_origin (VectorLike): location of viewport
+            viewport_up (VectorLike, optional): direction of the viewport y axis.
+                Defaults to (0, 0, 1).
+            look_at (VectorLike, optional): point to look at.
+                Defaults to None (center of shape).
+            focus (float, optional): the focal length for perspective projection
+                Defaults to None (orthographic projection)
+
+        Returns:
+            tuple[ShapeList[Edge],ShapeList[Edge]]: visible & hidden Edges
+        """
+        return Mixin1D.project_to_viewport(
+            self, viewport_origin, viewport_up, look_at, focus
+        )
 
     def unwrap(self, fully: bool = True) -> Self | Shape:
         """Strip unnecessary Compound wrappers

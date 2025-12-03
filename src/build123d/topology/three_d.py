@@ -141,7 +141,6 @@ if TYPE_CHECKING:  # pragma: no cover
 class Mixin3D(Shape[TOPODS]):
     """Additional methods to add to 3D Shape classes"""
 
-    project_to_viewport = Mixin1D.project_to_viewport
     find_intersection_points = Mixin2D.find_intersection_points
 
     # ---- Properties ----
@@ -715,13 +714,32 @@ class Mixin3D(Shape[TOPODS]):
 
         return offset_solid
 
-    # def solid(self) -> Solid | None:
-    #     """Return the Solid"""
-    #     return Shape.get_single_shape(self, "Solid")
+    def project_to_viewport(
+        self,
+        viewport_origin: VectorLike,
+        viewport_up: VectorLike = (0, 0, 1),
+        look_at: VectorLike | None = None,
+        focus: float | None = None,
+    ) -> tuple[ShapeList[Edge], ShapeList[Edge]]:
+        """project_to_viewport
 
-    # def solids(self) -> ShapeList[Solid]:
-    #     """solids - all the solids in this Shape"""
-    #     return Shape.get_shape_list(self, "Solid")
+        Project a shape onto a viewport returning visible and hidden Edges.
+
+        Args:
+            viewport_origin (VectorLike): location of viewport
+            viewport_up (VectorLike, optional): direction of the viewport y axis.
+                Defaults to (0, 0, 1).
+            look_at (VectorLike, optional): point to look at.
+                Defaults to None (center of shape).
+            focus (float, optional): the focal length for perspective projection
+                Defaults to None (orthographic projection)
+
+        Returns:
+            tuple[ShapeList[Edge],ShapeList[Edge]]: visible & hidden Edges
+        """
+        return Mixin1D.project_to_viewport(
+            self, viewport_origin, viewport_up, look_at, focus
+        )
 
 
 class Solid(Mixin3D[TopoDS_Solid]):

@@ -172,7 +172,7 @@ T = TypeVar("T", Edge, Wire, "Face")
 class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
-    project_to_viewport = Mixin1D.project_to_viewport
+    # project_to_viewport = Mixin1D.project_to_viewport
 
     # ---- Properties ----
 
@@ -407,13 +407,32 @@ class Mixin2D(ABC, Shape[TOPODS]):
         """Return a copy of self moved along the normal by amount"""
         return copy.deepcopy(self).moved(Location(self.normal_at() * amount))
 
-    # def shell(self) -> Shell | None:
-    #     """Return the Shell"""
-    #     return Shape.get_single_shape(self, "Shell")
+    def project_to_viewport(
+        self,
+        viewport_origin: VectorLike,
+        viewport_up: VectorLike = (0, 0, 1),
+        look_at: VectorLike | None = None,
+        focus: float | None = None,
+    ) -> tuple[ShapeList[Edge], ShapeList[Edge]]:
+        """project_to_viewport
 
-    # def shells(self) -> ShapeList[Shell]:
-    #     """shells - all the shells in this Shape"""
-    #     return Shape.get_shape_list(self, "Shell")
+        Project a shape onto a viewport returning visible and hidden Edges.
+
+        Args:
+            viewport_origin (VectorLike): location of viewport
+            viewport_up (VectorLike, optional): direction of the viewport y axis.
+                Defaults to (0, 0, 1).
+            look_at (VectorLike, optional): point to look at.
+                Defaults to None (center of shape).
+            focus (float, optional): the focal length for perspective projection
+                Defaults to None (orthographic projection)
+
+        Returns:
+            tuple[ShapeList[Edge],ShapeList[Edge]]: visible & hidden Edges
+        """
+        return Mixin1D.project_to_viewport(
+            self, viewport_origin, viewport_up, look_at, focus
+        )
 
     def _wrap_edge(
         self,
