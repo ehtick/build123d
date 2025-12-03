@@ -244,7 +244,7 @@ def export_gltf(
 
     messenger = Message.DefaultMessenger_s()
     for printer in messenger.Printers():
-        printer.SetTraceLevel(Message_Gravity(Message_Gravity.Message_Fail))
+        printer.SetTraceLevel(Message_Gravity.Message_Fail)
 
     status = writer.Perform(doc, index_map, progress)
 
@@ -297,7 +297,7 @@ def export_step(
     # Disable writing OCCT info to console
     messenger = Message.DefaultMessenger_s()
     for printer in messenger.Printers():
-        printer.SetTraceLevel(Message_Gravity(Message_Gravity.Message_Fail))
+        printer.SetTraceLevel(Message_Gravity.Message_Fail)
 
     session = XSControl_WorkSession()
     writer = STEPCAFControl_Writer(session, False)
@@ -328,7 +328,7 @@ def export_step(
 
     if not isinstance(file_path, BytesIO):
         status = (
-            writer.Write(fspath(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
+            writer.Write(fsdecode(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
         )
     else:
         status = writer.WriteStream(file_path) == IFSelect_ReturnStatus.IFSelect_RetDone

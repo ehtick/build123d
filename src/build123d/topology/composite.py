@@ -60,7 +60,6 @@ import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
-from typing import TypeVar
 
 from typing_extensions import Self
 
