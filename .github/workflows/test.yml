@@ -21,6 +21,7 @@ jobs:
       - uses: ./.github/actions/setup/
         with:
           python-version: ${{ matrix.python-version }}
+          optional-dependencies: "development"
       - name: test
         run: |
           python -m pytest -n auto --benchmark-disable
