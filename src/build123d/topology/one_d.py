@@ -89,8 +89,12 @@ from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
-from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
-from OCP.GCPnts import GCPnts_AbscissaPoint
+from OCP.GCPnts import (
+    GCPnts_AbscissaPoint,
+    GCPnts_QuasiUniformDeflection,
+    GCPnts_UniformDeflection,
+)
+from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
@@ -116,6 +120,9 @@ from OCP.GeomAbs import (
     GeomAbs_C0,
     GeomAbs_C1,
     GeomAbs_C2,
+    GeomAbs_C3,
+    GeomAbs_CN,
+    GeomAbs_C1,
     GeomAbs_G1,
     GeomAbs_G2,
     GeomAbs_JoinType,
@@ -226,11 +233,11 @@ from .shape_core import (
     shapetype,
     topods_dim,
     unwrap_topods_compound,
+    _topods_bool_op,
 )
 from .utils import (
     _extrude_topods_shape,
     _make_topods_face_from_wires,
-    _topods_bool_op,
     isclose_b,
 )
 from .zero_d import Vertex, topo_explore_common_vertex
@@ -1178,22 +1185,52 @@ class Mixin1D(Shape[TOPODS]):
 
     def positions(
         self,
-        distances: Iterable[float],
+        distances: Iterable[float] | None = None,
         position_mode: PositionMode = PositionMode.PARAMETER,
+        deflection: float | None = None,
     ) -> list[Vector]:
         """Positions along curve
 
         Generate positions along the underlying curve
 
         Args:
-            distances (Iterable[float]): distance or parameter values
-            position_mode (PositionMode, optional): position calculation mode.
-                Defaults to PositionMode.PARAMETER.
+            distances (Iterable[float] | None, optional): distance or parameter values.
+                Defaults to None.
+            position_mode (PositionMode, optional): position calculation mode only applies
+                when using distances. Defaults to PositionMode.PARAMETER.
+            deflection (float | None, optional): maximum deflection between the curve and
+                the polygon that results from the computed points. Defaults to None.
+
 
         Returns:
             list[Vector]: positions along curve
         """
-        return [self.position_at(d, position_mode) for d in distances]
+        if deflection is not None:
+            curve: BRepAdaptor_Curve | BRepAdaptor_CompCurve = self.geom_adaptor()
+            # GCPnts_UniformDeflection provides the best results but is limited
+            if curve.Continuity() in (GeomAbs_C2, GeomAbs_C3, GeomAbs_CN):
+                discretizer: (
+                    GCPnts_UniformDeflection | GCPnts_QuasiUniformDeflection
+                ) = GCPnts_UniformDeflection()
+            else:
+                discretizer = GCPnts_QuasiUniformDeflection()
+
+            discretizer.Initialize(
+                curve,
+                deflection,
+                curve.FirstParameter(),
+                curve.LastParameter(),
+            )
+            if not discretizer.IsDone() or discretizer.NbPoints() == 0:
+                raise RuntimeError("Deflection calculation failed")
+            return [
+                Vector(curve.Value(discretizer.Parameter(i + 1)))
+                for i in range(discretizer.NbPoints())
+            ]
+        elif distances is not None:
+            return [self.position_at(d, position_mode) for d in distances]
+        else:
+            raise ValueError("Either distances or deflection must be provided")
 
     def project(
         self, face: Face, direction: VectorLike, closest: bool = True
@@ -1339,144 +1376,6 @@ class Mixin1D(Shape[TOPODS]):
         hidden_edges = ShapeList(Edge(e) for e in hidden_edges)
 
         return (visible_edges, hidden_edges)
-
-    @overload
-    def split(
-        self, tool: TrimmingTool, keep: Literal[Keep.TOP, Keep.BOTTOM]
-    ) -> Self | list[Self] | None:
-        """split and keep inside or outside"""
-
-    @overload
-    def split(self, tool: TrimmingTool, keep: Literal[Keep.ALL]) -> list[Self]:
-        """split and return the unordered pieces"""
-
-    @overload
-    def split(self, tool: TrimmingTool, keep: Literal[Keep.BOTH]) -> tuple[
-        Self | list[Self] | None,
-        Self | list[Self] | None,
-    ]:
-        """split and keep inside and outside"""
-
-    @overload
-    def split(self, tool: TrimmingTool) -> Self | list[Self] | None:
-        """split and keep inside (default)"""
-
-    def split(self, tool: TrimmingTool, keep: Keep = Keep.TOP):
-        """split
-
-        Split this shape by the provided plane or face.
-
-        Args:
-            surface (Plane | Face): surface to segment shape
-            keep (Keep, optional): which object(s) to save. Defaults to Keep.TOP.
-
-        Returns:
-            Shape: result of split
-        Returns:
-            Self | list[Self] | None,
-            Tuple[Self | list[Self] | None]: The result of the split operation.
-
-            - **Keep.TOP**: Returns the top as a `Self` or `list[Self]`, or `None`
-              if no top is found.
-            - **Keep.BOTTOM**: Returns the bottom as a `Self` or `list[Self]`, or `None`
-              if no bottom is found.
-            - **Keep.BOTH**: Returns a tuple `(inside, outside)` where each element is
-              either a `Self` or `list[Self]`, or `None` if no corresponding part is found.
-        """
-        if self._wrapped is None or not tool:
-            raise ValueError("Can't split an empty edge/wire/tool")
-
-        shape_list = TopTools_ListOfShape()
-        shape_list.Append(self.wrapped)
-
-        # Define the splitting tool
-        trim_tool = (
-            BRepBuilderAPI_MakeFace(tool.wrapped).Face()  # gp_Pln to Face
-            if isinstance(tool, Plane)
-            else tool.wrapped
-        )
-        tool_list = TopTools_ListOfShape()
-        tool_list.Append(trim_tool)
-
-        # Create the splitter algorithm
-        splitter = BRepAlgoAPI_Splitter()
-
-        # Set the shape to be split and the splitting tool (plane face)
-        splitter.SetArguments(shape_list)
-        splitter.SetTools(tool_list)
-
-        # Perform the splitting operation
-        splitter.Build()
-
-        split_result = downcast(splitter.Shape())
-        # Remove unnecessary TopoDS_Compound around single shape
-        if isinstance(split_result, TopoDS_Compound):
-            split_result = unwrap_topods_compound(split_result, True)
-
-        # For speed the user may just want all the objects which they
-        # can sort more efficiently then the generic algorithm below
-        if keep == Keep.ALL:
-            return ShapeList(
-                self.__class__.cast(part)
-                for part in get_top_level_topods_shapes(split_result)
-            )
-
-        if not isinstance(tool, Plane):
-            # Get a TopoDS_Face to work with from the tool
-            if isinstance(trim_tool, TopoDS_Shell):
-                face_explorer = TopExp_Explorer(trim_tool, ta.TopAbs_FACE)
-                tool_face = TopoDS.Face_s(face_explorer.Current())
-            else:
-                tool_face = trim_tool
-
-            # Create a reference point off the +ve side of the tool
-            surface_gppnt = gp_Pnt()
-            surface_normal = gp_Vec()
-            u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(tool_face)
-            BRepGProp_Face(tool_face).Normal(
-                (u_min + u_max) / 2, (v_min + v_max) / 2, surface_gppnt, surface_normal
-            )
-            normalized_surface_normal = Vector(
-                surface_normal.X(), surface_normal.Y(), surface_normal.Z()
-            ).normalized()
-            surface_point = Vector(surface_gppnt)
-            ref_point = surface_point + normalized_surface_normal
-
-            # Create a HalfSpace - Solidish object to determine top/bottom
-            # Note: BRepPrimAPI_MakeHalfSpace takes either a TopoDS_Shell or TopoDS_Face but the
-            # mypy expects only a TopoDS_Shell here
-            half_space_maker = BRepPrimAPI_MakeHalfSpace(trim_tool, ref_point.to_pnt())
-            # type: ignore
-            tool_solid = half_space_maker.Solid()
-
-        tops: list[Shape] = []
-        bottoms: list[Shape] = []
-        properties = GProp_GProps()
-        for part in get_top_level_topods_shapes(split_result):
-            sub_shape = self.__class__.cast(part)
-            if isinstance(tool, Plane):
-                is_up = tool.to_local_coords(sub_shape).center().Z >= 0
-            else:
-                # Intersect self and the thickened tool
-                is_up_obj = _topods_bool_op(
-                    (part,), (tool_solid,), BRepAlgoAPI_Common()
-                )
-                # Check for valid intersections
-                BRepGProp.LinearProperties_s(is_up_obj, properties)
-                # Mass represents the total length for linear properties
-                is_up = properties.Mass() >= TOLERANCE
-            (tops if is_up else bottoms).append(sub_shape)
-
-        top = None if not tops else tops[0] if len(tops) == 1 else tops
-        bottom = None if not bottoms else bottoms[0] if len(bottoms) == 1 else bottoms
-
-        if keep == Keep.BOTH:
-            return (top, bottom)
-        if keep == Keep.TOP:
-            return top
-        if keep == Keep.BOTTOM:
-            return bottom
-        return None
 
     def start_point(self) -> Vector:
         """The start point of this edge

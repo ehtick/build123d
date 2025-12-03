@@ -210,6 +210,7 @@ class TestHollowImport(unittest.TestCase):
         importer = Mesher()
         stl = importer.read("test.stl")
         self.assertTrue(stl[0].is_valid)
+        self.assertAlmostEqual(test_shape.volume, stl[0].volume, 0)
 
 
 class TestImportDegenerateTriangles(unittest.TestCase):

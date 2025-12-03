@@ -106,15 +106,23 @@ from OCP.BRepGProp import BRepGProp
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.gp import gp_Pnt
 from OCP.GProp import GProp_GProps
+from OCP.Standard import Standard_TypeMismatch
 from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopoDS import TopoDS_Compound
+from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Shell
 from lib3mf import Lib3MF
 
 from build123d.build_enums import MeshType, Unit
 from build123d.geometry import TOLERANCE, Color
-from build123d.topology import Compound, Shape, Shell, Solid, downcast
+from build123d.topology import (
+    Compound,
+    Shape,
+    Shell,
+    Solid,
+    downcast,
+    unwrap_topods_compound,
+)
 
 
 class Mesher:
@@ -466,7 +474,9 @@ class Mesher:
             # Convert to a list of gp_Pnt
             ocp_vertices = [gp_pnts[tri_indices[i]] for i in range(3)]
             # Create the triangular face using the polygon
-            polygon_builder = BRepBuilderAPI_MakePolygon(*ocp_vertices, Close=True)
+            polygon_builder = BRepBuilderAPI_MakePolygon(
+                ocp_vertices[0], ocp_vertices[1], ocp_vertices[2], Close=True
+            )
             face_builder = BRepBuilderAPI_MakeFace(polygon_builder.Wire())
             facet = face_builder.Face()
             facet_properties = GProp_GProps()
@@ -479,19 +489,27 @@ class Mesher:
         occ_sewed_shape = downcast(shell_builder.SewedShape())
 
         if isinstance(occ_sewed_shape, TopoDS_Compound):
-            occ_shells = []
+            bd_shells = []
             explorer = TopExp_Explorer(occ_sewed_shape, TopAbs_ShapeEnum.TopAbs_SHELL)
             while explorer.More():
-                occ_shells.append(downcast(explorer.Current()))
+                # occ_shells.append(downcast(explorer.Current()))
+                bd_shells.append(Shell(TopoDS.Shell_s(explorer.Current())))
                 explorer.Next()
         else:
-            occ_shells = [occ_sewed_shape]
+            assert isinstance(occ_sewed_shape, TopoDS_Shell)
+            bd_shells = [Shell(occ_sewed_shape)]
 
-        # Create a solid if manifold
-        shape_obj = Shell(occ_sewed_shape)
-        if shape_obj.is_manifold:
-            solid_builder = BRepBuilderAPI_MakeSolid(*occ_shells)
-            shape_obj = Solid(solid_builder.Solid())
+        outer_shell = max(bd_shells, key=lambda s: math.prod(s.bounding_box().size))
+        inner_shells = [s for s in bd_shells if s is not outer_shell]
+
+        # The the shell isn't water tight just return it else create a solid
+        if not outer_shell.is_manifold:
+            return outer_shell
+
+        solid_builder = BRepBuilderAPI_MakeSolid(outer_shell.wrapped)
+        for inner_shell in inner_shells:
+            solid_builder.Add(inner_shell.wrapped)
+        shape_obj = Solid(solid_builder.Solid())
 
         return shape_obj
 
