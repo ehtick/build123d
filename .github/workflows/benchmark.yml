@@ -20,7 +20,7 @@ jobs:
       - uses: ./.github/actions/setup/
         with:
           python-version: ${{ matrix.python-version }}
-          optional-dependencies: development
+          optional-dependencies: "development"
       - name: benchmark
         run: |
           python -m pytest --benchmark-only --benchmark-autosave
