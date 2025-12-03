@@ -1806,6 +1806,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """split and keep inside and outside"""
 
     @overload
+    def split(
+        self, tool: TrimmingTool, keep: Literal[Keep.INSIDE, Keep.OUTSIDE]
+    ) -> None:
+        """invalid split"""
+
+    @overload
     def split(self, tool: TrimmingTool) -> Self | list[Self] | None:
         """split and keep inside (default)"""
 
@@ -1833,6 +1839,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None or not tool:
             raise ValueError("Can't split an empty edge/wire/tool")
+
+        if keep in [Keep.INSIDE, Keep.OUTSIDE]:
+            raise ValueError(f"{keep} is invalid")
 
         shape_list = TopTools_ListOfShape()
         shape_list.Append(self.wrapped)
@@ -1924,7 +1933,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return top
         if keep == Keep.BOTTOM:
             return bottom
-        return None
 
     @overload
     def split_by_perimeter(

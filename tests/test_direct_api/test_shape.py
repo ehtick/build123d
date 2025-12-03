@@ -172,10 +172,11 @@ class TestShape(unittest.TestCase):
         self.assertEqual(len(top), 2)
         self.assertAlmostEqual(top[0].length, 3, 5)
 
-    def test_split_return_none(self):
-        shape = Box(1, 1, 1) - Pos((0, 0, -0.25)) * Box(1, 0.5, 0.5)
-        split_shape = shape.split(Plane.XY, keep=Keep.INSIDE)
-        self.assertIsNone(split_shape)
+    def test_split_invalid_keep(self):
+        with self.assertRaises(ValueError):
+            Box(1, 1, 1).split(Plane.XY, keep=Keep.INSIDE)
+        with self.assertRaises(ValueError):
+            Box(1, 1, 1).split(Plane.XY, keep=Keep.OUTSIDE)
 
     def test_split_by_perimeter(self):
         # Test 0 - extract a spherical cap
