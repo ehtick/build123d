@@ -1337,7 +1337,7 @@ class Color:
         return Color(*tuple(self))
 
     def __str__(self) -> str:
-        """Display color"""
+        """Display Color"""
         rgb = self.wrapped.GetRGB()
         rgb = (rgb.Red(), rgb.Green(), rgb.Blue())
         try:
@@ -1351,7 +1351,7 @@ class Color:
         return f"{type(self).__name__}: {str(tuple(self))} {qualifier} {name.upper()!r}"
 
     def __repr__(self) -> str:
-        """Represent colr"""
+        """Represent Color"""
         return f"{type(self).__name__}{str(tuple(self))}"
 
     @staticmethod
