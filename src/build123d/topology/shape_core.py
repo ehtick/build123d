@@ -725,17 +725,15 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 address = node.address
                 name = ""
                 loc = (
-                    "Center" + str(tuple(node.position))
+                    f"Center{node.position:.6g}"
                     if show_center
-                    else "Position" + str(tuple(node.position))
+                    else f"Position{node.position:.6g}"
                 )
             else:
                 address = id(node)
                 name = node.__class__.__name__.ljust(9)
                 loc = (
-                    "Center" + str(tuple(node.center()))
-                    if show_center
-                    else repr(node.location)
+                    f"Center{node.center():.6g}" if show_center else repr(node.location)
                 )
             result += f"{treestr}{name}at {address:#x}, {loc}\n"
         return result

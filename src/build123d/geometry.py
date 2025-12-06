@@ -442,20 +442,35 @@ class Vector:
         """intersect vector with other &"""
         return self.intersect(other)
 
+    def __format__(self, spec) -> str:
+        """Format Vector"""
+
+        def trim_float(x: float, precision: int) -> float:
+            return round(x, precision) if abs(x) > TOLERANCE else 0.0
+
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            if "." in spec:
+                precision = int(spec[:-1].split(".")[-1])
+            else:
+                precision = 6 if last_char == "f" else 6
+
+            x = trim_float(self.X, precision)
+            y = trim_float(self.Y, precision)
+            z = trim_float(self.Z, precision)
+
+            return f"({x:{spec}}, {y:{spec}}, {z:{spec}})"
+
+        return str(tuple(self))
+
     def __repr__(self) -> str:
-        """Represent vector"""
-        x = round(self.X, 13) if abs(self.X) > TOLERANCE else 0.0
-        y = round(self.Y, 13) if abs(self.Y) > TOLERANCE else 0.0
-        z = round(self.Z, 13) if abs(self.Z) > TOLERANCE else 0.0
-        return f"{type(self).__name__}({x:.14g}, {y:.14g}, {z:.14g})"
+        """Represent Vector"""
+        return f"{type(self).__name__}{self:.13g}"
 
     def __str__(self) -> str:
-        """Display vector"""
-        strf = f".{TOL_DIGITS}g"
-        x = round(self.X, 13) if abs(self.X) > TOLERANCE else 0.0
-        y = round(self.Y, 13) if abs(self.Y) > TOLERANCE else 0.0
-        z = round(self.Z, 13) if abs(self.Z) > TOLERANCE else 0.0
-        return f"{type(self).__name__}: (X={x:{strf}}, Y={y:{strf}}, Z={z:{strf}})"
+        """Display Vector"""
+        x, y, z = format(self, ".6g")[1:-1].split(", ")
+        return f"{type(self).__name__}: (X={x}, Y={y}, Z={z})"
 
     def __eq__(self, other: object) -> bool:
         """Vectors equal operator =="""
@@ -744,15 +759,15 @@ class Axis(metaclass=AxisMeta):
         )
 
     def __repr__(self) -> str:
-        """Represent axis"""
-        return f"{type(self).__name__}({tuple(self.position)}, {tuple(self.direction)})"
+        """Represent Axis"""
+        return f"{type(self).__name__}({self.position:.13g}, {self.direction:.13g})"
 
     def __str__(self) -> str:
-        """Display axis"""
-        strf = f".{TOL_DIGITS}g"
-        position_str = ", ".join(f"{v:{strf}}" for v in tuple(self.position))
-        direction_str = ", ".join(f"{v:{strf}}" for v in tuple(self.direction))
-        return f"{type(self).__name__}: (position=({position_str}), direction=({direction_str}))"
+        """Display Axis"""
+        return (
+            f"{type(self).__name__}: "
+            f"(position={self.position:.6g}, direction={self.direction:.6g})"
+        )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Axis):
@@ -1917,19 +1932,16 @@ class Location:
         return rv_trans, rv_rot
 
     def __repr__(self) -> str:
-        """Represent location"""
+        """Represent Location"""
         return (
-            f"{type(self).__name__}({tuple(self.position)}, {tuple(self.orientation)})"
+            f"{type(self).__name__}" f"({self.position:.13g}, {self.orientation:.13g})"
         )
 
     def __str__(self) -> str:
-        """Display location"""
-        strf = f".{TOL_DIGITS}g"
-        position_str = ", ".join(f"{v:{strf}}" for v in tuple(self.position))
-        orientation_str = ", ".join(f"{v:{strf}}" for v in tuple(self.orientation))
+        """Display Location"""
         return (
             f"{type(self).__name__}: "
-            f"(position=({position_str}), orientation=({orientation_str}))"
+            f"(position={self.position:.6g}, orientation={self.orientation:.6g})"
         )
 
     @overload
@@ -2852,21 +2864,17 @@ class Plane(metaclass=PlaneMeta):
         return self.intersect(other)
 
     def __repr__(self) -> str:
-        """Represent plane"""
+        """Represent Plane"""
         return (
             f"{type(self).__name__}"
-            f"({tuple(self._origin)}, {tuple(self.x_dir)}, {tuple(self.z_dir)})"
+            f"({self.origin:.13g}, {self.x_dir:.13g}, {self.z_dir:.13g})"
         )
 
     def __str__(self) -> str:
-        """Display plane"""
-        strf = f".{TOL_DIGITS}g"
-        origin_str = ", ".join(f"{v:{strf}}" for v in tuple(self.origin))
-        x_dir_str = ", ".join(f"{v:{strf}}" for v in tuple(self.x_dir))
-        z_dir_str = ", ".join(f"{v:{strf}}" for v in tuple(self.z_dir))
+        """Display Plane"""
         return (
             f"{type(self).__name__}: "
-            f"(origin=({origin_str}), x_dir=({x_dir_str}), z_dir=({z_dir_str}))"
+            f"(origin={self.origin:.6g}, x_dir={self.x_dir:.6g}, z_dir={self.z_dir:.6g})"
         )
 
     def reverse(self) -> Plane:

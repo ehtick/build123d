@@ -335,7 +335,7 @@ class TestPlane(unittest.TestCase):
     def test_repr(self):
         self.assertEqual(
             repr(Plane.XY),
-            "Plane((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0))",
+            "Plane((0, 0, 0), (1, 0, 0), (0, 0, 1))",
         )
         self.assertEqual(
             str(Plane.XY),
