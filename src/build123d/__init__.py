@@ -21,7 +21,7 @@ from build123d.topology import *
 from build123d.drafting import *
 from build123d.persistence import modify_copyreg
 from build123d.exporters3d import *
-from build123d.utils import available_fonts
+from build123d.text import available_fonts
 
 from .version import version as __version__
 
