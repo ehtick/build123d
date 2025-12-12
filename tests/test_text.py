@@ -18,17 +18,59 @@ from build123d.text import FONT_ASPECT, FontInfo, FontManager
 class TestFontManager(unittest.TestCase):
     """Tests for FontManager."""
 
-    def test_add_font(self):
+    def test_persistence(self):
+        """OCP FontMgr expected to persist db over multiple instances"""
+        instance1 = FontManager()
+        instance1.manager.ClearFontDataBase()
+        working_path = os.path.dirname(os.path.abspath(__file__))
+        src_path = "src/build123d"
+        font_path = instance1.bundled_fonts[0][1]
+        font_path = os.path.join(working_path, "..", src_path, instance1.bundled_path, font_path)
+        instance1.register_font(font_path)
+
+        instance2 = FontManager()
+        self.assertEqual(instance1.available_fonts(), instance2.available_fonts())
+
+
+    def test_register_font(self):
         """Expected to return system font with matching name if it exists"""
         manager = FontManager()
         manager.manager.ClearFontDataBase()
         working_path = os.path.dirname(os.path.abspath(__file__))
-        font = manager.bundled_fonts[0]
-        font_path = os.path.join(working_path, manager.bundled_path, font[1])
-        manager.add_font(font[0], font_path, font[2], font[3], True)
+        src_path = "src/build123d"
+        font_path = manager.bundled_fonts[0][1]
+        font_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
+        font_names = manager.register_font(font_path)
 
-        result = manager.find_font(font[0], font[2])
-        self.assertEqual(font[0], result.FontName().ToCString())
+        result = manager.find_font(font_names[0], FontStyle.REGULAR)
+        self.assertEqual(font_names[0], result.FontName().ToCString())
+
+    def test_register_folder(self):
+        """Expected to register fonts in folder"""
+        manager = FontManager()
+        manager.manager.ClearFontDataBase()
+        working_path = os.path.dirname(os.path.abspath(__file__))
+        src_path = "src/build123d"
+        font_name = manager.bundled_fonts[0][0]
+        font_path = os.path.dirname(manager.bundled_fonts[0][1])
+        folder_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
+        print(os.path.normpath(folder_path))
+        font_names = manager.register_folder(folder_path)
+        print(font_names)
+
+        result = manager.find_font(font_names[0], FontStyle.REGULAR)
+        self.assertEqual(font_name, result.FontName().ToCString())
+
+    def test_register_system_fonts(self):
+        """Expected to register at least as many fonts from before. 
+        May find more on Windows
+        """
+        manager = FontManager()
+        available_before = manager.available_fonts()
+        manager.manager.ClearFontDataBase()
+        manager.register_system_fonts()
+        available_after = manager.available_fonts()
+        self.assertGreaterEqual(len(available_after), len(available_before))
 
     def test_check_font(self):
         """Expected to return system font with matching path if it exists or None"""
@@ -37,7 +79,7 @@ class TestFontManager(unittest.TestCase):
         font_path = manager.bundled_fonts[0][1]
         src_path = "src/build123d"
 
-        good_path = os.path.join(working_path, "..", src_path, manager.bundled_path, font_path)
+        good_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
         good_font = manager.check_font(good_path)
         bad_font = manager.check_font(font_path)
         aspect = FONT_ASPECT[FontStyle.REGULAR]
