@@ -55,8 +55,6 @@ license:
 from __future__ import annotations
 
 import copy
-import os
-import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
@@ -65,14 +63,6 @@ from typing_extensions import Self
 
 import OCP.TopAbs as ta
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Fuse, BRepAlgoAPI_Section
-from OCP.Font import (
-    Font_FA_Bold,
-    Font_FA_BoldItalic,
-    Font_FA_Italic,
-    Font_FA_Regular,
-    Font_FontMgr,
-    Font_SystemFont,
-)
 from OCP.gp import gp_Ax3
 from OCP.Graphic3d import (
     Graphic3d_HTA_LEFT,
@@ -86,7 +76,6 @@ from OCP.Graphic3d import (
 from OCP.GProp import GProp_GProps
 from OCP.NCollection import NCollection_Utf8String
 from OCP.StdPrs import StdPrs_BRepTextBuilder as Font_BRepTextBuilder, StdPrs_BRepFont
-from OCP.TCollection import TCollection_AsciiString
 from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopoDS import (
     TopoDS,
@@ -107,6 +96,7 @@ from build123d.geometry import (
     VectorLike,
     logger,
 )
+from build123d.text import FONT_ASPECT, FontManager
 
 from .one_d import Edge, Wire, Mixin1D
 from .shape_core import (
@@ -251,31 +241,33 @@ class Compound(Mixin3D[TopoDS_Compound]):
         align: Align | tuple[Align, Align] | None = None,
         position_on_path: float = 0.0,
         text_path: Edge | Wire | None = None,
+        single_line_width: float = 0.0,
     ) -> Compound:
-        """2D Text that optionally follows a path.
+        """Text that optionally follows a path.
 
         The text that is created can be combined as with other sketch features by specifying
-        a mode or rotated by the given angle.  In addition, edges have been previously created
+        a mode or rotated by the given angle. In addition, edges have been previously created
         with arc or segment, the text will follow the path defined by these edges. The start
         parameter can be used to shift the text along the path to achieve precise positioning.
 
         Args:
-            txt: text to be rendered
-            font_size: size of the font in model units
-            font: font name
-            font_path: path to font file
-            font_style: text style. Defaults to FontStyle.REGULAR
+            txt (str): text to render
+            font_size (float): size of the font in model units
+            font (str, optional): font name. Defaults to "Arial"
+            font_path (str, optional): system path to font file. Defaults to None
+            font_style (Font_Style, optional): font style, REGULAR, BOLD, BOLDITALIC, or
+                ITALIC. Defaults to Font_Style.REGULAR
             text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
                 LEFT, CENTER, or RIGHT. Vertical text align BOTTOM, CENTER, TOP, or
                 TOPFIRSTLINE. Defaults to (TextAlign.CENTER, TextAlign.CENTER)
-            align (Union[Align, tuple[Align, Align]], optional): align min, center, or max
-                of object. Defaults to None
-            position_on_path: the relative location on path to position the text,
-                between 0.0 and 1.0. Defaults to 0.0
-            text_path: a path for the text to follows. Defaults to None (linear text)
-
-        Returns:
-            a Compound object containing multiple Faces representing the text
+            align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of
+                object. Defaults to None
+            position_on_path (float, optional): the relative location on path to position
+                the text, values must be between 0.0 and 1.0. Defaults to 0.0
+            text_path: (Edge | Wire, optional): path for text to follow. Defaults to None
+                Compound object containing multiple Shapes representing the text
+            single_line_width (float): width of outlined single line font.
+                Defaults to 0.0
 
         Examples::
 
@@ -289,39 +281,35 @@ class Compound(Mixin3D[TopoDS_Compound]):
         """
         # pylint: disable=too-many-locals
 
-        def position_face(orig_face: Face) -> Face:
-            """
-            Reposition a face to the provided path
+        def position_glyph(glyph: Shape, path: Edge | Wire, position: float) -> Shape:
+            """Reposition a glyph shape on provided path
 
-            Local coordinates are used to calculate the position of the face
-            relative to the path. Global coordinates to position the face.
+            Local coordinates are used to calculate the position of the shape
+            relative to the path. Global coordinates to position the shape.
             """
-            assert text_path is not None
-            bbox = orig_face.bounding_box()
+
+            bbox = glyph.bounding_box()
             face_bottom_center = Vector((bbox.min.X + bbox.max.X) / 2, 0, 0)
-            relative_position_on_wire = (
-                position_on_path + face_bottom_center.X / path_length
-            )
-            wire_tangent = text_path.tangent_at(relative_position_on_wire)
+            relative_position_on_wire = position + face_bottom_center.X / path.length
+            wire_tangent = path.tangent_at(relative_position_on_wire)
             wire_angle = Vector(1, 0, 0).get_signed_angle(wire_tangent)
-            wire_position = text_path.position_at(relative_position_on_wire)
+            wire_position = path.position_at(relative_position_on_wire)
 
-            return orig_face.translate(wire_position - face_bottom_center).rotate(
+            return glyph.translate(wire_position - face_bottom_center).rotate(
                 Axis(wire_position, (0, 0, 1)),
                 -wire_angle,
             )
 
-        if sys.platform.startswith("linux"):
-            os.environ["FONTCONFIG_FILE"] = "/etc/fonts/fonts.conf"
-            os.environ["FONTCONFIG_PATH"] = "/etc/fonts/"
+        manager = FontManager()
+        if font_path and manager.check_font(font_path):
+            face_names = manager.register_font(font_path, True, False)
+            # Check if font (name) is in face names and not bad or default (Arial)
+            font_name = font if font in face_names else face_names[0]
+            system_font = manager.find_font(font_name, font_style)
+        else:
+            system_font = manager.find_font(font, font_style)
 
-        font_kind = {
-            FontStyle.REGULAR: Font_FA_Regular,
-            FontStyle.BOLD: Font_FA_Bold,
-            FontStyle.ITALIC: Font_FA_Italic,
-            FontStyle.BOLDITALIC: Font_FA_BoldItalic,
-        }[font_style]
-
+        # Validate TextAlign parameters
         if text_align[0] not in [TextAlign.LEFT, TextAlign.CENTER, TextAlign.RIGHT]:
             raise ValueError(
                 "Horizontal TextAlign must be LEFT, CENTER, or RIGHT. "
@@ -352,38 +340,30 @@ class Compound(Mixin3D[TopoDS_Compound]):
             TextAlign.TOPFIRSTLINE: Graphic3d_VTA_TOPFIRSTLINE,
         }[text_align[1]]
 
-        mgr = Font_FontMgr.GetInstance_s()
-
-        if font_path and mgr.CheckFont(TCollection_AsciiString(font_path).ToCString()):
-            font_t = Font_SystemFont(TCollection_AsciiString(font_path))
-            font_t.SetFontPath(font_kind, TCollection_AsciiString(font_path))
-            mgr.RegisterFont(font_t, True)
-
-        else:
-            font_t = mgr.FindFont(TCollection_AsciiString(font), font_kind)
-
         logger.info(
             "Creating text with font %s located at %s",
-            font_t.FontName().ToCString(),
-            font_t.FontPath(font_kind).ToCString(),
+            system_font.FontName().ToCString(),
+            system_font.FontPath(FONT_ASPECT[font_style]).ToCString(),
         )
 
+        # Write text to shape
         builder = Font_BRepTextBuilder()
-        font_i = StdPrs_BRepFont(
-            NCollection_Utf8String(font_t.FontName().ToCString()),
-            font_kind,
+        brep_font = StdPrs_BRepFont(
+            NCollection_Utf8String(system_font.FontName().ToCString()),
+            FONT_ASPECT[font_style],
             float(font_size),
         )
 
+        if system_font.IsSingleStrokeFont():
+            brep_font.SetCompositeCurveMode(False)
+
         text_flat = Compound(
-            TopoDS.Compound_s(
-                builder.Perform(
-                    font_i,
-                    NCollection_Utf8String(txt),
-                    gp_Ax3(),
-                    horiz_align,
-                    vert_align,
-                )
+            builder.Perform(
+                brep_font,
+                NCollection_Utf8String(txt),
+                gp_Ax3(),
+                horiz_align,
+                vert_align,
             )
         )
 
@@ -393,9 +373,24 @@ class Compound(Mixin3D[TopoDS_Compound]):
             Vector(*text_flat.bounding_box().to_align_offset(align_text))
         )
 
-        if text_path is not None:
-            path_length = text_path.length
-            text_flat = Compound([position_face(f) for f in text_flat.faces()])
+        # Place text on path
+        if text_path:
+            glyphs = text_flat.get_top_level_shapes()
+            text_flat = Compound(
+                [position_glyph(g, text_path, position_on_path) for g in glyphs]
+            )
+
+        def _make_face(edges: Iterable[Edge]) -> Face:
+            face = Face(Wire.combine(edges)[0])
+            if face.normal_at().Z < 0:  # flip up-side-down faces
+                face = -face  # pylint: disable=E1130
+            return face
+
+        # Outline single line text
+        if system_font.IsSingleStrokeFont() and single_line_width > 0:
+            outline = [e.offset_2d(single_line_width) for e in text_flat.edges()]
+            outline = [_make_face(o.edges()) for o in outline]
+            text_flat = Compound([]) + outline
 
         return text_flat
 
@@ -412,14 +407,14 @@ class Compound(Mixin3D[TopoDS_Compound]):
         arrow = Wire([arrow_arc, copy.copy(arrow_arc).mirror(Plane.XZ)])
         x_label = (
             Compound.make_text(
-                "X", font_size=axes_scale / 4, align=(Align.MIN, Align.CENTER)
+                "X", axes_scale / 4, "singleline", align=(Align.MIN, Align.CENTER)
             )
             .move(Location(x_axis @ 1))
             .edges()
         )
         y_label = (
             Compound.make_text(
-                "Y", font_size=axes_scale / 4, align=(Align.MIN, Align.CENTER)
+                "Y", axes_scale / 4, "singleline", align=(Align.MIN, Align.CENTER)
             )
             .rotate(Axis.Z, 90)
             .move(Location(y_axis @ 1))
@@ -427,7 +422,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         )
         z_label = (
             Compound.make_text(
-                "Z", font_size=axes_scale / 4, align=(Align.CENTER, Align.MIN)
+                "Z", axes_scale / 4, "singleline", align=(Align.CENTER, Align.MIN)
             )
             .rotate(Axis.Y, 90)
             .rotate(Axis.X, 90)

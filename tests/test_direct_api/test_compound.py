@@ -47,6 +47,14 @@ class TestCompound(unittest.TestCase):
         )
         self.assertEqual(len(text.faces()), 4)
 
+        singleline = Compound.make_text("test", 10, "singleline", text_path=arc)
+        outline = Compound.make_text(
+            "test", 10, "singleline", text_path=arc, single_line_width=0.2
+        )
+        self.assertEqual(len(singleline.faces()), 0)
+        self.assertGreaterEqual(len(singleline.wires()), 4)
+        self.assertEqual(len(outline.faces()), 4)
+
     def test_fuse(self):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))
