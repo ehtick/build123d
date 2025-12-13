@@ -11,6 +11,8 @@ desc: Unit tests for the build123d font and text module
 import unittest
 import os
 
+from OCP.TCollection import TCollection_AsciiString
+
 from build123d import available_fonts, FontStyle
 from build123d.text import FONT_ASPECT, FontInfo, FontManager
 
@@ -54,9 +56,7 @@ class TestFontManager(unittest.TestCase):
         font_name = manager.bundled_fonts[0][0]
         font_path = os.path.dirname(manager.bundled_fonts[0][1])
         folder_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
-        print(os.path.normpath(folder_path))
         font_names = manager.register_folder(folder_path)
-        print(font_names)
 
         result = manager.find_font(font_names[0], FontStyle.REGULAR)
         self.assertEqual(font_name, result.FontName().ToCString())
@@ -67,9 +67,17 @@ class TestFontManager(unittest.TestCase):
         """
         manager = FontManager()
         available_before = manager.available_fonts()
+        manager.manager.RemoveFontAlias(
+              TCollection_AsciiString("singleline"),
+              TCollection_AsciiString("Relief SingleLine CAD")
+              )
         manager.manager.ClearFontDataBase()
         manager.register_system_fonts()
+        # add bundled fonts back in
+        manager.__init__()
         available_after = manager.available_fonts()
+        # register_system_fonts may add more fonts than InitFontDataBase() due to
+        # string naming rules
         self.assertGreaterEqual(len(available_after), len(available_before))
 
     def test_check_font(self):
