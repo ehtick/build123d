@@ -268,9 +268,9 @@ with BuildSketch() as align:
         Text("MAX", font="FreeSerif", font_size=0.07)
     # Bottom Center: (CENTER, MAX)
     with Locations((0.0, -0.75 + 0.07 / 2)):
-        Text("MAX", font="FreeSerif", font_size=0.07)
-    with Locations((0.0, -0.75 - 0.07 / 2)):
         Text("CENTER", font="FreeSerif", font_size=0.07)
+    with Locations((0.0, -0.75 - 0.07 / 2)):
+        Text("MAX", font="FreeSerif", font_size=0.07)
     # Bottom Left: (MAx, MAX)
     with Locations((-0.75, -0.75)):
         Text("MAX\nMAX", font="FreeSerif", font_size=0.07)
