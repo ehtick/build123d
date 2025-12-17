@@ -684,31 +684,6 @@ class Mixin1D(Shape[TOPODS]):
 
         return derivative
 
-    # def edge(self) -> Edge | None:
-    #     """Return the Edge"""
-    #     return Shape.get_single_shape(self, "Edge")
-
-    # def edges(self) -> ShapeList[Edge]:
-    #     """edges - all the edges in this Shape"""
-    #     if isinstance(self, Wire) and self.wrapped is not None:
-    #         # The WireExplorer is a tool to explore the edges of a wire in a connection order.
-    #         explorer = BRepTools_WireExplorer(self.wrapped)
-
-    #         edge_list: ShapeList[Edge] = ShapeList()
-    #         while explorer.More():
-    #             next_edge = Edge(explorer.Current())
-    #             next_edge.topo_parent = (
-    #                 self if self.topo_parent is None else self.topo_parent
-    #             )
-    #             edge_list.append(next_edge)
-    #             explorer.Next()
-    #         return edge_list
-
-    #     edge_list = Shape.get_shape_list(self, "Edge")
-    #     return edge_list.filter_by(
-    #         lambda e: BRep_Tool.Degenerated_s(e.wrapped), reverse=True
-    #     )
-
     def end_point(self) -> Vector:
         """The end point of this edge.
 

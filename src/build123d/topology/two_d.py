@@ -172,8 +172,6 @@ T = TypeVar("T", Edge, Wire, "Face")
 class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
-    # project_to_viewport = Mixin1D.project_to_viewport
-
     # ---- Properties ----
 
     @property
