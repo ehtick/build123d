@@ -1,4 +1,4 @@
-<h1 align="left">
+<h1 align="center">
     <img alt="build123d logo" src="https://github.com/gumyr/build123d/raw/dev/docs/assets/build123d_logo/logo-banner.svg">
 </h1>
 
@@ -16,14 +16,14 @@
 [![Downloads](https://pepy.tech/badge/build123d)](https://pepy.tech/project/build123d)
 [![Downloads/month](https://pepy.tech/badge/build123d/month)](https://pepy.tech/project/build123d)
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/build123d.svg)](https://pypi.org/project/build123d/)
-[![DOI](https://zenodo.org/badge/510925389.svg)](https://doi.org/10.5281/zenodo.14872322)
+[![DOI](https://zenodo.org/badge/510925389.svg)](https://zenodo.org/badge/latestdoi/510925389)
 
 [Documentation](https://build123d.readthedocs.io/en/latest/index.html) |
 [Cheat Sheet](https://build123d.readthedocs.io/en/latest/cheat_sheet.html) |
 [Discord](https://discord.com/invite/Bj9AQPsCfx) |
 [Discussions](https://github.com/gumyr/build123d/discussions) |
 [Issues](https://github.com/gumyr/build123d/issues ) |
-[Contributing]()
+[Contributing](#contributing)
 
 build123d is a Python-based, parametric [boundary representation (BREP)][BREP] modeling framework for 2D and 3D CAD. Built on the [Open Cascade] geometric kernel, it provides a clean, fully Pythonic interface for creating precise models suitable for 3D printing, CNC machining, laser cutting, and other manufacturing processes.
 
@@ -73,7 +73,7 @@ line += PolarLine(line @ 1, 6, direction=line % 1)
 
 ### Upgrading to 2D and 3D
 
-Faces, Shells (multiple connected Faces), and Sketches (a Compound of Faces and Shells) are the 2d Shapes available in build123d. The previous line is sufficiently defined to close the Wire and create a Face with `make_hull`:
+Faces, Shells (multiple connected Faces), and Sketches (a Compound of Faces and Shells) are the 2D Shapes available in build123d. The previous line is sufficiently defined to close the Wire and create a Face with `make_hull`:
 
 ```py
 sketch = make_hull(line)
@@ -87,7 +87,7 @@ part = extrude(sketch, amount= 2)
 ```
 
 <div align="left">
-    <img style="max-height:150px" alt="upgrade 2d" src="https://github.com/gumyr/build123d/raw/dev/docs/assets/readme/upgrade_2d.png">
+    <img style="max-height:150px" alt="upgrade 2D" src="https://github.com/gumyr/build123d/raw/dev/docs/assets/readme/upgrade_2d.png">
 </div>
 
 ### Adding to and modifying part
@@ -124,7 +124,7 @@ part = chamfer(bore.edges(), .2)
 
 The previous construction is through the **Algebra Mode** interface, which follows a stateless paradigm where each object is explicitly tracked and mutated by algebraic operators.
 
-**Builder Mode** is an alternative build123d interface where state is tracked and structured in a design history-like way where each dimension is distinct. Operations are aware pending faces and edges from Build contexts and location transformations are applied to all child objects in Build and Locations contexts. Builder mode also introduces the `mode` affordance to objects to specify how new Shapes are combined with the context:
+**Builder Mode** is an alternative build123d interface where state is tracked and structured in a design history-like way where each dimension is distinct. Operations are aware pending faces and edges from Build contexts and location transformations are applied to all child objects in Build and Locations contexts. While each Build context tracks state, operations like `extrude` can still optionally take explicit Shape input instead of implicitly using pending Shapes. Builder mode also introduces the `mode` affordance to objects to specify how new Shapes are combined with the context:
 
 ```py
 with BuildPart() as part_context:
@@ -193,7 +193,7 @@ for i, location in enumerate(GridLocations(5, 0, 4, 1)):
 
 ### Data interchange
 
-build123d can import and export a number data formats for interchange with 2d and 3d design tools, 3D printing slicers, and traditional CAM:
+build123d can import and export a number data formats for interchange with 2D and 3D design tools, 3D printing slicers, and traditional CAM:
 
 ```py
 svg = import_svg("spade.svg")
@@ -225,7 +225,7 @@ If you receive errors about conflicting dependencies, retry the installation aft
 pip install --upgrade pip
 ```
 
-### Pre- release
+### Pre-release
 
 build123d is under active development and up-to-date features are found in the
 development branch:
