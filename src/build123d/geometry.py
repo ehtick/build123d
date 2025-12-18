@@ -453,7 +453,7 @@ class Vector:
             if "." in spec:
                 precision = int(spec[:-1].split(".")[-1])
             else:
-                precision = 6 if last_char == "f" else 6
+                precision = 6 if last_char == "f" else 12
 
             x = trim_float(self.X, precision)
             y = trim_float(self.Y, precision)
@@ -758,15 +758,23 @@ class Axis(metaclass=AxisMeta):
             )
         )
 
+    def __format__(self, spec) -> str:
+        """Format Axis"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.position:{spec}}, {self.direction:{spec}})"
+
+        return f"({tuple(self.position)}, {tuple(self.direction)})"
+
     def __repr__(self) -> str:
         """Represent Axis"""
-        return f"{type(self).__name__}({self.position:.13g}, {self.direction:.13g})"
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
 
     def __str__(self) -> str:
         """Display Axis"""
         return (
             f"{type(self).__name__}: "
-            f"(position={self.position:.6g}, direction={self.direction:.6g})"
+            f"(position={self.position:.{TOL_DIGITS}g}, direction={self.direction:.{TOL_DIGITS}g})"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -1931,17 +1939,23 @@ class Location:
 
         return rv_trans, rv_rot
 
+    def __format__(self, spec) -> str:
+        """Format Location"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.position:{spec}}, {self.orientation:{spec}})"
+
+        return f"({tuple(self.position)}, {tuple(self.orientation)})"
+
     def __repr__(self) -> str:
         """Represent Location"""
-        return (
-            f"{type(self).__name__}" f"({self.position:.13g}, {self.orientation:.13g})"
-        )
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
 
     def __str__(self) -> str:
         """Display Location"""
         return (
             f"{type(self).__name__}: "
-            f"(position={self.position:.6g}, orientation={self.orientation:.6g})"
+            f"(position={self.position:.{TOL_DIGITS}g}, orientation={self.orientation:.{TOL_DIGITS}g})"
         )
 
     @overload
@@ -2863,18 +2877,23 @@ class Plane(metaclass=PlaneMeta):
         """intersect plane with other &"""
         return self.intersect(other)
 
+    def __format__(self, spec) -> str:
+        """Format Plane"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.origin:{spec}}, {self.x_dir:{spec}}, {self.z_dir:{spec}})"
+
+        return f"({tuple(self.origin)}, {tuple(self.x_dir)}, {tuple(self.z_dir)})"
+
     def __repr__(self) -> str:
         """Represent Plane"""
-        return (
-            f"{type(self).__name__}"
-            f"({self.origin:.13g}, {self.x_dir:.13g}, {self.z_dir:.13g})"
-        )
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
 
     def __str__(self) -> str:
         """Display Plane"""
         return (
             f"{type(self).__name__}: "
-            f"(origin={self.origin:.6g}, x_dir={self.x_dir:.6g}, z_dir={self.z_dir:.6g})"
+            f"(origin={self.origin:.{TOL_DIGITS}g}, x_dir={self.x_dir:.{TOL_DIGITS}g}, z_dir={self.z_dir:.{TOL_DIGITS}g})"
         )
 
     def reverse(self) -> Plane:

@@ -228,8 +228,15 @@ class TestLocation(unittest.TestCase):
 
     def test_location_repr_and_str(self):
         self.assertEqual(
-            repr(Location()), "Location((0, 0, 0), (0, 0, 0))"
+            f"{Location((1, 2, 3), (4, 5, 6)):.2f}",
+            "((1.00, 2.00, 3.00), (4.00, 5.00, 6.00))",
         )
+        self.assertEqual(
+            f"{Location((1, 2, 3), (4, 5, 6)):.2g}", "((1, 2, 3), (4, 5, 6))"
+        )
+        self.assertIn("((1.0, 2.0, 3.0), ", f"{Location((1, 2, 3), (4, 5, 6)):.2t}")
+
+        self.assertEqual(repr(Location()), "Location((0, 0, 0), (0, 0, 0))")
         self.assertEqual(
             str(Location()),
             "Location: (position=(0, 0, 0), orientation=(0, 0, 0))",
