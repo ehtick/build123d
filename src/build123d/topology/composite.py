@@ -358,12 +358,14 @@ class Compound(Mixin3D[TopoDS_Compound]):
             brep_font.SetCompositeCurveMode(False)
 
         text_flat = Compound(
-            builder.Perform(
-                brep_font,
-                NCollection_Utf8String(txt),
-                gp_Ax3(),
-                horiz_align,
-                vert_align,
+            TopoDS.Compound_s(
+                builder.Perform(
+                    brep_font,
+                    NCollection_Utf8String(txt),
+                    gp_Ax3(),
+                    horiz_align,
+                    vert_align,
+                )
             )
         )
 
