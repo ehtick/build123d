@@ -504,7 +504,7 @@ class ExtensionLine(BaseSketchObject):
         label_angle (bool, optional): a flag indicating that instead of an extracted length
             value, the size of the circular arc extracted from the path should be displayed
             in degrees. Defaults to False.
-        project_line (Vector, optional): Vector line which to project dimension against.
+        project_line (Vector, optional): Vector line which to project dimension against. Offset start point is the position of the start of border.
             Defaults to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
@@ -528,24 +528,39 @@ class ExtensionLine(BaseSketchObject):
         context = BuildSketch._get_context(self)
         if sketch is None and not (context is None or context.sketch is None):
             sketch = context.sketch
-        if project_line is not None:
-            raise NotImplementedError("project_line is currently unsupported")
+        if offset == 0:
+            raise ValueError("A dimension line should be used if offset is 0")
 
         # Create a wire modelling the path of the dimension lines from a variety of input types
         object_to_measure = Draft._process_path(border)
+        if object_to_measure.position_at(0) == object_to_measure.position_at(1):
+            raise ValueError("Start and end points of border must be different.")
+
+        if project_line is not None:
+            if isinstance(project_line, Iterable):
+                project_line = Vector(project_line)
+            measure_object_span = object_to_measure.position_at(
+                1
+            ) - object_to_measure.position_at(0)
+            extent_along_wire = measure_object_span.project_to_line(project_line)
+            object_to_dimension = Edge.make_line(
+                object_to_measure.position_at(0),
+                object_to_measure.position_at(0) + extent_along_wire,
+            )
+        else:
+            object_to_dimension = object_to_measure
 
         side_lut = {1: Side.RIGHT, -1: Side.LEFT}
 
-        if offset == 0:
-            raise ValueError("A dimension line should be used if offset is 0")
-        dimension_path = object_to_measure.offset_2d(
+        dimension_path = object_to_dimension.offset_2d(
             distance=offset, side=side_lut[int(copysign(1, offset))], closed=False
         )
         dimension_label_str = (
             label
             if label is not None
-            else draft._label_to_str(label, object_to_measure, label_angle, tolerance)
+            else draft._label_to_str(label, object_to_dimension, label_angle, tolerance)
         )
+
         extension_lines = [
             Edge.make_line(
                 object_to_measure.position_at(e), dimension_path.position_at(e)
