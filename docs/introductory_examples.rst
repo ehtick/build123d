@@ -94,7 +94,7 @@ Build a prismatic solid using extrusion.
 * **Builder mode**
 
     This time we can first create a 2D :class:`~build_sketch.BuildSketch` adding a
-    :class:`~objects_sketch.Circle` and a subtracted :class:`~objects_sketch.Rectangle``
+    :class:`~objects_sketch.Circle` and a subtracted :class:`~objects_sketch.Rectangle`
     and then use :class:`~build_part.BuildPart`'s :meth:`~operations_part.extrude` feature.
 
     .. literalinclude:: general_examples.py
