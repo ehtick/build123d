@@ -275,7 +275,7 @@ create the final profile.
 
 .. _ex 9:
 
-9. Selectors, Fillets, and Chamfers
+9. Selectors, Fillets and Chamfers
 ---------------------------------------------------
 
 This example introduces multiple useful and important concepts. Firstly :meth:`~operations_generic.chamfer`
