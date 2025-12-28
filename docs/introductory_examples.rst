@@ -275,7 +275,7 @@ create the final profile.
 
 .. _ex 9:
 
-9. Selectors, Fillets and Chamfers
+9. Selectors, Fillets, and Chamfers
 ---------------------------------------------------
 
 This example introduces multiple useful and important concepts. Firstly :meth:`~operations_generic.chamfer`
@@ -412,7 +412,7 @@ edge that needs a complex profile.
 
 .. _ex 13:
 
-13. CounterBoreHoles, CounterSinkHoles and PolarLocations
+13. CounterBoreHoles, CounterSinkHoles, and PolarLocations
 -------------------------------------------------------------
 
 Counter-sink and counter-bore holes are useful for creating recessed areas for fasteners.
