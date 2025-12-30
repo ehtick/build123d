@@ -301,7 +301,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=-10,
             draft=metric,
-            project_line=(0, 1, 0),
+            measurement_direction=(0, 1, 0),
         )
         self.assertIsNotNone(ext)
 
@@ -311,7 +311,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=-10,
             draft=metric,
-            project_line=Vector(0, 1, 0),
+            measurement_direction=Vector(0, 1, 0),
         )
         self.assertIsNotNone(ext)
         self.assertGreater(
@@ -334,7 +334,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=10,
             draft=metric,
-            project_line=Vector(0, 1, 0),
+            measurement_direction=Vector(0, 1, 0),
         )
         self.assertIsNotNone(ext)
         self.assertEqual(
@@ -354,7 +354,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=x_size + 10,
             draft=metric,
-            project_line=Vector(0, 1, 0),
+            measurement_direction=Vector(0, 1, 0),
         )
         self.assertIsNotNone(ext)
         self.assertGreater(
@@ -373,7 +373,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=10,
             draft=metric,
-            project_line=Vector(0, 1, 0),
+            measurement_direction=Vector(0, 1, 0),
         )
         self.assertIsNotNone(ext)
         self.assertEqual(
@@ -388,7 +388,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=10,
             draft=metric,
-            project_line=Vector(1, 0, 0),
+            measurement_direction=Vector(1, 0, 0),
         )
         self.assertIsNotNone(ext)
         self.assertGreater(
@@ -411,7 +411,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=diagonal_line,
             offset=10,
             draft=metric,
-            project_line=Vector(1, 1, 0),
+            measurement_direction=Vector(1, 1, 0),
         )
         self.assertIsNotNone(ext)
         self.assertAlmostEqual(ext.dimension, 141.421, places=2)
@@ -422,7 +422,7 @@ class ExtensionLineTestCase(unittest.TestCase):
             border=half_circle,
             offset=-10,
             draft=metric,
-            project_line=Vector(1, 0, 0),
+            measurement_direction=Vector(1, 0, 0),
         )
         self.assertIsNotNone(ext)
         self.assertEqual(ext.dimension, 100)
@@ -438,7 +438,7 @@ class ExtensionLineTestCase(unittest.TestCase):
                 border=half_circle,
                 offset=10,
                 draft=metric,
-                project_line=Vector(0, 1, 0),
+                measurement_direction=Vector(0, 1, 0),
             )
 
 

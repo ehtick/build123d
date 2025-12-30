@@ -167,7 +167,7 @@ body_bottom_corner = (side_bbox.max.X, side_bbox.min.Y)
 d4 = ExtensionLine(
     border=(shaft_top_corner, body_bottom_corner),
     offset=-(side_bbox.max.X - shaft_top_corner.X) - 1 * CM,  # offset to outside view.
-    project_line=(0, 1, 0),
+    measurement_direction=(0, 1, 0),
     draft=drafting_options,
 )
 l3 = Text("Side Elevation", 6)

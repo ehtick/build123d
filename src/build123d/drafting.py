@@ -504,7 +504,8 @@ class ExtensionLine(BaseSketchObject):
         label_angle (bool, optional): a flag indicating that instead of an extracted length
             value, the size of the circular arc extracted from the path should be displayed
             in degrees. Defaults to False.
-        project_line (Vector, optional): Vector line which to project dimension against. Offset start point is the position of the start of border.
+        measurement_direction (VectorLike, optional): Vector line which to project the dimension
+            against. Offset start point is the position of the start of border.
             Defaults to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD.
 
@@ -520,7 +521,7 @@ class ExtensionLine(BaseSketchObject):
         arrows: tuple[bool, bool] = (True, True),
         tolerance: float | tuple[float, float] | None = None,
         label_angle: bool = False,
-        project_line: VectorLike | None = None,
+        measurement_direction: VectorLike | None = None,
         mode: Mode = Mode.ADD,
     ):
         # pylint: disable=too-many-locals
@@ -536,13 +537,15 @@ class ExtensionLine(BaseSketchObject):
         if object_to_measure.position_at(0) == object_to_measure.position_at(1):
             raise ValueError("Start and end points of border must be different.")
 
-        if project_line is not None:
-            if isinstance(project_line, Iterable):
-                project_line = Vector(project_line)
+        if measurement_direction is not None:
+            if isinstance(measurement_direction, Iterable):
+                measurement_direction = Vector(measurement_direction)
             measure_object_span = object_to_measure.position_at(
                 1
             ) - object_to_measure.position_at(0)
-            extent_along_wire = measure_object_span.project_to_line(project_line)
+            extent_along_wire = measure_object_span.project_to_line(
+                measurement_direction
+            )
             object_to_dimension = Edge.make_line(
                 object_to_measure.position_at(0),
                 object_to_measure.position_at(0) + extent_along_wire,
