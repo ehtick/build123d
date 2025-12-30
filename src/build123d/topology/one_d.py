@@ -473,7 +473,9 @@ class Mixin1D(Shape[TOPODS]):
             middle = self.bounding_box().center()
         return middle
 
-    def common_plane(self, *lines: Edge | Wire | None) -> None | Plane:
+    def common_plane(
+        self, *lines: Edge | Wire | None, tolerance: float = TOLERANCE
+    ) -> None | Plane:
         """common_plane
 
         Find the plane containing all the edges/wires (including self). If there
@@ -482,6 +484,7 @@ class Mixin1D(Shape[TOPODS]):
 
         Args:
             lines (sequence of Edge | Wire): edges in common with self
+            tolerance (float): amount lines can deviate from plane. Defaults to TOLERANCE.
 
         Returns:
             None |  Plane: Either the common plane or None
@@ -505,8 +508,7 @@ class Mixin1D(Shape[TOPODS]):
                 origin = as_axis[0].position
                 x_dir = as_axis[0].direction
                 z_dir = Plane(as_axis[0]).x_dir
-                c_plane = Plane(origin, z_dir=z_dir)
-                result = c_plane.shift_origin((0, 0))
+                result = Plane(origin, z_dir=z_dir)
 
         if result is None:  # not coaxial
             # Shorten any infinite lines (from converted Axis)
@@ -537,16 +539,26 @@ class Mixin1D(Shape[TOPODS]):
                 c_plane = Plane(
                     origin=(sum(extremes, Vector(0, 0, 0)) / 3), z_dir=z_dir
                 )
-                c_plane = c_plane.shift_origin((0, 0))
             except ValueError:
                 # There is no valid common plane
                 result = None
             else:
                 # Are all of the points on the common plane
-                common = all(c_plane.contains(p) for p in points)
+                common = all(c_plane.contains(p, tolerance) for p in points)
                 result = c_plane if common else None
 
-        return result
+        if result is None:
+            return result
+
+        # Center the plane on the lines
+        global_center = sum(
+            [e.position_at(0.5) for e in all_lines], start=Vector(0, 0, 0)
+        ) / len(all_lines)
+        center_axis = Axis(global_center, result.z_dir)
+        plane_origin = result.intersect(center_axis)
+        assert isinstance(plane_origin, Vector)
+
+        return result.shift_origin(plane_origin)
 
     def curvature_comb(
         self, count: int = 100, max_tooth_size: float | None = None
