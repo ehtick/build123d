@@ -33,6 +33,7 @@ from datetime import datetime
 import warnings
 from io import BytesIO
 from os import PathLike, fsdecode, fspath
+from typing import BinaryIO
 
 import OCP.TopAbs as ta
 from anytree import PreOrderIter
@@ -161,7 +162,7 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
 
 def export_brep(
     to_export: Shape,
-    file_path: PathLike | str | bytes | BytesIO,
+    file_path: PathLike | str | bytes | BytesIO | BinaryIO,
 ) -> bool:
     """Export this shape to a BREP file
 
@@ -172,7 +173,7 @@ def export_brep(
     Returns:
         bool: write status
     """
-    if not isinstance(file_path, BytesIO):
+    if isinstance(file_path, (PathLike | str | bytes)):
         file_path = fsdecode(file_path)
 
     return_value = BRepTools.Write_s(to_export.wrapped, file_path)
@@ -262,7 +263,7 @@ def export_gltf(
 
 def export_step(
     to_export: Shape,
-    file_path: PathLike | str | bytes | BytesIO,
+    file_path: PathLike | str | bytes | BytesIO | BinaryIO,
     unit: Unit = Unit.MM,
     write_pcurves: bool = True,
     precision_mode: PrecisionMode = PrecisionMode.AVERAGE,
@@ -326,7 +327,7 @@ def export_step(
     Interface_Static.SetIVal_s("write.precision.mode", precision_mode.value)
     writer.Transfer(doc, STEPControl_StepModelType.STEPControl_AsIs)
 
-    if not isinstance(file_path, BytesIO):
+    if isinstance(file_path, (PathLike, str, bytes)):
         status = (
             writer.Write(fsdecode(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
         )

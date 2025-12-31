@@ -29,9 +29,11 @@ import io
 import json
 import os
 import re
+import sys
 import unittest
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryFile
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -211,6 +213,19 @@ def test_exporters_in_memory(exporter):
     buffer = io.BytesIO()
     box = Box(1, 1, 1).locate(Pos(-1, -2, -3))
     exporter(box, buffer)
+
+
+
+@pytest.mark.parametrize("exporter", (export_step, export_brep))
+def test_exporters_to_binary_fileobj(exporter):
+    box = Box(1, 1, 1).locate(Pos(-1, -2, -3))
+    with TemporaryFile('wb') as f:
+        exporter(box, f)
+
+@pytest.mark.parametrize("exporter", (export_step, export_brep))
+def test_exporters_to_stdout(exporter):
+    box = Box(1, 1, 1).locate(Pos(-1, -2, -3))
+    exporter(box, sys.stdout.buffer)
 
 
 if __name__ == "__main__":
