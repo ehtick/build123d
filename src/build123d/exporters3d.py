@@ -33,7 +33,7 @@ from datetime import datetime
 import warnings
 from io import BytesIO
 from os import PathLike, fsdecode, fspath
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 import OCP.TopAbs as ta
 from anytree import PreOrderIter
@@ -175,7 +175,8 @@ def export_brep(
     """
     if isinstance(file_path, (PathLike | str | bytes)):
         file_path = fsdecode(file_path)
-
+    else:
+        file_path = cast(BytesIO, file_path)
     return_value = BRepTools.Write_s(to_export.wrapped, file_path)
 
     return True if return_value is None else return_value
@@ -328,16 +329,16 @@ def export_step(
     writer.Transfer(doc, STEPControl_StepModelType.STEPControl_AsIs)
 
     if isinstance(file_path, (PathLike, str, bytes)):
-        status = (
-            writer.Write(fsdecode(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
-        )
+        status = writer.Write(fsdecode(file_path))
     else:
-        status = writer.WriteStream(file_path) == IFSelect_ReturnStatus.IFSelect_RetDone
+        # need to cast for type checker because BinaryIO is OK but OCP doesn't know
+        status = writer.WriteStream(cast(BytesIO, file_path))
 
-    if not status:
+    success = status == IFSelect_ReturnStatus.IFSelect_RetDone
+    if not success:
         raise RuntimeError("Failed to write STEP file")
 
-    return status
+    return success
 
 
 def export_stl(
