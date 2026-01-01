@@ -320,4 +320,3 @@ class TestColorCategoricalSet:
         for c in colors:
             (_, _, _, a) = tuple(c)
             assert math.isclose(a, 1.0, rel_tol=1e-6)
-            assert math.isclose(a, 1.0, rel_tol=1e-6)
