@@ -41,7 +41,7 @@ import json
 import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from math import degrees, isclose, log10, pi, radians, prod
+from math import degrees, isclose, log10, pi, prod, radians
 from typing import TYPE_CHECKING, Any, TypeAlias, overload
 
 import numpy as np
@@ -72,7 +72,7 @@ from OCP.gp import (
 
 # properties used to store mass calculation result
 from OCP.GProp import GProp_GProps
-from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA
+from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TypeOfColor
 from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS_Vertex
@@ -1200,7 +1200,7 @@ class Color:
 
     @overload
     def __init__(self, red: float, green: float, blue: float, alpha: float = 1.0):
-        """Color from RGBA and Alpha values
+        """Color from sRGB and Alpha values
 
         Args:
             red (float): 0.0 <= red <= 1.0
@@ -1312,7 +1312,10 @@ class Color:
                 raise TypeError(f"Unsupported color definition: {color_format}")
 
         if not self.wrapped:
-            self.wrapped = Quantity_ColorRGBA(red, green, blue, alpha)
+            the_color = Quantity_Color(
+                red, green, blue, Quantity_TypeOfColor.Quantity_TOC_sRGB
+            )
+            self.wrapped = Quantity_ColorRGBA(the_color, alpha)
 
     def __iter__(self):
         """Initialize to beginning"""
@@ -1321,14 +1324,14 @@ class Color:
 
     def __next__(self):
         """return the next value"""
-        rgb = self.wrapped.GetRGB()
-        rgb_tuple = (rgb.Red(), rgb.Green(), rgb.Blue(), self.wrapped.Alpha())
+        r, g, b = self.wrapped.GetRGB().Values(Quantity_TypeOfColor.Quantity_TOC_sRGB)
+        rgb_tuple = (r, g, b, self.wrapped.Alpha())
 
         if self.iter_index > 3:
             raise StopIteration
         value = rgb_tuple[self.iter_index]
         self.iter_index += 1
-        return value
+        return round(value, 7)
 
     def __copy__(self) -> Color:
         """Return copy of self"""
@@ -1340,10 +1343,9 @@ class Color:
 
     def __str__(self) -> str:
         """Generate string"""
-        rgb = self.wrapped.GetRGB()
-        rgb = (rgb.Red(), rgb.Green(), rgb.Blue())
+        rgb = self.wrapped.GetRGB().Values(Quantity_TypeOfColor.Quantity_TOC_sRGB)
         try:
-            name = webcolors.rgb_to_name([int(c * 255) for c in rgb])
+            name = webcolors.rgb_to_name([round(c * 255) for c in rgb])
             qualifier = "is"
         except ValueError:
             # This still uses OCCT X11 colors instead of css3
