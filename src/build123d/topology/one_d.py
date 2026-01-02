@@ -88,7 +88,7 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
+from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse, GC_MakeArcOfParabola, GC_MakeArcOfHyperbola
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
@@ -151,6 +151,8 @@ from OCP.gp import (
     gp_Dir,
     gp_Dir2d,
     gp_Elips,
+    gp_Parab,
+    gp_Hypr,
     gp_Pln,
     gp_Pnt,
     gp_Pnt2d,
@@ -2052,6 +2054,95 @@ class Edge(Mixin1D[TopoDS_Edge]):
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_geom).Edge())
 
         return ellipse
+
+    @classmethod
+    def make_parabola(
+        cls,
+        focal_length: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make parabola
+
+        Makes an parabola centered at the origin of plane.
+
+        Args:
+            focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 0.0.
+            end_angle (float, optional): Defaults to 90.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial parabola
+        """
+        parabola_gp = gp_Parab(plane.to_gp_ax2(), focal_length)
+
+        parabola_geom = GC_MakeArcOfParabola(
+            parabola_gp,
+            start_angle * DEG2RAD,
+            end_angle * DEG2RAD,
+            angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+        ).Value()
+        parabola = cls(BRepBuilderAPI_MakeEdge(parabola_geom).Edge())
+
+        return parabola
+
+    @classmethod
+    def make_hyperbola(
+        cls,
+        x_radius: float,
+        y_radius: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 360.0,
+        end_angle: float = 360.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make hyperbola
+
+        Makes a hyperbola centered at the origin of plane.
+
+        Args:
+            x_radius (float): x radius of the hyperbola (along the x-axis of plane)
+            y_radius (float): y radius of the hyperbola (along the y-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 360.0.
+            end_angle (float, optional): Defaults to 360.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial hyperbola
+        """
+        ax1 = gp_Ax1(plane.origin.to_pnt(), plane.z_dir.to_dir())
+
+        if y_radius > x_radius:
+            # swap x and y radius and rotate by 90° afterwards to create an ellipse
+            # with x_radius < y_radius
+            correction_angle = 90.0 * DEG2RAD
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), y_radius, x_radius).Rotated(
+                ax1, correction_angle
+            )
+        else:
+            correction_angle = 0.0
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), x_radius, y_radius)
+
+        if start_angle == end_angle:  # full hyperbola case
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_gp).Edge())
+        else:  # arc case
+            # take correction_angle into account
+            hyperbola_geom = GC_MakeArcOfHyperbola(
+                hyperbola_gp,
+                start_angle * DEG2RAD - correction_angle,
+                end_angle * DEG2RAD - correction_angle,
+                angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+            ).Value()
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_geom).Edge())
+
+        return hyperbola
 
     @classmethod
     def make_helix(
