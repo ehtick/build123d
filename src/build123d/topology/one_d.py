@@ -88,7 +88,12 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse, GC_MakeArcOfParabola, GC_MakeArcOfHyperbola
+from OCP.GC import (
+    GC_MakeArcOfCircle,
+    GC_MakeArcOfEllipse,
+    GC_MakeArcOfParabola,
+    GC_MakeArcOfHyperbola,
+)
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
@@ -2862,7 +2867,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Edge]:
+    ) -> ShapeList[Edge]:
         """Project Edge
 
         Project an Edge onto a Shape generating new wires on the surfaces of the object
@@ -2888,10 +2893,8 @@ class Edge(Mixin1D[TopoDS_Edge]):
           ValueError: Only one of direction or center must be provided
 
         """
-        wire = Wire([self])
-        projected_wires = wire.project_to_shape(target_object, direction, center)
-        projected_edges = [w.edges()[0] for w in projected_wires]
-        return projected_edges
+        projected_wires = Wire(self).project_to_shape(target_object, direction, center)
+        return projected_wires.edges()
 
     def reversed(self, reconstruct: bool = False) -> Edge:
         """reversed
@@ -3880,7 +3883,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Wire]:
+    ) -> ShapeList[Wire]:
         """Project Wire
 
         Project a Wire onto a Shape generating new wires on the surfaces of the object
@@ -3934,7 +3937,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
             )
 
         # Generate a list of the projected wires with aligned orientation
-        output_wires = []
+        output_wires = ShapeList()
         target_orientation = self.wrapped.Orientation()
         while projection_object.More():
             projected_wire = projection_object.Current()
@@ -3980,9 +3983,12 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 "projected, filtered and sorted wire list is of length %d",
                 len(output_wires_distances),
             )
-            output_wires = [w[0] for w in output_wires_distances]
+            output_wires = ShapeList([w[0] for w in output_wires_distances])
 
-        return output_wires
+        # Clean the wires remove cases where projection artificially split edges
+        cleaned_wires = ShapeList([w.clean() for w in output_wires])
+
+        return cleaned_wires
 
     def stitch(self, other: Wire) -> Wire:
         """Attempt to stitch wires
