@@ -3937,7 +3937,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
             )
 
         # Generate a list of the projected wires with aligned orientation
-        output_wires = ShapeList()
+        output_wires: ShapeList[Wire] = ShapeList()
         target_orientation = self.wrapped.Orientation()
         while projection_object.More():
             projected_wire = projection_object.Current()
