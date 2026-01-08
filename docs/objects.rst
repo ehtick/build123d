@@ -455,6 +455,13 @@ Reference
         +++
         Cone defined by radii and height
 
+    .. grid-item-card:: :class:`~objects_part.ConvexPolyhedron`
+
+        .. image:: assets/convex_polyhedron_example.svg
+
+        +++
+        Convex Polyhedron defined by points
+
     .. grid-item-card:: :class:`~objects_part.CounterBoreHole`
 
         .. image:: assets/counter_bore_hole_example.svg
@@ -512,6 +519,7 @@ Reference
 .. autoclass:: BasePartObject
 .. autoclass:: Box
 .. autoclass:: Cone
+.. autoclass:: ConvexPolyhedron
 .. autoclass:: CounterBoreHole
 .. autoclass:: CounterSinkHole
 .. autoclass:: Cylinder
