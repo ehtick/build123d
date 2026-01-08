@@ -334,8 +334,24 @@ class TestPlane(unittest.TestCase):
 
     def test_repr(self):
         self.assertEqual(
+            f"{Plane((1, 2, 3), (4, 5, 6), (7, 8, 9)):.2f}",
+            "((1.00, 2.00, 3.00), (0.46, 0.57, 0.68), (0.50, 0.57, 0.65))",
+        )
+        self.assertEqual(
+            f"{Plane((1, 2, 3), (4, 5, 6), (7, 8, 9)):.2g}",
+            "((1, 2, 3), (0.46, 0.57, 0.68), (0.5, 0.57, 0.65))",
+        )
+        self.assertIn(
+            "((1.0, 2.0, 3.0), ", f"{Plane((1, 2, 3), (4, 5, 6), (7, 8, 9)):.2t}"
+        )
+
+        self.assertEqual(
             repr(Plane.XY),
-            "Plane(o=(0.00, 0.00, 0.00), x=(1.00, 0.00, 0.00), z=(0.00, 0.00, 1.00))",
+            "Plane((0, 0, 0), (1, 0, 0), (0, 0, 1))",
+        )
+        self.assertEqual(
+            str(Plane.XY),
+            "Plane: (origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, 0, 1))",
         )
 
     def test_shift_origin_axis(self):

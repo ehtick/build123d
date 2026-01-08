@@ -85,8 +85,17 @@ class TestAxis(unittest.TestCase):
         self.assertAlmostEqual(test_axis.direction, (0, 1, 0), 5)
 
     def test_axis_repr_and_str(self):
-        self.assertEqual(repr(Axis.X), "((0.0, 0.0, 0.0),(1.0, 0.0, 0.0))")
-        self.assertEqual(str(Axis.Y), "Axis: ((0.0, 0.0, 0.0),(0.0, 1.0, 0.0))")
+        self.assertEqual(
+            f"{Axis((1, 2, 3), (4, 5, 6)):.2f}",
+            "((1.00, 2.00, 3.00), (0.46, 0.57, 0.68))",
+        )
+        self.assertEqual(
+            f"{Axis((1, 2, 3), (4, 5, 6)):.2g}", "((1, 2, 3), (0.46, 0.57, 0.68))"
+        )
+        self.assertIn("((1.0, 2.0, 3.0), ", f"{Axis((1, 2, 3), (4, 5, 6)):.2t}")
+
+        self.assertEqual(repr(Axis.X), "Axis((0, 0, 0), (1, 0, 0))")
+        self.assertEqual(str(Axis.Y), "Axis: (position=(0, 0, 0), direction=(0, 1, 0))")
 
     def test_axis_copy(self):
         x_copy = copy.copy(Axis.X)
@@ -135,10 +144,6 @@ class TestAxis(unittest.TestCase):
     def test_axis_is_parallel(self):
         self.assertTrue(Axis.X.is_parallel(Axis((1, 1, 1), (1, 0, 0))))
         self.assertFalse(Axis.X.is_parallel(Axis.Y))
-
-    def test_axis_is_skew(self):
-        self.assertTrue(Axis.X.is_skew(Axis((0, 1, 1), (0, 0, 1))))
-        self.assertFalse(Axis.X.is_skew(Axis.Y))
 
     def test_axis_is_skew(self):
         # Skew Axes

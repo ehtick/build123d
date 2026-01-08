@@ -443,14 +443,35 @@ class Vector:
         """intersect vector with other &"""
         return self.intersect(other)
 
-    def __repr__(self) -> str:
-        """Display vector"""
-        x = round(self.X, 13) if abs(self.X) > TOLERANCE else 0.0
-        y = round(self.Y, 13) if abs(self.Y) > TOLERANCE else 0.0
-        z = round(self.Z, 13) if abs(self.Z) > TOLERANCE else 0.0
-        return f"Vector({x:.14g}, {y:.14g}, {z:.14g})"
+    def __format__(self, spec) -> str:
+        """Format Vector"""
 
-    __str__ = __repr__
+        def trim_float(x: float, precision: int) -> float:
+            return round(x, precision) if abs(x) > TOLERANCE else 0.0
+
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            if "." in spec:
+                precision = int(spec[:-1].split(".")[-1])
+            else:
+                precision = 6 if last_char == "f" else 12
+
+            x = trim_float(self.X, precision)
+            y = trim_float(self.Y, precision)
+            z = trim_float(self.Z, precision)
+
+            return f"({x:{spec}}, {y:{spec}}, {z:{spec}})"
+
+        return str(tuple(self))
+
+    def __repr__(self) -> str:
+        """Represent Vector"""
+        return f"{type(self).__name__}{self:.13g}"
+
+    def __str__(self) -> str:
+        """Display Vector"""
+        x, y, z = format(self, ".6g")[1:-1].split(", ")
+        return f"{type(self).__name__}: (X={x}, Y={y}, Z={z})"
 
     def __eq__(self, other: object) -> bool:
         """Vectors equal operator =="""
@@ -738,14 +759,23 @@ class Axis(metaclass=AxisMeta):
             )
         )
 
+    def __format__(self, spec) -> str:
+        """Format Axis"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.position:{spec}}, {self.direction:{spec}})"
+
+        return f"({tuple(self.position)}, {tuple(self.direction)})"
+
     def __repr__(self) -> str:
-        """Display self"""
-        return f"({tuple(self.position)},{tuple(self.direction)})"
+        """Represent Axis"""
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
 
     def __str__(self) -> str:
-        """Display self"""
+        """Display Axis"""
         return (
-            f"{type(self).__name__}: ({tuple(self.position)},{tuple(self.direction)})"
+            f"{type(self).__name__}: "
+            f"(position={self.position:.{TOL_DIGITS}g}, direction={self.direction:.{TOL_DIGITS}g})"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -1352,11 +1382,11 @@ class Color:
             quantity_color_enum = self.wrapped.GetRGB().Name()
             name = Quantity_Color.StringName_s(quantity_color_enum)
             qualifier = "near"
-        return f"Color: {str(tuple(self))} {qualifier} {name.upper()!r}"
+        return f"{type(self).__name__}: {str(tuple(self))} {qualifier} {name.upper()!r}"
 
     def __repr__(self) -> str:
-        """Color repr"""
-        return f"Color{str(tuple(self))}"
+        """Represent Color"""
+        return f"{type(self).__name__}{str(tuple(self))}"
 
     @classmethod
     def categorical_set(
@@ -1569,56 +1599,50 @@ class Location:
 
     @overload
     def __init__(self):
-        """Empty location with not rotation or translation with respect to the original location."""
+        """Location with no position or orientation"""
 
     @overload
     def __init__(self, location: Location):
-        """Location with another given location."""
+        """Location from Location"""
 
     @overload
-    def __init__(self, translation: VectorLike, angle: float = 0):
-        """Location with translation with respect to the original location.
-        If angle != 0 then the location includes a rotation around z-axis by angle"""
+    def __init__(self, position: VectorLike, angle: float = 0):
+        """Location from position and rotation around z-axis by optional angle"""
 
     @overload
-    def __init__(self, translation: VectorLike, rotation: RotationLike | None = None):
-        """Location with translation with respect to the original location.
-        If rotation is not None then the location includes the rotation (see also Rotation class)
-        """
+    def __init__(self, position: VectorLike, orientation: RotationLike | None = None):
+        """Location from position and optional orientation (see Rotation class)"""
 
     @overload
     def __init__(
         self,
-        translation: VectorLike,
-        rotation: RotationLike,
+        position: VectorLike,
+        orientation: RotationLike,
         ordering: Extrinsic | Intrinsic,
     ):
-        """Location with translation with respect to the original location.
-        If rotation is not None then the location includes the rotation (see also Rotation class)
-        ordering defaults to Intrinsic.XYZ, but can also be set to Extrinsic
+        """Location from position and optional orientation (see Rotation class).
+        Orientation determined by optional ordering, defaults to Intrinsic.XYZ
         """
 
     @overload
     def __init__(self, plane: Plane):
-        """Location corresponding to the location of the Plane."""
+        """Location from location of Plane."""
 
     @overload
     def __init__(self, plane: Plane, plane_offset: VectorLike):
-        """Location corresponding to the angular location of the Plane with
-        translation plane_offset."""
+        """Location from location of Plane translated by plane_offset"""
 
     @overload
     def __init__(self, top_loc: TopLoc_Location):
-        """Location wrapping the low-level TopLoc_Location object t"""
+        """Location from low-level TopLoc_Location object"""
 
     @overload
     def __init__(self, gp_trsf: gp_Trsf):
-        """Location wrapping the low-level gp_Trsf object t"""
+        """Location from low-level gp_Trsf object"""
 
     @overload
-    def __init__(self, translation: VectorLike, direction: VectorLike, angle: float):
-        """Location with translation t and rotation around direction by angle
-        with respect to the original location."""
+    def __init__(self, position: VectorLike, direction: VectorLike, angle: float):
+        """Location from position and rotation around direction by angle"""
 
     def __init__(
         self, *args, **kwargs
@@ -1628,6 +1652,7 @@ class Location:
 
         position = kwargs.pop("position", None)
         orientation = kwargs.pop("orientation", None)
+        direction = kwargs.pop("direction", None)
         ordering = kwargs.pop("ordering", None)
         angle = kwargs.pop("angle", None)
         plane = kwargs.pop("plane", None)
@@ -1657,7 +1682,10 @@ class Location:
                     elif isinstance(args[1], (int, float)):
                         angle = args[1]
                 if len(args) > 2:
-                    if isinstance(args[2], (int, float)) and orientation is not None:
+                    if isinstance(args[1], (Vector, Iterable)) and isinstance(
+                        args[2], (int, float)
+                    ):
+                        direction = Vector(args[1])
                         angle = args[2]
                     elif isinstance(args[2], (Intrinsic, Extrinsic)):
                         ordering = args[2]
@@ -1686,7 +1714,7 @@ class Location:
         elif angle is not None:
             axis = gp_Ax1(
                 gp_Pnt(0, 0, 0),
-                Vector(orientation).to_dir() if orientation else gp_Dir(0, 0, 1),
+                Vector(direction).to_dir() if direction else gp_Dir(0, 0, 1),
             )
             trsf.SetRotation(axis, radians(angle))
 
@@ -2004,29 +2032,24 @@ class Location:
 
         return rv_trans, rv_rot
 
-    def __repr__(self):
-        """To String
+    def __format__(self, spec) -> str:
+        """Format Location"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.position:{spec}}, {self.orientation:{spec}})"
 
-        Convert Location to String for display
+        return f"({tuple(self.position)}, {tuple(self.orientation)})"
 
-        Returns:
-            Location as String
-        """
-        position_str = ", ".join(f"{v:.2f}" for v in tuple(self)[0])
-        orientation_str = ", ".join(f"{v:.2f}" for v in tuple(self)[1])
-        return f"(p=({position_str}), o=({orientation_str}))"
+    def __repr__(self) -> str:
+        """Represent Location"""
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
 
-    def __str__(self):
-        """To String
-
-        Convert Location to String for display
-
-        Returns:
-            Location as String
-        """
-        position_str = ", ".join(f"{v:.2f}" for v in tuple(self)[0])
-        orientation_str = ", ".join(f"{v:.2f}" for v in tuple(self)[1])
-        return f"Location: (position=({position_str}), orientation=({orientation_str}))"
+    def __str__(self) -> str:
+        """Display Location"""
+        return (
+            f"{type(self).__name__}: "
+            f"(position={self.position:.{TOL_DIGITS}g}, orientation={self.orientation:.{TOL_DIGITS}g})"
+        )
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
@@ -2324,7 +2347,7 @@ class OrientedBoundBox:
         return self.wrapped.IsOut(point.to_pnt())
 
     def __repr__(self) -> str:
-        return f"OrientedBoundBox(center={self.center()}, size={self.size}, plane={self.plane})"
+        return f"OrientedBoundBox(center={self.center()!r}, size={self.size!r}, plane={self.plane!r})"
 
 
 class Rotation(Location):
@@ -2947,18 +2970,24 @@ class Plane(metaclass=PlaneMeta):
         """intersect plane with other &"""
         return self.intersect(other)
 
-    def __repr__(self):
-        """To String
+    def __format__(self, spec) -> str:
+        """Format Plane"""
+        last_char = spec[-1] if spec else None
+        if last_char in ("f", "g"):
+            return f"({self.origin:{spec}}, {self.x_dir:{spec}}, {self.z_dir:{spec}})"
 
-        Convert Plane to String for display
+        return f"({tuple(self.origin)}, {tuple(self.x_dir)}, {tuple(self.z_dir)})"
 
-        Returns:
-            Plane as String
-        """
-        origin_str = ", ".join(f"{v:.2f}" for v in tuple(self._origin))
-        x_dir_str = ", ".join(f"{v:.2f}" for v in tuple(self.x_dir))
-        z_dir_str = ", ".join(f"{v:.2f}" for v in tuple(self.z_dir))
-        return f"Plane(o=({origin_str}), x=({x_dir_str}), z=({z_dir_str}))"
+    def __repr__(self) -> str:
+        """Represent Plane"""
+        return f"{type(self).__name__}{self:.{TOL_DIGITS}g}"
+
+    def __str__(self) -> str:
+        """Display Plane"""
+        return (
+            f"{type(self).__name__}: "
+            f"(origin={self.origin:.{TOL_DIGITS}g}, x_dir={self.x_dir:.{TOL_DIGITS}g}, z_dir={self.z_dir:.{TOL_DIGITS}g})"
+        )
 
     def reverse(self) -> Plane:
         """Reverse z direction of plane"""
