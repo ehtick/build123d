@@ -52,12 +52,11 @@ license:
 from __future__ import annotations
 
 import copy
-import numpy as np
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import combinations
 from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
-from typing import TYPE_CHECKING, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Literal, overload
 from typing import cast as tcast
 
 import numpy as np
@@ -89,9 +88,18 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
-from OCP.GccEnt import GccEnt_unqualified, GccEnt_Position
-from OCP.GCPnts import GCPnts_AbscissaPoint
+from OCP.GC import (
+    GC_MakeArcOfCircle,
+    GC_MakeArcOfEllipse,
+    GC_MakeArcOfParabola,
+    GC_MakeArcOfHyperbola,
+)
+from OCP.GCPnts import (
+    GCPnts_AbscissaPoint,
+    GCPnts_QuasiUniformDeflection,
+    GCPnts_UniformDeflection,
+)
+from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
@@ -117,6 +125,9 @@ from OCP.GeomAbs import (
     GeomAbs_C0,
     GeomAbs_C1,
     GeomAbs_C2,
+    GeomAbs_C3,
+    GeomAbs_CN,
+    GeomAbs_C1,
     GeomAbs_G1,
     GeomAbs_G2,
     GeomAbs_JoinType,
@@ -145,6 +156,8 @@ from OCP.gp import (
     gp_Dir,
     gp_Dir2d,
     gp_Elips,
+    gp_Parab,
+    gp_Hypr,
     gp_Pln,
     gp_Pnt,
     gp_Pnt2d,
@@ -227,11 +240,11 @@ from .shape_core import (
     shapetype,
     topods_dim,
     unwrap_topods_compound,
+    _topods_bool_op,
 )
 from .utils import (
     _extrude_topods_shape,
     _make_topods_face_from_wires,
-    _topods_bool_op,
     isclose_b,
 )
 from .zero_d import Vertex, topo_explore_common_vertex
@@ -306,7 +319,9 @@ class Mixin1D(Shape[TOPODS]):
     @property
     def length(self) -> float:
         """Edge or Wire length"""
-        return GCPnts_AbscissaPoint.Length_s(self.geom_adaptor())
+        props = GProp_GProps()
+        BRepGProp.LinearProperties_s(self.wrapped, props)
+        return props.Mass()
 
     @property
     def radius(self) -> float:
@@ -465,7 +480,9 @@ class Mixin1D(Shape[TOPODS]):
             middle = self.bounding_box().center()
         return middle
 
-    def common_plane(self, *lines: Edge | Wire | None) -> None | Plane:
+    def common_plane(
+        self, *lines: Edge | Wire | None, tolerance: float = TOLERANCE
+    ) -> None | Plane:
         """common_plane
 
         Find the plane containing all the edges/wires (including self). If there
@@ -474,6 +491,7 @@ class Mixin1D(Shape[TOPODS]):
 
         Args:
             lines (sequence of Edge | Wire): edges in common with self
+            tolerance (float): amount lines can deviate from plane. Defaults to TOLERANCE.
 
         Returns:
             None |  Plane: Either the common plane or None
@@ -497,8 +515,7 @@ class Mixin1D(Shape[TOPODS]):
                 origin = as_axis[0].position
                 x_dir = as_axis[0].direction
                 z_dir = Plane(as_axis[0]).x_dir
-                c_plane = Plane(origin, z_dir=z_dir)
-                result = c_plane.shift_origin((0, 0))
+                result = Plane(origin, z_dir=z_dir)
 
         if result is None:  # not coaxial
             # Shorten any infinite lines (from converted Axis)
@@ -529,16 +546,26 @@ class Mixin1D(Shape[TOPODS]):
                 c_plane = Plane(
                     origin=(sum(extremes, Vector(0, 0, 0)) / 3), z_dir=z_dir
                 )
-                c_plane = c_plane.shift_origin((0, 0))
             except ValueError:
                 # There is no valid common plane
                 result = None
             else:
                 # Are all of the points on the common plane
-                common = all(c_plane.contains(p) for p in points)
+                common = all(c_plane.contains(p, tolerance) for p in points)
                 result = c_plane if common else None
 
-        return result
+        if result is None:
+            return result
+
+        # Center the plane on the lines
+        global_center = sum(
+            [e.position_at(0.5) for e in all_lines], start=Vector(0, 0, 0)
+        ) / len(all_lines)
+        center_axis = Axis(global_center, result.z_dir)
+        plane_origin = result.intersect(center_axis)
+        assert isinstance(plane_origin, Vector)
+
+        return result.shift_origin(plane_origin)
 
     def curvature_comb(
         self, count: int = 100, max_tooth_size: float | None = None
@@ -571,7 +598,7 @@ class Mixin1D(Shape[TOPODS]):
             - On straight segments, κ = 0 so no teeth are drawn.
             - At inflection points κ→0 and the tooth flips direction.
             - At C0 corners the tangent is discontinuous; nearby teeth may jump.
-            C1 yields continuous direction; C2 yields continuous magnitude as well.
+              C1 yields continuous direction; C2 yields continuous magnitude as well.
 
         Example:
             >>> comb = my_wire.curvature_comb(count=200, max_tooth_size=2.0)
@@ -676,31 +703,6 @@ class Mixin1D(Shape[TOPODS]):
 
         return derivative
 
-    def edge(self) -> Edge | None:
-        """Return the Edge"""
-        return Shape.get_single_shape(self, "Edge")
-
-    def edges(self) -> ShapeList[Edge]:
-        """edges - all the edges in this Shape"""
-        if isinstance(self, Wire) and self.wrapped is not None:
-            # The WireExplorer is a tool to explore the edges of a wire in a connection order.
-            explorer = BRepTools_WireExplorer(self.wrapped)
-
-            edge_list: ShapeList[Edge] = ShapeList()
-            while explorer.More():
-                next_edge = Edge(explorer.Current())
-                next_edge.topo_parent = (
-                    self if self.topo_parent is None else self.topo_parent
-                )
-                edge_list.append(next_edge)
-                explorer.Next()
-            return edge_list
-
-        edge_list = Shape.get_shape_list(self, "Edge")
-        return edge_list.filter_by(
-            lambda e: BRep_Tool.Degenerated_s(e.wrapped), reverse=True
-        )
-
     def end_point(self) -> Vector:
         """The end point of this edge.
 
@@ -729,122 +731,104 @@ class Mixin1D(Shape[TOPODS]):
         def to_vertex(objs: Iterable) -> ShapeList:
             return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
 
-        common_set: ShapeList[Vertex | Edge] = ShapeList(self.edges())
-        target: ShapeList | Shape | Plane
+        def bool_op(
+            args: Sequence,
+            tools: Sequence,
+            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
+        ) -> ShapeList:
+            # Wrap Shape._bool_op for corrected output
+            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
+            if isinstance(intersections, ShapeList):
+                return intersections or ShapeList()
+            if isinstance(intersections, Shape) and not intersections.is_null:
+                return ShapeList([intersections])
+            return ShapeList()
+
+        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
+            # Remove lower order shapes from list which *appear* to be part of
+            # a higher order shape using a lazy distance check
+            # (sufficient for vertices, may be an issue for higher orders)
+            order_groups = []
+            for order in orders:
+                order_groups.append(
+                    ShapeList([s for s in shapes if isinstance(s, order)])
+                )
+
+            filtered_shapes = order_groups[-1]
+            for i in range(len(order_groups) - 1):
+                los = order_groups[i]
+                his: list = sum(order_groups[i + 1 :], [])
+                filtered_shapes.extend(
+                    ShapeList(
+                        lo
+                        for lo in los
+                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
+                    )
+                )
+
+            return filtered_shapes
+
+        common_set: ShapeList[Vertex | Edge | Wire] = ShapeList([self])
+        target: Shape | Plane
         for other in to_intersect:
             # Conform target type
-            # Vertices need to be Vector for set()
             match other:
                 case Axis():
-                    target = ShapeList([Edge(other)])
+                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
+                    bbox = self.bounding_box()
+                    dist = self.distance_to(other.position)
+                    dist = dist if dist >= 1 else 1
+                    target = Edge.make_line(
+                        other.position - other.direction * bbox.diagonal * dist,
+                        other.position + other.direction * bbox.diagonal * dist,
+                    )
                 case Plane():
                     target = other
                 case Vector():
                     target = Vertex(other)
                 case Location():
                     target = Vertex(other.position)
-                case Edge():
-                    target = ShapeList([other])
-                case Wire():
-                    target = ShapeList(other.edges())
                 case _ if issubclass(type(other), Shape):
                     target = other
                 case _:
                     raise ValueError(f"Unsupported type to_intersect: {type(other)}")
 
             # Find common matches
-            common: list[Vector | Edge] = []
-            result: ShapeList | Shape | None
+            common: list[Vertex | Edge | Wire] = []
+            result: ShapeList | None
             for obj in common_set:
                 match (obj, target):
-                    case obj, Shape() as target:
-                        # Find Shape with Edge/Wire
-                        if isinstance(target, Vertex):
-                            result = Shape.intersect(obj, target)
-                        else:
-                            result = target.intersect(obj)
+                    case (_, Plane()):
+                        assert isinstance(other.wrapped, gp_Pln)
+                        target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
+                        operation1 = BRepAlgoAPI_Section()
+                        result = bool_op((obj,), (target,), operation1)
+                        operation2 = BRepAlgoAPI_Common()
+                        result.extend(bool_op((obj,), (target,), operation2))
 
-                        if result:
-                            if not isinstance(result, list):
-                                result = ShapeList([result])
-                            common.extend(to_vector(result))
+                    case (_, Vertex() | Edge() | Wire()):
+                        operation1 = BRepAlgoAPI_Section()
+                        section = bool_op((obj,), (target,), operation1)
+                        result = section
+                        if not section:
+                            operation2 = BRepAlgoAPI_Common()
+                            result.extend(bool_op((obj,), (target,), operation2))
 
-                    case Vertex() as obj, target:
-                        if not isinstance(target, ShapeList):
-                            target = ShapeList([target])
+                    case _ if issubclass(type(target), Shape):
+                        result = target.intersect(obj)
 
-                        for tar in target:
-                            if isinstance(tar, Edge):
-                                result = Shape.intersect(obj, tar)
-                            else:
-                                result = obj.intersect(tar)
-
-                            if result:
-                                if not isinstance(result, list):
-                                    result = ShapeList([result])
-                                common.extend(to_vector(result))
-
-                    case Edge() as obj, ShapeList() as targets:
-                        # Find any edge / edge intersection points
-                        for tar in targets:
-                            # Find crossing points
-                            try:
-                                intersection_points = obj.find_intersection_points(tar)
-                                common.extend(intersection_points)
-                            except ValueError:
-                                pass
-
-                            # Find common end points
-                            obj_end_points = set(Vector(v) for v in obj.vertices())
-                            tar_end_points = set(Vector(v) for v in tar.vertices())
-                            points = set.intersection(obj_end_points, tar_end_points)
-                            common.extend(points)
-
-                        # Find Edge/Edge overlaps
-                        result = obj._bool_op(
-                            (obj,), targets, BRepAlgoAPI_Common()
-                        ).edges()
-                        common.extend(result if isinstance(result, list) else [result])
-
-                    case Edge() as obj, Plane() as plane:
-                        # Find any edge / plane intersection points & edges
-                        # Find point intersections
-                        if not obj:
-                            continue
-                        geom_line = BRep_Tool.Curve_s(
-                            obj.wrapped, obj.param_at(0), obj.param_at(1)
-                        )
-                        geom_plane = Geom_Plane(plane.local_coord_system)
-                        intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
-                        plane_intersection_points: list[Vector] = []
-                        if intersection_calculator.IsDone():
-                            plane_intersection_points = [
-                                Vector(intersection_calculator.Point(i + 1))
-                                for i in range(intersection_calculator.NbPoints())
-                            ]
-                        common.extend(plane_intersection_points)
-
-                        # Find edge intersections
-                        if all(
-                            plane.contains(v)
-                            for v in obj.positions(i / 7 for i in range(8))
-                        ):  # is a 2D edge
-                            common.append(obj)
+                if result:
+                    common.extend(result)
 
             if common:
-                common_set = to_vertex(set(common))
-                # Remove Vertex intersections coincident to Edge intersections
-                vts = common_set.vertices()
-                eds = common_set.edges()
-                if vts and eds:
-                    filtered_vts = ShapeList(
-                        [
-                            v
-                            for v in vts
-                            if all(v.distance_to(e) > TOLERANCE for e in eds)
-                        ]
-                    )
-                    common_set = filtered_vts + eds
+                common_set = ShapeList()
+                for shape in common:
+                    if isinstance(shape, Wire):
+                        common_set.extend(shape.edges())
+                    else:
+                        common_set.append(shape)
+                common_set = to_vertex(set(to_vector(common_set)))
+                common_set = filter_shapes_by_order(common_set, [Vertex, Edge])
             else:
                 return None
 
@@ -1117,16 +1101,16 @@ class Mixin1D(Shape[TOPODS]):
         The meaning of the returned parameter depends on the type of self:
 
         - **Edge**: Returns the native OCCT curve parameter corresponding to the
-        given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
-        edges, OCCT may return a value **outside** the edge's nominal parameter
-        range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
-        the period). If you require a value folded into the edge's range, apply a
-        modulo with the parameter span.
+          given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
+          edges, OCCT may return a value **outside** the edge's nominal parameter
+          range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
+          the period). If you require a value folded into the edge's range, apply a
+          modulo with the parameter span.
 
         - **Wire**: Returns a *composite* parameter encoding both the edge index
-        and the position within that edge: the **integer part** is the zero-based
-        count of fully traversed edges, and the **fractional part** is the
-        normalized position in `[0.0, 1.0]` along the current edge.
+          and the position within that edge: the **integer part** is the zero-based
+          count of fully traversed edges, and the **fractional part** is the
+          normalized position in `[0.0, 1.0]` along the current edge.
 
         Args:
             position (float): Normalized arc-length position along the shape,
@@ -1195,22 +1179,52 @@ class Mixin1D(Shape[TOPODS]):
 
     def positions(
         self,
-        distances: Iterable[float],
+        distances: Iterable[float] | None = None,
         position_mode: PositionMode = PositionMode.PARAMETER,
+        deflection: float | None = None,
     ) -> list[Vector]:
         """Positions along curve
 
         Generate positions along the underlying curve
 
         Args:
-            distances (Iterable[float]): distance or parameter values
-            position_mode (PositionMode, optional): position calculation mode.
-                Defaults to PositionMode.PARAMETER.
+            distances (Iterable[float] | None, optional): distance or parameter values.
+                Defaults to None.
+            position_mode (PositionMode, optional): position calculation mode only applies
+                when using distances. Defaults to PositionMode.PARAMETER.
+            deflection (float | None, optional): maximum deflection between the curve and
+                the polygon that results from the computed points. Defaults to None.
+
 
         Returns:
             list[Vector]: positions along curve
         """
-        return [self.position_at(d, position_mode) for d in distances]
+        if deflection is not None:
+            curve: BRepAdaptor_Curve | BRepAdaptor_CompCurve = self.geom_adaptor()
+            # GCPnts_UniformDeflection provides the best results but is limited
+            if curve.Continuity() in (GeomAbs_C2, GeomAbs_C3, GeomAbs_CN):
+                discretizer: (
+                    GCPnts_UniformDeflection | GCPnts_QuasiUniformDeflection
+                ) = GCPnts_UniformDeflection()
+            else:
+                discretizer = GCPnts_QuasiUniformDeflection()
+
+            discretizer.Initialize(
+                curve,
+                deflection,
+                curve.FirstParameter(),
+                curve.LastParameter(),
+            )
+            if not discretizer.IsDone() or discretizer.NbPoints() == 0:
+                raise RuntimeError("Deflection calculation failed")
+            return [
+                Vector(curve.Value(discretizer.Parameter(i + 1)))
+                for i in range(discretizer.NbPoints())
+            ]
+        elif distances is not None:
+            return [self.position_at(d, position_mode) for d in distances]
+        else:
+            raise ValueError("Either distances or deflection must be provided")
 
     def project(
         self, face: Face, direction: VectorLike, closest: bool = True
@@ -1357,144 +1371,6 @@ class Mixin1D(Shape[TOPODS]):
 
         return (visible_edges, hidden_edges)
 
-    @overload
-    def split(
-        self, tool: TrimmingTool, keep: Literal[Keep.TOP, Keep.BOTTOM]
-    ) -> Self | list[Self] | None:
-        """split and keep inside or outside"""
-
-    @overload
-    def split(self, tool: TrimmingTool, keep: Literal[Keep.ALL]) -> list[Self]:
-        """split and return the unordered pieces"""
-
-    @overload
-    def split(self, tool: TrimmingTool, keep: Literal[Keep.BOTH]) -> tuple[
-        Self | list[Self] | None,
-        Self | list[Self] | None,
-    ]:
-        """split and keep inside and outside"""
-
-    @overload
-    def split(self, tool: TrimmingTool) -> Self | list[Self] | None:
-        """split and keep inside (default)"""
-
-    def split(self, tool: TrimmingTool, keep: Keep = Keep.TOP):
-        """split
-
-        Split this shape by the provided plane or face.
-
-        Args:
-            surface (Plane | Face): surface to segment shape
-            keep (Keep, optional): which object(s) to save. Defaults to Keep.TOP.
-
-        Returns:
-            Shape: result of split
-        Returns:
-            Self | list[Self] | None,
-            Tuple[Self | list[Self] | None]: The result of the split operation.
-
-            - **Keep.TOP**: Returns the top as a `Self` or `list[Self]`, or `None`
-              if no top is found.
-            - **Keep.BOTTOM**: Returns the bottom as a `Self` or `list[Self]`, or `None`
-              if no bottom is found.
-            - **Keep.BOTH**: Returns a tuple `(inside, outside)` where each element is
-              either a `Self` or `list[Self]`, or `None` if no corresponding part is found.
-        """
-        if self._wrapped is None or not tool:
-            raise ValueError("Can't split an empty edge/wire/tool")
-
-        shape_list = TopTools_ListOfShape()
-        shape_list.Append(self.wrapped)
-
-        # Define the splitting tool
-        trim_tool = (
-            BRepBuilderAPI_MakeFace(tool.wrapped).Face()  # gp_Pln to Face
-            if isinstance(tool, Plane)
-            else tool.wrapped
-        )
-        tool_list = TopTools_ListOfShape()
-        tool_list.Append(trim_tool)
-
-        # Create the splitter algorithm
-        splitter = BRepAlgoAPI_Splitter()
-
-        # Set the shape to be split and the splitting tool (plane face)
-        splitter.SetArguments(shape_list)
-        splitter.SetTools(tool_list)
-
-        # Perform the splitting operation
-        splitter.Build()
-
-        split_result = downcast(splitter.Shape())
-        # Remove unnecessary TopoDS_Compound around single shape
-        if isinstance(split_result, TopoDS_Compound):
-            split_result = unwrap_topods_compound(split_result, True)
-
-        # For speed the user may just want all the objects which they
-        # can sort more efficiently then the generic algorithm below
-        if keep == Keep.ALL:
-            return ShapeList(
-                self.__class__.cast(part)
-                for part in get_top_level_topods_shapes(split_result)
-            )
-
-        if not isinstance(tool, Plane):
-            # Get a TopoDS_Face to work with from the tool
-            if isinstance(trim_tool, TopoDS_Shell):
-                face_explorer = TopExp_Explorer(trim_tool, ta.TopAbs_FACE)
-                tool_face = TopoDS.Face_s(face_explorer.Current())
-            else:
-                tool_face = trim_tool
-
-            # Create a reference point off the +ve side of the tool
-            surface_gppnt = gp_Pnt()
-            surface_normal = gp_Vec()
-            u_min, u_max, v_min, v_max = BRepTools.UVBounds_s(tool_face)
-            BRepGProp_Face(tool_face).Normal(
-                (u_min + u_max) / 2, (v_min + v_max) / 2, surface_gppnt, surface_normal
-            )
-            normalized_surface_normal = Vector(
-                surface_normal.X(), surface_normal.Y(), surface_normal.Z()
-            ).normalized()
-            surface_point = Vector(surface_gppnt)
-            ref_point = surface_point + normalized_surface_normal
-
-            # Create a HalfSpace - Solidish object to determine top/bottom
-            # Note: BRepPrimAPI_MakeHalfSpace takes either a TopoDS_Shell or TopoDS_Face but the
-            # mypy expects only a TopoDS_Shell here
-            half_space_maker = BRepPrimAPI_MakeHalfSpace(trim_tool, ref_point.to_pnt())
-            # type: ignore
-            tool_solid = half_space_maker.Solid()
-
-        tops: list[Shape] = []
-        bottoms: list[Shape] = []
-        properties = GProp_GProps()
-        for part in get_top_level_topods_shapes(split_result):
-            sub_shape = self.__class__.cast(part)
-            if isinstance(tool, Plane):
-                is_up = tool.to_local_coords(sub_shape).center().Z >= 0
-            else:
-                # Intersect self and the thickened tool
-                is_up_obj = _topods_bool_op(
-                    (part,), (tool_solid,), BRepAlgoAPI_Common()
-                )
-                # Check for valid intersections
-                BRepGProp.LinearProperties_s(is_up_obj, properties)
-                # Mass represents the total length for linear properties
-                is_up = properties.Mass() >= TOLERANCE
-            (tops if is_up else bottoms).append(sub_shape)
-
-        top = None if not tops else tops[0] if len(tops) == 1 else tops
-        bottom = None if not bottoms else bottoms[0] if len(bottoms) == 1 else bottoms
-
-        if keep == Keep.BOTH:
-            return (top, bottom)
-        if keep == Keep.TOP:
-            return top
-        if keep == Keep.BOTTOM:
-            return bottom
-        return None
-
     def start_point(self) -> Vector:
         """The start point of this edge
 
@@ -1549,21 +1425,21 @@ class Mixin1D(Shape[TOPODS]):
         """
         return self.derivative_at(position, 1, position_mode).normalized()
 
-    def vertex(self) -> Vertex | None:
-        """Return the Vertex"""
-        return Shape.get_single_shape(self, "Vertex")
+    # def vertex(self) -> Vertex | None:
+    #     """Return the Vertex"""
+    #     return Shape.get_single_shape(self, "Vertex")
 
-    def vertices(self) -> ShapeList[Vertex]:
-        """vertices - all the vertices in this Shape"""
-        return Shape.get_shape_list(self, "Vertex")
+    # def vertices(self) -> ShapeList[Vertex]:
+    #     """vertices - all the vertices in this Shape"""
+    #     return Shape.get_shape_list(self, "Vertex")
 
-    def wire(self) -> Wire | None:
-        """Return the Wire"""
-        return Shape.get_single_shape(self, "Wire")
+    # def wire(self) -> Wire | None:
+    #     """Return the Wire"""
+    #     return Shape.get_single_shape(self, "Wire")
 
-    def wires(self) -> ShapeList[Wire]:
-        """wires - all the wires in this Shape"""
-        return Shape.get_shape_list(self, "Wire")
+    # def wires(self) -> ShapeList[Wire]:
+    #     """wires - all the wires in this Shape"""
+    #     return Shape.get_shape_list(self, "Wire")
 
 
 class Edge(Mixin1D[TopoDS_Edge]):
@@ -2183,6 +2059,95 @@ class Edge(Mixin1D[TopoDS_Edge]):
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_geom).Edge())
 
         return ellipse
+
+    @classmethod
+    def make_parabola(
+        cls,
+        focal_length: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make parabola
+
+        Makes an parabola centered at the origin of plane.
+
+        Args:
+            focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 0.0.
+            end_angle (float, optional): Defaults to 90.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial parabola
+        """
+        parabola_gp = gp_Parab(plane.to_gp_ax2(), focal_length)
+
+        parabola_geom = GC_MakeArcOfParabola(
+            parabola_gp,
+            start_angle * DEG2RAD,
+            end_angle * DEG2RAD,
+            angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+        ).Value()
+        parabola = cls(BRepBuilderAPI_MakeEdge(parabola_geom).Edge())
+
+        return parabola
+
+    @classmethod
+    def make_hyperbola(
+        cls,
+        x_radius: float,
+        y_radius: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 360.0,
+        end_angle: float = 360.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make hyperbola
+
+        Makes a hyperbola centered at the origin of plane.
+
+        Args:
+            x_radius (float): x radius of the hyperbola (along the x-axis of plane)
+            y_radius (float): y radius of the hyperbola (along the y-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 360.0.
+            end_angle (float, optional): Defaults to 360.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial hyperbola
+        """
+        ax1 = gp_Ax1(plane.origin.to_pnt(), plane.z_dir.to_dir())
+
+        if y_radius > x_radius:
+            # swap x and y radius and rotate by 90° afterwards to create an ellipse
+            # with x_radius < y_radius
+            correction_angle = 90.0 * DEG2RAD
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), y_radius, x_radius).Rotated(
+                ax1, correction_angle
+            )
+        else:
+            correction_angle = 0.0
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), x_radius, y_radius)
+
+        if start_angle == end_angle:  # full hyperbola case
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_gp).Edge())
+        else:  # arc case
+            # take correction_angle into account
+            hyperbola_geom = GC_MakeArcOfHyperbola(
+                hyperbola_gp,
+                start_angle * DEG2RAD - correction_angle,
+                end_angle * DEG2RAD - correction_angle,
+                angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+            ).Value()
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_geom).Edge())
+
+        return hyperbola
 
     @classmethod
     def make_helix(
@@ -2902,7 +2867,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Edge]:
+    ) -> ShapeList[Edge]:
         """Project Edge
 
         Project an Edge onto a Shape generating new wires on the surfaces of the object
@@ -2928,10 +2893,8 @@ class Edge(Mixin1D[TopoDS_Edge]):
           ValueError: Only one of direction or center must be provided
 
         """
-        wire = Wire([self])
-        projected_wires = wire.project_to_shape(target_object, direction, center)
-        projected_edges = [w.edges()[0] for w in projected_wires]
-        return projected_edges
+        projected_wires = Wire(self).project_to_shape(target_object, direction, center)
+        return projected_wires.edges()
 
     def reversed(self, reconstruct: bool = False) -> Edge:
         """reversed
@@ -2960,7 +2923,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
             topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
             reversed_edge.wrapped = topods_edge
         else:
-            reversed_edge.wrapped = downcast(self.wrapped.Reversed())
+            reversed_edge.wrapped = TopoDS.Edge_s(self.wrapped.Reversed())
         return reversed_edge
 
     def to_axis(self) -> Axis:
@@ -3679,6 +3642,21 @@ class Wire(Mixin1D[TopoDS_Wire]):
 
         return return_value
 
+    def edges(self) -> ShapeList[Edge]:
+        """edges - all the edges in this Shape"""
+        # The WireExplorer is a tool to explore the edges of a wire in a connection order.
+        explorer = BRepTools_WireExplorer(self.wrapped)
+
+        edge_list: ShapeList[Edge] = ShapeList()
+        while explorer.More():
+            next_edge = Edge(explorer.Current())
+            next_edge.topo_parent = (
+                self if self.topo_parent is None else self.topo_parent
+            )
+            edge_list.append(next_edge)
+            explorer.Next()
+        return edge_list
+
     def fillet_2d(self, radius: float, vertices: Iterable[Vertex]) -> Wire:
         """fillet_2d
 
@@ -3905,7 +3883,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Wire]:
+    ) -> ShapeList[Wire]:
         """Project Wire
 
         Project a Wire onto a Shape generating new wires on the surfaces of the object
@@ -3959,7 +3937,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
             )
 
         # Generate a list of the projected wires with aligned orientation
-        output_wires = []
+        output_wires: ShapeList[Wire] = ShapeList()
         target_orientation = self.wrapped.Orientation()
         while projection_object.More():
             projected_wire = projection_object.Current()
@@ -4005,9 +3983,12 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 "projected, filtered and sorted wire list is of length %d",
                 len(output_wires_distances),
             )
-            output_wires = [w[0] for w in output_wires_distances]
+            output_wires = ShapeList([w[0] for w in output_wires_distances])
 
-        return output_wires
+        # Clean the wires remove cases where projection artificially split edges
+        cleaned_wires = ShapeList([w.clean() for w in output_wires])
+
+        return cleaned_wires
 
     def stitch(self, other: Wire) -> Wire:
         """Attempt to stitch wires

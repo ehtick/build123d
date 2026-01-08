@@ -95,7 +95,7 @@ all = [
     "build123d[ocp_vscode]",
     "build123d[development]",
     "build123d[docs]",
-    # "build123d[stubs]", # excluded for now as mypy fails
+    "build123d[stubs]",
 ]
 
 [tool.setuptools.packages.find]

@@ -37,7 +37,9 @@ from build123d import (
     Axis,
     BuildLine,
     BuildSketch,
+    CenterOf,
     Color,
+    Compound,
     Edge,
     Face,
     FontStyle,
@@ -50,6 +52,7 @@ from build123d import (
     Rectangle,
     Sketch,
     Unit,
+    Vector,
     add,
     make_face,
     offset,
@@ -231,7 +234,8 @@ class DimensionLineTestCase(unittest.TestCase):
                 ],
                 draft=metric,
             )
-        self.assertGreater(hole.intersect(d_line).area, 0)
+        area = sum(f.area for f in hole.intersect(d_line).faces())
+        self.assertGreater(area, 0)
 
     def test_outside_arrows(self):
         d_line = DimensionLine([(0, 0, 0), (15, 0, 0)], draft=metric)
@@ -291,14 +295,150 @@ class ExtensionLineTestCase(unittest.TestCase):
         self.assertAlmostEqual(bbox.size.X, 30 + metric.line_width, 5)
         self.assertAlmostEqual(bbox.size.Y, 10, 5)
 
-    def test_not_implemented(self):
-        shape, outer, inner = create_test_sketch()
-        with self.assertRaises(NotImplementedError):
+    def test_vectorlike_in_extension_function(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=-10,
+            draft=metric,
+            measurement_direction=(0, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+
+    def test_vertical_projection_with_dim_outside_shape(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=-10,
+            draft=metric,
+            measurement_direction=Vector(0, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertGreater(
+            Compound(children=[diagonal_line, ext]).bounding_box().size.X,
+            diagonal_line.bounding_box().size.X,
+        )  # dimension should be outside shape.
+        self.assertEqual(
+            diagonal_line.bounding_box().size.Y + 0.25,  # plus line_width
+            ext.bounding_box().size.Y,
+        )
+        self.assertEqual(
+            diagonal_line.center(CenterOf.BOUNDING_BOX).Y,
+            ext.center(CenterOf.BOUNDING_BOX).Y,
+        )
+        self.assertEqual(ext.dimension, 100)
+
+    def test_vertical_projection_with_dim_inside_shape(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=10,
+            draft=metric,
+            measurement_direction=Vector(0, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertEqual(
+            Compound(children=[diagonal_line, ext]).bounding_box().size.Y,
+            diagonal_line.bounding_box().size.Y + 0.25,
+        )  # plus line_width
+        self.assertEqual(
+            diagonal_line.center(CenterOf.BOUNDING_BOX).Y,
+            ext.center(CenterOf.BOUNDING_BOX).Y,
+        )
+        self.assertEqual(ext.dimension, 100)
+
+    def test_vertical_projection_with_dim_otherside(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        x_size = diagonal_line.bounding_box().size.X
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=x_size + 10,
+            draft=metric,
+            measurement_direction=Vector(0, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertGreater(
+            Compound(children=[diagonal_line, ext]).bounding_box().size.Y,
+            diagonal_line.bounding_box().size.Y,
+        )  # plus line_width
+        self.assertEqual(
+            diagonal_line.center(CenterOf.BOUNDING_BOX).Y,
+            ext.center(CenterOf.BOUNDING_BOX).Y,
+        )
+        self.assertEqual(ext.dimension, 100)
+
+    def test_vertical_projection_with_vertical_line(self):
+        diagonal_line = Edge.make_line((100, 100), (100, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=10,
+            draft=metric,
+            measurement_direction=Vector(0, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertEqual(
+            diagonal_line.center(CenterOf.BOUNDING_BOX).Y,
+            ext.center(CenterOf.BOUNDING_BOX).Y,
+        )
+        self.assertEqual(ext.dimension, 100)
+
+    def test_horizontal_projection_with_dim_outside_shape(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=10,
+            draft=metric,
+            measurement_direction=Vector(1, 0, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertGreater(
+            Compound(children=[diagonal_line, ext]).bounding_box().size.Y,
+            diagonal_line.bounding_box().size.Y,
+        )  # dimension should be outside shape.
+        self.assertEqual(
+            diagonal_line.bounding_box().size.X + 0.25,  # plus line_width
+            ext.bounding_box().size.X,
+        )
+        self.assertEqual(
+            diagonal_line.center(CenterOf.BOUNDING_BOX).X,
+            ext.center(CenterOf.BOUNDING_BOX).X,
+        )
+        self.assertEqual(ext.dimension, 100)
+
+    def test_angled_projection(self):
+        diagonal_line = Edge.make_line((100, 100), (200, 200))
+        ext = ExtensionLine(
+            border=diagonal_line,
+            offset=10,
+            draft=metric,
+            measurement_direction=Vector(1, 1, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertAlmostEqual(ext.dimension, 141.421, places=2)
+
+    def test_half_circle(self):
+        half_circle = Edge.make_circle(50, start_angle=0, end_angle=180)
+        ext = ExtensionLine(
+            border=half_circle,
+            offset=-10,
+            draft=metric,
+            measurement_direction=Vector(1, 0, 0),
+        )
+        self.assertIsNotNone(ext)
+        self.assertEqual(ext.dimension, 100)
+        self.assertGreater(
+            Compound(children=[half_circle, ext]).bounding_box().size.Y,
+            half_circle.bounding_box().size.Y,
+        )  # dimension should be outside shape.
+
+    def test_full_circle(self):
+        half_circle = Edge.make_circle(50)
+        with pytest.raises(ValueError):
             ExtensionLine(
-                outer.edges().sort_by(Axis.Y)[0],
+                border=half_circle,
                 offset=10,
-                project_line=(1, 0, 0),
                 draft=metric,
+                measurement_direction=Vector(0, 1, 0),
             )
 
 

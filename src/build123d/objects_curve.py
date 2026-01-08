@@ -50,7 +50,7 @@ from build123d.build_enums import (
 )
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Plane, Vector, VectorLike, TOLERANCE
-from build123d.topology import Edge, Face, Wire, Curve
+from build123d.topology import Curve, Edge, Face, Vertex, Wire
 from build123d.topology.shape_core import ShapeList
 
 
@@ -741,6 +741,117 @@ class EllipticalCenterArc(BaseEdgeObject):
         super().__init__(curve, mode=mode)
 
 
+class ParabolicCenterArc(BaseEdgeObject):
+    """Line Object: Parabolic Center Arc
+
+    Create a parabolic arc defined by a vertex point and focal length (distance from focus to vertex).
+
+    Args:
+        vertex (VectorLike): parabola vertex
+        focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+        start_angle (float, optional): arc start angle.
+            Defaults to 0.0
+        end_angle (float, optional): arc end angle.
+            Defaults to 90.0
+        rotation (float, optional): angle to rotate arc. Defaults to 0.0
+        angular_direction (AngularDirection, optional): arc direction.
+            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    def __init__(
+        self,
+        vertex: VectorLike,
+        focal_length: float,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        rotation: float = 0.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+        mode: Mode = Mode.ADD,
+    ):
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        vertex_pnt = WorkplaneList.localize(vertex)
+        if context is None:
+            parabola_workplane = Plane.XY
+        else:
+            parabola_workplane = copy_module.copy(
+                WorkplaneList._get_context().workplanes[0]
+            )
+        parabola_workplane.origin = vertex_pnt
+        curve = Edge.make_parabola(
+            focal_length=focal_length,
+            plane=parabola_workplane,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            angular_direction=angular_direction,
+        ).rotate(
+            Axis(parabola_workplane.origin, parabola_workplane.z_dir.to_dir()), rotation
+        )
+
+        super().__init__(curve, mode=mode)
+
+
+class HyperbolicCenterArc(BaseEdgeObject):
+    """Line Object: Hyperbolic Center Arc
+
+    Create a hyperbolic arc defined by a center point and focal length (distance from focus to vertex).
+
+    Args:
+        center (VectorLike): hyperbola center
+        x_radius (float): x radius of the ellipse (along the x-axis of plane)
+        y_radius (float): y radius of the ellipse (along the y-axis of plane)
+        start_angle (float, optional): arc start angle from x-axis.
+            Defaults to 0.0
+        end_angle (float, optional): arc end angle from x-axis.
+            Defaults to 90.0
+        rotation (float, optional): angle to rotate arc. Defaults to 0.0
+        angular_direction (AngularDirection, optional): arc direction.
+            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    def __init__(
+        self,
+        center: VectorLike,
+        x_radius: float,
+        y_radius: float,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        rotation: float = 0.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+        mode: Mode = Mode.ADD,
+    ):
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        center_pnt = WorkplaneList.localize(center)
+        if context is None:
+            hyperbola_workplane = Plane.XY
+        else:
+            hyperbola_workplane = copy_module.copy(
+                WorkplaneList._get_context().workplanes[0]
+            )
+        hyperbola_workplane.origin = center_pnt
+        curve = Edge.make_hyperbola(
+            x_radius=x_radius,
+            y_radius=y_radius,
+            plane=hyperbola_workplane,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            angular_direction=angular_direction,
+        ).rotate(
+            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()), rotation
+        )
+
+        super().__init__(curve, mode=mode)
+
+
 class Helix(BaseEdgeObject):
     """Line Object: Helix
 
@@ -787,20 +898,22 @@ class Helix(BaseEdgeObject):
 
 class FilletPolyline(BaseLineObject):
     """Line Object: Fillet Polyline
-
     Create a sequence of straight lines defined by successive points that are filleted
     to a given radius.
 
     Args:
         pts (VectorLike | Iterable[VectorLike]): sequence of two or more points
-        radius (float): fillet radius
+        radius (float | Iterable[float]): radius to fillet at each vertex or a single value for all vertices.
+            A radius of 0 will create a sharp corner (vertex without fillet).
+
         close (bool, optional): close end points with extra Edge and corner fillets.
             Defaults to False
+
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Raises:
         ValueError: Two or more points not provided
-        ValueError: radius must be positive
+        ValueError: radius must be non-negative
     """
 
     _applies_to = [BuildLine._tag]
@@ -808,34 +921,49 @@ class FilletPolyline(BaseLineObject):
     def __init__(
         self,
         *pts: VectorLike | Iterable[VectorLike],
-        radius: float,
+        radius: float | Iterable[float],
         close: bool = False,
         mode: Mode = Mode.ADD,
     ):
+
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
-
         points = flatten_sequence(*pts)
 
         if len(points) < 2:
             raise ValueError("FilletPolyline requires two or more pts")
-        if radius <= 0:
-            raise ValueError("radius must be positive")
+
+        if isinstance(radius, (int, float)):
+            radius_list = [radius] * len(points)  # Single radius for all points
+
+        else:
+            radius_list = list(radius)
+            if len(radius_list) != len(points) - int(not close) * 2:
+                raise ValueError(
+                    f"radius list length ({len(radius_list)}) must match angle count ({ len(points) - int(not close) * 2})"
+                )
+
+        for r in radius_list:
+            if r < 0:
+                raise ValueError(f"radius {r} must be non-negative")
 
         lines_pts = WorkplaneList.localize(*points)
-
         # Create the polyline
+
         new_edges = [
             Edge.make_line(lines_pts[i], lines_pts[i + 1])
             for i in range(len(lines_pts) - 1)
         ]
+
         if close and (new_edges[0] @ 0 - new_edges[-1] @ 1).length > 1e-5:
             new_edges.append(Edge.make_line(new_edges[-1] @ 1, new_edges[0] @ 0))
+
         wire_of_lines = Wire(new_edges)
 
         # Create a list of vertices from wire_of_lines in the same order as
         # the original points so the resulting fillet edges are ordered
-        ordered_vertices = []
+        ordered_vertices: list[Vertex] = []
+
         for pnts in lines_pts:
             distance = {
                 v: (Vector(pnts) - Vector(*v)).length for v in wire_of_lines.vertices()
@@ -843,40 +971,93 @@ class FilletPolyline(BaseLineObject):
             ordered_vertices.append(sorted(distance.items(), key=lambda x: x[1])[0][0])
 
         # Fillet the corners
-
         # Create a map of vertices to edges containing that vertex
         vertex_to_edges = {
             v: [e for e in wire_of_lines.edges() if v in e.vertices()]
             for v in ordered_vertices
         }
 
-        # For each corner vertex create a new fillet Edge
-        fillets = []
-        for vertex, edges in vertex_to_edges.items():
+        # For each corner vertex create a new fillet Edge (or keep as vertex if radius is 0)
+        fillets: list[None | Edge] = []
+
+        for i, (vertex, edges) in enumerate(vertex_to_edges.items()):
             if len(edges) != 2:
                 continue
-            other_vertices = {ve for e in edges for ve in e.vertices() if ve != vertex}
-            third_edge = Edge.make_line(*[v for v in other_vertices])
-            fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(radius, [vertex])
-            fillets.append(fillet_face.edges().filter_by(GeomType.CIRCLE)[0])
+            current_radius = radius_list[i - int(not close)]
+
+            if current_radius == 0:
+                # For 0 radius, store the vertex as a marker for a sharp corner
+                fillets.append(None)
+
+            else:
+                other_vertices = {
+                    ve for e in edges for ve in e.vertices() if ve != vertex
+                }
+                third_edge = Edge.make_line(*[v for v in other_vertices])
+                fillet_face = Face(Wire(edges + [third_edge])).fillet_2d(
+                    current_radius, [vertex]
+                )
+                fillets.append(fillet_face.edges().filter_by(GeomType.CIRCLE)[0])
 
         # Create the Edges that join the fillets
         if close:
-            interior_edges = [
-                Edge.make_line(fillets[i - 1] @ 1, fillets[i] @ 0)
-                for i in range(len(fillets))
-            ]
-            end_edges = []
-        else:
-            interior_edges = [
-                Edge.make_line(fillets[i] @ 1, f @ 0) for i, f in enumerate(fillets[1:])
-            ]
-            end_edges = [
-                Edge.make_line(wire_of_lines @ 0, fillets[0] @ 0),
-                Edge.make_line(fillets[-1] @ 1, wire_of_lines @ 1),
-            ]
+            interior_edges = []
 
-        new_wire = Wire(end_edges + interior_edges + fillets)
+            for i in range(len(fillets)):
+                prev_fillet = fillets[i - 1]
+                curr_fillet = fillets[i]
+                prev_idx = i - 1
+                curr_idx = i
+                # Determine start and end points
+                if prev_fillet is None:
+                    start_pt: Vertex | Vector = ordered_vertices[prev_idx]
+                else:
+                    start_pt = prev_fillet @ 1
+
+                if curr_fillet is None:
+                    end_pt: Vertex | Vector = ordered_vertices[curr_idx]
+                else:
+                    end_pt = curr_fillet @ 0
+                interior_edges.append(Edge.make_line(start_pt, end_pt))
+
+            end_edges = []
+
+        else:
+            interior_edges = []
+            for i in range(len(fillets) - 1):
+                next_fillet = fillets[i + 1]
+                curr_fillet = fillets[i]
+                curr_idx = i
+                next_idx = i + 1
+                # Determine start and end points
+                if curr_fillet is None:
+                    start_pt = ordered_vertices[
+                        curr_idx + 1
+                    ]  # +1 because first vertex has no fillet
+                else:
+                    start_pt = curr_fillet @ 1
+
+                if next_fillet is None:
+                    end_pt = ordered_vertices[next_idx + 1]
+                else:
+                    end_pt = next_fillet @ 0
+                interior_edges.append(Edge.make_line(start_pt, end_pt))
+
+            # Handle end edges
+            if fillets[0] is None:
+                start_edge = Edge.make_line(wire_of_lines @ 0, ordered_vertices[1])
+            else:
+                start_edge = Edge.make_line(wire_of_lines @ 0, fillets[0] @ 0)
+
+            if fillets[-1] is None:
+                end_edge = Edge.make_line(ordered_vertices[-2], wire_of_lines @ 1)
+            else:
+                end_edge = Edge.make_line(fillets[-1] @ 1, wire_of_lines @ 1)
+            end_edges = [start_edge, end_edge]
+
+        # Filter out None values from fillets (these are 0-radius corners)
+        actual_fillets = [f for f in fillets if f is not None]
+        new_wire = Wire(end_edges + interior_edges + actual_fillets)
 
         super().__init__(new_wire, mode=mode)
 
@@ -1597,6 +1778,7 @@ class ArcArcTangentLine(BaseEdgeObject):
             Defaults to Keep.INSIDE
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
+
     warnings.warn(
         "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version.",
         DeprecationWarning,

@@ -7,7 +7,7 @@ For example, a :class:`~objects_part.Torus` is defined by a major and minor radi
 Builder mode, objects are positioned with ``Locations`` while in Algebra mode, objects
 are positioned with the ``*`` operator and shown in these examples:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildPart() as disk:
         with BuildSketch():
@@ -18,7 +18,7 @@ are positioned with the ``*`` operator and shown in these examples:
                 Circle(d, mode=Mode.SUBTRACT)
         extrude(amount=c)
 
-.. code-block:: python
+.. code-block:: build123d
 
     sketch = Circle(a) - Pos(b, 0.0) * Rectangle(c, c) - Pos(0.0, b) * Circle(d)
     disk = extrude(sketch, c)
@@ -36,7 +36,7 @@ right or left of each Axis. The following diagram shows how this alignment works
 
 For example:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildSketch():
         Circle(1, align=(Align.MIN, Align.MIN))
@@ -49,7 +49,7 @@ In 3D the ``align`` parameter also contains a Z align value but otherwise works 
 Note that the ``align`` will also accept a single ``Align`` value which will be used on all axes -
 as shown here:
 
-.. code-block:: python
+.. code-block:: build123d
 
     with BuildSketch():
         Circle(1, align=Align.MIN)
@@ -117,6 +117,20 @@ The following objects all can be used in BuildLine contexts. Note that
 
         +++
         Elliptical arc defined by center,  radii & angles
+
+    .. grid-item-card:: :class:`~objects_curve.ParabolicCenterArc`
+
+        .. image:: assets/parabolic_center_arc_example.svg
+
+        +++
+        Parabolic arc defined by vertex, focal length & angles
+
+    .. grid-item-card:: :class:`~objects_curve.HyperbolicCenterArc`
+
+        .. image:: assets/hyperbolic_center_arc_example.svg
+
+        +++
+        Hyperbolic arc defined by center, radii & angles
 
     .. grid-item-card:: :class:`~objects_curve.FilletPolyline`
 
@@ -241,6 +255,8 @@ Reference
 .. autoclass:: CenterArc
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
+.. autoclass:: ParabolicCenterArc
+.. autoclass:: HyperbolicCenterArc
 .. autoclass:: FilletPolyline
 .. autoclass:: Helix
 .. autoclass:: IntersectingLine
@@ -439,6 +455,13 @@ Reference
         +++
         Cone defined by radii and height
 
+    .. grid-item-card:: :class:`~objects_part.ConvexPolyhedron`
+
+        .. image:: assets/convex_polyhedron_example.svg
+
+        +++
+        Convex Polyhedron defined by points
+
     .. grid-item-card:: :class:`~objects_part.CounterBoreHole`
 
         .. image:: assets/counter_bore_hole_example.svg
@@ -496,6 +519,7 @@ Reference
 .. autoclass:: BasePartObject
 .. autoclass:: Box
 .. autoclass:: Cone
+.. autoclass:: ConvexPolyhedron
 .. autoclass:: CounterBoreHole
 .. autoclass:: CounterSinkHole
 .. autoclass:: Cylinder
@@ -519,6 +543,7 @@ Here is an example of a custom sketch object specially created as part of the de
 this playing card storage box (:download:`see the playing_cards.py example <../examples/playing_cards.py>`):
 
 .. literalinclude:: ../examples/playing_cards.py
+    :language: build123d
     :start-after: [Club]
     :end-before: [Club]
 

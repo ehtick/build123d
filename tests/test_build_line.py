@@ -98,14 +98,14 @@ class BuildLineTests(unittest.TestCase):
                 powerup @ 0,
                 tangents=(screw % 1, powerup % 0),
             )
-        self.assertAlmostEqual(roller_coaster.wires()[0].length, 678.983628932414, 5)
+        self.assertAlmostEqual(roller_coaster.wires()[0].length, 678.9785865257071, 5)
 
     def test_bezier(self):
         pts = [(0, 0), (20, 20), (40, 0), (0, -40), (-60, 0), (0, 100), (100, 0)]
         wts = [1.0, 1.0, 2.0, 3.0, 4.0, 2.0, 1.0]
         with BuildLine() as bz:
             b1 = Bezier(*pts, weights=wts)
-        self.assertAlmostEqual(bz.wires()[0].length, 225.86389406824566, 5)
+        self.assertAlmostEqual(bz.wires()[0].length, 225.98661946375782, 5)
         self.assertTrue(isinstance(b1, Edge))
 
     def test_double_tangent_arc(self):
@@ -174,6 +174,53 @@ class BuildLineTests(unittest.TestCase):
         self.assertLessEqual(bbox.max.Y, 5)
         self.assertTrue(isinstance(e1, Edge))
 
+    def test_parabolic_center_arc(self):
+        # General conic section equation: (1+K)x^2-2Rx+y^2=0
+        # parabola (K = -1) => -2Rx+y^2=0
+        center = (0, 0)
+        C = 1
+        R = 1 / C
+        focal_length = R / 2
+        with BuildLine() as el:
+            ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = el.line.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+
+        e1 = ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = e1.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+        self.assertTrue(isinstance(e1, Edge))
+
+    def test_hyperbolic_center_arc(self):
+        # General conic section equation: (1+K)x^2-2Rx+y^2=0
+        # hyperbola (K < -1)
+        center = (0, 0)
+        C = 1
+        R = 1 / C
+        K = -2 # => -(x^2)-2Rx+y^2=0
+        a, b = R / (-K - 1), R / sqrt(-K - 1)
+        with BuildLine() as el:
+            HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = el.line.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+
+        e1 = HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = e1.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+        self.assertTrue(isinstance(e1, Edge))
+
     def test_filletpolyline(self):
         with BuildLine(Plane.YZ):
             p = FilletPolyline(
@@ -182,6 +229,61 @@ class BuildLineTests(unittest.TestCase):
         self.assertEqual(len(p.edges()), 5)
         self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 2)
         self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 3)
+
+        with BuildLine(Plane.YZ):
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 2, 3, 0),
+                close=True,
+            )
+        self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 3)
+        self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 4)
+
+        with self.assertRaises(ValueError):
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 2, 3, 4),
+                close=False,
+            )
+
+        with self.assertRaises(ValueError):
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=-1,
+                close=True,
+            )
+
+        with self.assertRaises(ValueError):
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 2),
+                close=True,
+            )
+
+        with BuildLine(Plane.YZ):
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 2, 3, 4),
+                close=True,
+            )
+        self.assertEqual(len(p.edges()), 8)
+        self.assertEqual(len(p.edges().filter_by(GeomType.CIRCLE)), 4)
+        self.assertEqual(len(p.edges().filter_by(GeomType.LINE)), 4)
 
         with BuildLine(Plane.YZ):
             p = FilletPolyline(
@@ -196,6 +298,33 @@ class BuildLineTests(unittest.TestCase):
             FilletPolyline((0, 0), radius=0.1)
         with self.assertRaises(ValueError):
             FilletPolyline((0, 0), (1, 0), (1, 1), radius=-1)
+
+        # test filletpolyline curr_fillet None
+        # Middle corner radius = 0 → curr_fillet is None
+        with BuildLine():
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (20, 10),
+                radius=(0, 1),  # middle corner is sharp
+                close=False,
+            )
+        # 1 circular fillet, 3 line fillets
+        assert len(p.edges().filter_by(GeomType.CIRCLE)) == 1
+
+        # test filletpolyline next_fillet None:
+        # Second corner is sharp (radius 0) → next_fillet is None
+        with BuildLine():
+            p = FilletPolyline(
+                (0, 0),
+                (10, 0),
+                (10, 10),
+                (0, 10),
+                radius=(1, 0),  # next_fillet is None at last interior corner
+                close=False,
+            )
+        assert len(p.edges()) > 0
 
     def test_intersecting_line(self):
         with BuildLine():
@@ -805,9 +934,9 @@ class BuildLineTests(unittest.TestCase):
             min_r = 0 if case[2][0] is None else (flip_min * case[0] + case[2][0]) / 2
             max_r = 1e6 if case[2][1] is None else (flip_max * case[0] + case[2][1]) / 2
 
-            print(case[1], min_r, max_r, case[0])
-            print(min_r + 0.01, min_r * 0.99, max_r - 0.01, max_r + 0.01)
-            print((case[0] - 1 * (r1 + r2)) / 2)
+            # print(case[1], min_r, max_r, case[0])
+            # print(min_r + 0.01, min_r * 0.99, max_r - 0.01, max_r + 0.01)
+            # print((case[0] - 1 * (r1 + r2)) / 2)
 
             # Greater than min
             l1 = ArcArcTangentArc(start_arc, end_arc, min_r + 0.01, keep=case[1])
