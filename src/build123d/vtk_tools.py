@@ -44,7 +44,7 @@ license:
 
 """
 
-from typing import Any, Union
+from typing import Any
 import warnings
 
 from build123d.topology import Shape
@@ -117,7 +117,7 @@ def to_vtk_poly_data(
     tolerance: float | None = None,
     angular_tolerance: float | None = None,
     normals: bool = False,
-) -> Union["vtkPolyData", None]:
+) -> "vtkPolyData" | None:
     """Convert shape to vtkPolyData
 
     Args:
