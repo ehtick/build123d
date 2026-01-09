@@ -117,7 +117,7 @@ def to_vtk_poly_data(
     tolerance: float | None = None,
     angular_tolerance: float | None = None,
     normals: bool = False,
-) -> "vtkPolyData" | None:
+) -> "vtkPolyData | None":
     """Convert shape to vtkPolyData
 
     Args:
