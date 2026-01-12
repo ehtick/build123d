@@ -1,6 +1,7 @@
 # [Setup]
 from build123d import *
-from ocp_vscode import *
+
+# from ocp_vscode import *
 
 dot = Circle(0.05)
 
@@ -20,4 +21,4 @@ svg.add_shape(hyperbolic_center_arc.line)
 svg.add_shape(dot.moved(Location(Vector((0, 0)))))
 svg.write("assets/hyperbolic_center_arc_example.svg")
 
-show_all()
+# show_all()
