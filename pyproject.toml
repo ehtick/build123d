@@ -16,7 +16,7 @@ authors = [
 ]
 description = "A python CAD programming library"
 readme = "README.md"
-requires-python = ">= 3.10, < 3.14"
+requires-python = ">= 3.10, < 3.15"
 keywords = [
     "3d models",
     "3d printing",
@@ -35,7 +35,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "cadquery-ocp >= 7.8, < 7.9",
+    "cadquery-ocp-novtk >= 7.9, < 8.0",
     "typing_extensions >= 4.6.0, < 5",
     "numpy >= 2, < 3",
     "svgpathtools >= 1.5.1, < 2",
@@ -43,8 +43,8 @@ dependencies = [
     "ezdxf >= 1.1.0, < 2",
     "ipython >= 8.0.0, < 10",
     "lib3mf >= 2.4.1",
-    "ocpsvg >= 0.5, < 0.6",
-    "ocp_gordon >= 0.1.17",
+    "ocpsvg >= 0.6, < 0.7",
+    "ocp_gordon >= 0.2, < 0.3",
     "trianglesolver",
     "sympy",
     "scipy",

@@ -2392,9 +2392,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
     def _repr_html_(self):
         """Jupyter 3D representation support"""
 
-        from build123d.jupyter_tools import shape_to_html
+        from build123d.jupyter_tools import shape_to_html, HAS_VTK
 
-        return shape_to_html(self)._repr_html_()
+        if HAS_VTK:
+            return shape_to_html(self)._repr_html_()
+        else:
+            return self.__repr__()
 
     def vertex(self) -> Vertex | None:
         """Return the Vertex"""

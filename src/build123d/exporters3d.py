@@ -308,6 +308,12 @@ def export_step(
     writer.SetNameMode(True)
 
     header = APIHeaderSection_MakeHeader(writer.Writer().Model())
+
+    if not header.IsDone():  # As in OCCT 7.9.x
+        # Create an empty consistent header, i.e. IsDone() return True
+        header = APIHeaderSection_MakeHeader(0)
+        header.Apply(writer.Writer().Model())    
+        
     if to_export.label:
         header.SetName(TCollection_HAsciiString(to_export.label))
     if timestamp is not None:
