@@ -212,14 +212,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
     inverse_shape_LUT = {v: k for k, v in shape_LUT.items()}
 
     downcast_LUT = {
-        ta.TopAbs_VERTEX: TopoDS.Vertex_s,
-        ta.TopAbs_EDGE: TopoDS.Edge_s,
-        ta.TopAbs_WIRE: TopoDS.Wire_s,
-        ta.TopAbs_FACE: TopoDS.Face_s,
-        ta.TopAbs_SHELL: TopoDS.Shell_s,
-        ta.TopAbs_SOLID: TopoDS.Solid_s,
-        ta.TopAbs_COMPOUND: TopoDS.Compound_s,
-        ta.TopAbs_COMPSOLID: TopoDS.CompSolid_s,
+        ta.TopAbs_VERTEX: TopoDS.Vertex,
+        ta.TopAbs_EDGE: TopoDS.Edge,
+        ta.TopAbs_WIRE: TopoDS.Wire,
+        ta.TopAbs_FACE: TopoDS.Face,
+        ta.TopAbs_SHELL: TopoDS.Shell,
+        ta.TopAbs_SOLID: TopoDS.Solid,
+        ta.TopAbs_COMPOUND: TopoDS.Compound,
+        ta.TopAbs_COMPSOLID: TopoDS.CompSolid,
     }
 
     geom_LUT_EDGE: dict[ga.GeomAbs_CurveType, GeomType] = {
@@ -418,7 +418,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             # exactly two faces associated with it.
             for i in range(shape_map.Extent()):
                 # Access each edge in the map sequentially
-                edge = TopoDS.Edge_s(shape_map.FindKey(i + 1))
+                edge = TopoDS.Edge(shape_map.FindKey(i + 1))
 
                 vertex0 = TopoDS_Vertex()
                 vertex1 = TopoDS_Vertex()
@@ -1883,7 +1883,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             # Get a TopoDS_Face to work with from the tool
             if isinstance(trim_tool, TopoDS_Shell):
                 face_explorer = TopExp_Explorer(trim_tool, ta.TopAbs_FACE)
-                tool_face = TopoDS.Face_s(face_explorer.Current())
+                tool_face = TopoDS.Face(face_explorer.Current())
             else:
                 tool_face = trim_tool
 

@@ -493,7 +493,7 @@ class Mesher:
             explorer = TopExp_Explorer(occ_sewed_shape, TopAbs_ShapeEnum.TopAbs_SHELL)
             while explorer.More():
                 # occ_shells.append(downcast(explorer.Current()))
-                bd_shells.append(Shell(TopoDS.Shell_s(explorer.Current())))
+                bd_shells.append(Shell(TopoDS.Shell(explorer.Current())))
                 explorer.Next()
         else:
             assert isinstance(occ_sewed_shape, TopoDS_Shell)

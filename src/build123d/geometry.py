@@ -1847,13 +1847,13 @@ class Location:
             downcast_lut: dict[
                 TopAbs_ShapeEnum, Callable[[TopoDS_Shape], TopoDS_Shape]
             ] = {
-                TopAbs_ShapeEnum.TopAbs_VERTEX: TopoDS.Vertex_s,
-                TopAbs_ShapeEnum.TopAbs_EDGE: TopoDS.Edge_s,
-                TopAbs_ShapeEnum.TopAbs_WIRE: TopoDS.Wire_s,
-                TopAbs_ShapeEnum.TopAbs_FACE: TopoDS.Face_s,
-                TopAbs_ShapeEnum.TopAbs_SHELL: TopoDS.Shell_s,
-                TopAbs_ShapeEnum.TopAbs_SOLID: TopoDS.Solid_s,
-                TopAbs_ShapeEnum.TopAbs_COMPOUND: TopoDS.Compound_s,
+                TopAbs_ShapeEnum.TopAbs_VERTEX: TopoDS.Vertex,
+                TopAbs_ShapeEnum.TopAbs_EDGE: TopoDS.Edge,
+                TopAbs_ShapeEnum.TopAbs_WIRE: TopoDS.Wire,
+                TopAbs_ShapeEnum.TopAbs_FACE: TopoDS.Face,
+                TopAbs_ShapeEnum.TopAbs_SHELL: TopoDS.Shell,
+                TopAbs_ShapeEnum.TopAbs_SOLID: TopoDS.Solid,
+                TopAbs_ShapeEnum.TopAbs_COMPOUND: TopoDS.Compound,
             }
             assert other.wrapped is not None
             try:
@@ -3180,13 +3180,13 @@ class Plane(metaclass=PlaneMeta):
             downcast_lut: dict[
                 TopAbs_ShapeEnum, Callable[[TopoDS_Shape], TopoDS_Shape]
             ] = {
-                TopAbs_ShapeEnum.TopAbs_VERTEX: TopoDS.Vertex_s,
-                TopAbs_ShapeEnum.TopAbs_EDGE: TopoDS.Edge_s,
-                TopAbs_ShapeEnum.TopAbs_WIRE: TopoDS.Wire_s,
-                TopAbs_ShapeEnum.TopAbs_FACE: TopoDS.Face_s,
-                TopAbs_ShapeEnum.TopAbs_SHELL: TopoDS.Shell_s,
-                TopAbs_ShapeEnum.TopAbs_SOLID: TopoDS.Solid_s,
-                TopAbs_ShapeEnum.TopAbs_COMPOUND: TopoDS.Compound_s,
+                TopAbs_ShapeEnum.TopAbs_VERTEX: TopoDS.Vertex,
+                TopAbs_ShapeEnum.TopAbs_EDGE: TopoDS.Edge,
+                TopAbs_ShapeEnum.TopAbs_WIRE: TopoDS.Wire,
+                TopAbs_ShapeEnum.TopAbs_FACE: TopoDS.Face,
+                TopAbs_ShapeEnum.TopAbs_SHELL: TopoDS.Shell,
+                TopAbs_ShapeEnum.TopAbs_SOLID: TopoDS.Solid,
+                TopAbs_ShapeEnum.TopAbs_COMPOUND: TopoDS.Compound,
             }
             assert obj.wrapped is not None
             try:

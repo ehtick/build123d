@@ -1525,7 +1525,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         """
         if not obj:
             raise ValueError("Can't extrude empty vertex")
-        return Edge(TopoDS.Edge_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Edge(TopoDS.Edge(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_bezier(
@@ -2923,7 +2923,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
             topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
             reversed_edge.wrapped = topods_edge
         else:
-            reversed_edge.wrapped = TopoDS.Edge_s(self.wrapped.Reversed())
+            reversed_edge.wrapped = TopoDS.Edge(self.wrapped.Reversed())
         return reversed_edge
 
     def to_axis(self) -> Axis:
@@ -3615,8 +3615,8 @@ class Wire(Mixin1D[TopoDS_Wire]):
             edge1, edge2 = Wire.order_chamfer_edges(reference_edge, edges)
             if edge1.wrapped is not None and edge2.wrapped is not None:
                 chamfer_builder.AddChamfer(
-                    TopoDS.Edge_s(edge1.wrapped),
-                    TopoDS.Edge_s(edge2.wrapped),
+                    TopoDS.Edge(edge1.wrapped),
+                    TopoDS.Edge(edge2.wrapped),
                     distance,
                     distance2,
                 )
@@ -4006,8 +4006,8 @@ class Wire(Mixin1D[TopoDS_Wire]):
             raise ValueError("Can't stitch empty wires")
 
         wire_builder = BRepBuilderAPI_MakeWire()
-        wire_builder.Add(TopoDS.Wire_s(self.wrapped))
-        wire_builder.Add(TopoDS.Wire_s(other.wrapped))
+        wire_builder.Add(TopoDS.Wire(self.wrapped))
+        wire_builder.Add(TopoDS.Wire(other.wrapped))
         wire_builder.Build()
 
         return self.__class__.cast(wire_builder.Wire())
@@ -4158,7 +4158,7 @@ def edges_to_wires(edges: Iterable[Edge], tol: float = 1e-6) -> ShapeList[Wire]:
     wires: ShapeList[Wire] = ShapeList()
     for i in range(wires_out.Length()):
         # wires.append(Wire(downcast(wires_out.Value(i + 1))))
-        wires.append(Wire(TopoDS.Wire_s(wires_out.Value(i + 1))))
+        wires.append(Wire(TopoDS.Wire(wires_out.Value(i + 1))))
 
     return wires
 
@@ -4263,6 +4263,6 @@ def topo_explore_connected_faces(
         for face in edge_face_map.FindFromKey(edge.wrapped):
             unique_face_map.Add(face)
     for i in range(unique_face_map.Extent()):
-        unique_faces.append(TopoDS.Face_s(unique_face_map(i + 1)))
+        unique_faces.append(TopoDS.Face(unique_face_map(i + 1)))
 
     return unique_faces
