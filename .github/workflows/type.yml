@@ -1,4 +1,4 @@
-name: Run ty type checker
+name: Run type checking
 
 on: [push, pull_request]
 jobs:
@@ -22,7 +22,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           optional-dependencies: "development,stubs"
 
-      - name: Typecheck
+      - name: Typecheck (mypy)
+        run: |
+          mypy --config-file mypy.ini src/build123d
+
+      - name: Typecheck (ty)
         run: |
           uv tool install ty@latest
-          ty check src/
+          ty check src/build123d/
+        continue-on-error: true
