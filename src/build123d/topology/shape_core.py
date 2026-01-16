@@ -1343,66 +1343,66 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
 
     def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Self]:
-        """Intersection of the arguments and this shape
+        self,
+        *to_intersect: Shape | Vector | Location | Axis | Plane,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Find where bodies/interiors meet (overlap or crossing geometry).
+
+        This is the main entry point for intersection operations. Handles
+        geometry conversion and delegates to subclass _intersect() implementations.
+
+        Semantics:
+            - Multiple arguments use AND (chaining): c.intersect(s1, s2) = c ∩ s1 ∩ s2
+            - Compound arguments use OR (distribution): c.intersect(Compound([s1, s2]))
+              = (c ∩ s1) ∪ (c ∩ s2)
 
         Args:
-            to_intersect (sequence of Union[Shape, Axis, Plane]): Shape(s) to
-                intersect with
+            to_intersect: Shape(s) or geometry objects to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts without interior
+                overlap (only relevant when Solids are involved)
 
         Returns:
-            None | ShapeList[Self]: Resulting ShapeList may contain different class
-                than self
+            ShapeList of intersection results, or None if no intersection
         """
 
-        def _to_vertex(vec: Vector) -> Vertex:
-            """Helper method to convert vector to shape"""
-            return self.__class__.cast(
-                downcast(
-                    BRepBuilderAPI_MakeVertex(gp_Pnt(vec.X, vec.Y, vec.Z)).Vertex()
-                )
-            )
+        if not to_intersect:
+            return None
 
-        def _to_edge(axis: Axis) -> Edge:
-            """Helper method to convert axis to shape"""
-            return self.__class__.cast(
-                BRepBuilderAPI_MakeEdge(
-                    Geom_Line(
-                        axis.position.to_pnt(),
-                        axis.direction.to_dir(),
-                    )
-                ).Edge()
-            )
+        # Runtime import to avoid circular imports. Allows type safe actions in helpers
+        from build123d.topology.helpers import convert_to_shapes
 
-        def _to_face(plane: Plane) -> Face:
-            """Helper method to convert plane to shape"""
-            return self.__class__.cast(BRepBuilderAPI_MakeFace(plane.wrapped).Face())
+        shapes = convert_to_shapes(self, to_intersect)
 
-        # Convert any geometry objects into their respective topology objects
-        objs = []
-        for obj in to_intersect:
-            if isinstance(obj, Vector):
-                objs.append(_to_vertex(obj))
-            elif isinstance(obj, Axis):
-                objs.append(_to_edge(obj))
-            elif isinstance(obj, Plane):
-                objs.append(_to_face(obj))
-            elif isinstance(obj, Location):
-                if obj.wrapped is None:
-                    raise ValueError("Cannot intersect with an empty location")
-                objs.append(_to_vertex(tcast(Vector, obj.position)))
-            else:
-                objs.append(obj)
+        # Chained iteration for AND semantics: c.intersect(s1, s2) = c ∩ s1 ∩ s2
+        common_set = ShapeList([self])
+        for other in shapes:
+            next_set = ShapeList()
+            for obj in common_set:
+                result = obj._intersect(other, tolerance, include_touched)
+                if result:
+                    next_set.extend(result.expand())
+            if not next_set:
+                return None  # AND semantics: if any step fails, no intersection
+            common_set = ShapeList(set(next_set))  # deduplicate
+        return common_set if common_set else None
 
-        # Find the shape intersections
-        intersect_op = BRepAlgoAPI_Common()
-        intersections = self._bool_op((self,), objs, intersect_op)
-        if isinstance(intersections, ShapeList):
-            return intersections or None
-        if isinstance(intersections, Shape) and not intersections.is_null:
-            return ShapeList([intersections])
-        return None
+    def touch(self, other: Shape, tolerance: float = 1e-6) -> ShapeList:
+        """Find boundary contacts between this shape and another.
+
+        Base implementation returns empty ShapeList. Subclasses (Mixin2D, Mixin3D,
+        Compound) override this to provide actual touch detection.
+
+        Args:
+            other: Shape to find contacts with
+            tolerance: tolerance for contact detection
+
+        Returns:
+            ShapeList of contact shapes (empty for base implementation)
+        """
+        return ShapeList()
 
     def is_equal(self, other: Shape) -> bool:
         """Returns True if two shapes are equal, i.e. if they share the same

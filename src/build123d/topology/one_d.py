@@ -88,7 +88,12 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse, GC_MakeArcOfParabola, GC_MakeArcOfHyperbola
+from OCP.GC import (
+    GC_MakeArcOfCircle,
+    GC_MakeArcOfEllipse,
+    GC_MakeArcOfParabola,
+    GC_MakeArcOfHyperbola,
+)
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
@@ -708,126 +713,53 @@ class Mixin1D(Shape[TOPODS]):
 
         return Vector(curve.Value(umax))
 
-    def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge]:
-        """Intersect Edge with Shape or geometry object
+    def _intersect(
+        self,
+        other: Shape,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection for Edge/Wire.
+
+        Returns same-dimension overlap or crossing geometry:
+        - 1D + 1D → Edge (collinear overlap) + Vertex (crossing)
+        - 1D + Face/Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
-
-        Returns:
-            ShapeList[Vertex | Edge] | None: ShapeList of vertices and/or edges
+            other: Shape to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+                (only relevant when Solids are involved)
         """
 
-        def to_vector(objs: Iterable) -> ShapeList:
-            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+        results: ShapeList = ShapeList()
 
-        def to_vertex(objs: Iterable) -> ShapeList:
-            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+        # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
+        if isinstance(other, (Edge, Wire)):
+            common = self._bool_op(
+                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            )
+            results.extend(common.expand())
+            section = self._bool_op(
+                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            )
+            # Extract vertices from section (edges already in Common for wires)
+            for shape in section:
+                if isinstance(shape, Vertex) and not shape.is_null:
+                    results.append(shape)
 
-        def bool_op(
-            args: Sequence,
-            tools: Sequence,
-            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
-        ) -> ShapeList:
-            # Wrap Shape._bool_op for corrected output
-            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
-            if isinstance(intersections, ShapeList):
-                return intersections or ShapeList()
-            if isinstance(intersections, Shape) and not intersections.is_null:
-                return ShapeList([intersections])
-            return ShapeList()
+        # 1D + Vertex: point containment on edge
+        elif isinstance(other, Vertex):
+            if other.distance_to(self) <= tolerance:
+                results.append(other)
 
-        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
-            # Remove lower order shapes from list which *appear* to be part of
-            # a higher order shape using a lazy distance check
-            # (sufficient for vertices, may be an issue for higher orders)
-            order_groups = []
-            for order in orders:
-                order_groups.append(
-                    ShapeList([s for s in shapes if isinstance(s, order)])
-                )
+        # Delegate to higher-order shapes (Face, Solid, etc.)
+        else:
+            result = other._intersect(self, tolerance, include_touched)
+            if result:
+                results.extend(result)
 
-            filtered_shapes = order_groups[-1]
-            for i in range(len(order_groups) - 1):
-                los = order_groups[i]
-                his: list = sum(order_groups[i + 1 :], [])
-                filtered_shapes.extend(
-                    ShapeList(
-                        lo
-                        for lo in los
-                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
-                    )
-                )
-
-            return filtered_shapes
-
-        common_set: ShapeList[Vertex | Edge | Wire] = ShapeList([self])
-        target: Shape | Plane
-        for other in to_intersect:
-            # Conform target type
-            match other:
-                case Axis():
-                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
-                    bbox = self.bounding_box()
-                    dist = self.distance_to(other.position)
-                    dist = dist if dist >= 1 else 1
-                    target = Edge.make_line(
-                        other.position - other.direction * bbox.diagonal * dist,
-                        other.position + other.direction * bbox.diagonal * dist,
-                    )
-                case Plane():
-                    target = other
-                case Vector():
-                    target = Vertex(other)
-                case Location():
-                    target = Vertex(other.position)
-                case _ if issubclass(type(other), Shape):
-                    target = other
-                case _:
-                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
-
-            # Find common matches
-            common: list[Vertex | Edge | Wire] = []
-            result: ShapeList | None
-            for obj in common_set:
-                match (obj, target):
-                    case (_, Plane()):
-                        assert isinstance(other.wrapped, gp_Pln)
-                        target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
-                        operation1 = BRepAlgoAPI_Section()
-                        result = bool_op((obj,), (target,), operation1)
-                        operation2 = BRepAlgoAPI_Common()
-                        result.extend(bool_op((obj,), (target,), operation2))
-
-                    case (_, Vertex() | Edge() | Wire()):
-                        operation1 = BRepAlgoAPI_Section()
-                        section = bool_op((obj,), (target,), operation1)
-                        result = section
-                        if not section:
-                            operation2 = BRepAlgoAPI_Common()
-                            result.extend(bool_op((obj,), (target,), operation2))
-
-                    case _ if issubclass(type(target), Shape):
-                        result = target.intersect(obj)
-
-                if result:
-                    common.extend(result)
-
-            if common:
-                common_set = ShapeList()
-                for shape in common:
-                    if isinstance(shape, Wire):
-                        common_set.extend(shape.edges())
-                    else:
-                        common_set.append(shape)
-                common_set = to_vertex(set(to_vector(common_set)))
-                common_set = filter_shapes_by_order(common_set, [Vertex, Edge])
-            else:
-                return None
-
-        return ShapeList(common_set)
+        return results if results else None
 
     def location_at(
         self,

@@ -69,6 +69,7 @@ from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgo import BRepAlgo
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Section
+from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeEdge,
     BRepBuilderAPI_MakeFace,
@@ -115,7 +116,13 @@ from OCP.TColStd import (
     TColStd_HArray2OfReal,
 )
 from OCP.TopExp import TopExp
-from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Shell, TopoDS_Solid
+from OCP.TopoDS import (
+    TopoDS,
+    TopoDS_Face,
+    TopoDS_Shape,
+    TopoDS_Shell,
+    TopoDS_Solid,
+)
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from ocp_gordon import interpolate_curve_network
 from typing_extensions import Self
@@ -274,127 +281,205 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         return result
 
-    def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge | Face]:
-        """Intersect Face with Shape or geometry object
+    def _intersect(
+        self,
+        other: Shape,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection for Face/Shell.
+
+        Returns same-dimension overlap or crossing geometry:
+        - 2D + 2D → Face (coplanar overlap) + Edge (crossing curves)
+        - 2D + Edge → Edge (on surface) + Vertex (piercing)
+        - 2D + Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
-
-        Returns:
-            ShapeList[Vertex | Edge | Face] | None: ShapeList of vertices, edges, and/or
-                faces.
+            other: Shape to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+                (only relevant when Solids are involved)
         """
 
-        def to_vector(objs: Iterable) -> ShapeList:
-            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+        def filter_edges(
+            section_edges: ShapeList[Edge], common_edges: ShapeList[Edge]
+        ) -> ShapeList[Edge]:
+            """Filter section edges, keeping only edges not on common face boundaries."""
+            # Pre-compute bounding boxes for both sets (optimal=False for speed, filtering only)
+            section_bboxes = [(e, e.bounding_box(optimal=False)) for e in section_edges]
+            common_bboxes = [
+                (ce, ce.bounding_box(optimal=False)) for ce in common_edges
+            ]
 
-        def to_vertex(objs: Iterable) -> ShapeList:
-            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
-
-        def bool_op(
-            args: Sequence,
-            tools: Sequence,
-            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
-        ) -> ShapeList:
-            # Wrap Shape._bool_op for corrected output
-            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
-            if isinstance(intersections, ShapeList):
-                return intersections or ShapeList()
-            if isinstance(intersections, Shape) and not intersections.is_null:
-                return ShapeList([intersections])
-            return ShapeList()
-
-        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
-            # Remove lower order shapes from list which *appear* to be part of
-            # a higher order shape using a lazy distance check
-            # (sufficient for vertices, may be an issue for higher orders)
-            order_groups = []
-            for order in orders:
-                order_groups.append(
-                    ShapeList([s for s in shapes if isinstance(s, order)])
+            # Filter: remove section edges that coincide with common face boundaries
+            filtered: ShapeList = ShapeList()
+            for edge, edge_bbox in section_bboxes:
+                is_common = any(
+                    edge_bbox.overlaps(ce_bbox, tolerance)
+                    and edge.distance_to(ce) <= tolerance
+                    for ce, ce_bbox in common_bboxes
                 )
+                if not is_common:
+                    filtered.append(edge)
+            return filtered
 
-            filtered_shapes = order_groups[-1]
-            for i in range(len(order_groups) - 1):
-                los = order_groups[i]
-                his: list = sum(order_groups[i + 1 :], [])
-                filtered_shapes.extend(
-                    ShapeList(
-                        lo
-                        for lo in los
-                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
-                    )
-                )
+        results: ShapeList = ShapeList()
 
-            return filtered_shapes
+        # 2D + 2D: Common (coplanar overlap) AND Section (crossing curves)
+        if isinstance(other, (Face, Shell)):
+            # Common for coplanar overlap
+            common = self._bool_op(
+                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            )
+            common_faces = common.expand()
+            results.extend(common_faces)
 
-        common_set: ShapeList[Vertex | Edge | Face | Shell] = ShapeList([self])
-        target: Shape
-        for other in to_intersect:
-            # Conform target type
-            match other:
-                case Axis():
-                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
-                    bbox = self.bounding_box()
-                    dist = self.distance_to(other.position)
-                    dist = dist if dist >= 1 else 1
-                    target = Edge.make_line(
-                        other.position - other.direction * bbox.diagonal * dist,
-                        other.position + other.direction * bbox.diagonal * dist,
-                    )
-                case Plane():
-                    target = Face(other)
-                case Vector():
-                    target = Vertex(other)
-                case Location():
-                    target = Vertex(other.position)
-                case _ if issubclass(type(other), Shape):
-                    target = other
-                case _:
-                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
+            # Section for crossing curves (only edges, not vertices)
+            # Vertices from Section are boundary contacts (touch), not intersections
+            section = self._bool_op(
+                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            )
+            section_edges = ShapeList(
+                [s for s in section if isinstance(s, Edge)]
+            ).expand()
 
-            # Find common matches
-            common: list[Vertex | Edge | Wire | Face | Shell] = []
-            result: ShapeList | None
-            for obj in common_set:
-                match (obj, target):
-                    case (_, Vertex() | Edge() | Wire() | Face() | Shell()):
-                        operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common = (
-                            BRepAlgoAPI_Section()
-                        )
-                        result = bool_op((obj,), (target,), operation)
-                        if not isinstance(obj, Edge | Wire) and not isinstance(
-                            target, (Edge | Wire)
-                        ):
-                            # Face + Edge combinations may produce an intersection
-                            # with Common but always with Section.
-                            # No easy way to deduplicate
-                            operation = BRepAlgoAPI_Common()
-                            result.extend(bool_op((obj,), (target,), operation))
-
-                    case _ if issubclass(type(target), Shape):
-                        result = target.intersect(obj)
-
-                if result:
-                    common.extend(result)
-
-            if common:
-                common_set = ShapeList()
-                for shape in common:
-                    if isinstance(shape, Wire):
-                        common_set.extend(shape.edges())
-                    elif isinstance(shape, Shell):
-                        common_set.extend(shape.faces())
-                    else:
-                        common_set.append(shape)
-                common_set = to_vertex(set(to_vector(common_set)))
-                common_set = filter_shapes_by_order(common_set, [Vertex, Edge, Face])
+            if not common_faces:
+                # No coplanar overlap - all section edges are valid crossings
+                results.extend(section_edges)
             else:
-                return None
+                # Filter out edges on common face boundaries
+                # (Section returns boundary of overlap region which are not crossings)
+                common_edges: ShapeList[Edge] = ShapeList()
+                for face in common_faces:
+                    common_edges.extend(face.edges())
+                results.extend(filter_edges(section_edges, common_edges))
 
-        return ShapeList(common_set)
+        # 2D + Edge: Section for intersection
+        elif isinstance(other, (Edge, Wire)):
+            section = self._bool_op(
+                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            )
+            results.extend(section)
+
+        # 2D + Vertex: point containment on surface
+        elif isinstance(other, Vertex):
+            if other.distance_to(self) <= tolerance:
+                results.append(other)
+
+        # Delegate to higher-order shapes (Solid, etc.)
+        else:
+            result = other._intersect(self, tolerance, include_touched)
+            if result:
+                results.extend(result)
+
+        # Add boundary contacts if requested
+        if include_touched and isinstance(other, (Face, Shell)):
+            found_faces = ShapeList(r for r in results if isinstance(r, Face))
+            found_edges = ShapeList(r for r in results if isinstance(r, Edge))
+            results.extend(self.touch(other, tolerance, found_faces, found_edges))
+
+        return results if results else None
+
+    def touch(
+        self,
+        other: Shape,
+        tolerance: float = 1e-6,
+        _found_faces: ShapeList | None = None,
+        _found_edges: ShapeList | None = None,
+    ) -> ShapeList:
+        """Find boundary contacts between this 2D shape and another shape.
+
+        Returns the highest-dimensional contact at each location, filtered to
+        avoid returning lower-dimensional boundaries of higher-dimensional contacts.
+
+        For Face/Shell:
+        - Face + Face → Vertex (shared corner or crossing point without edge/face overlap)
+        - Face + Edge/Vertex → no touch (intersect already returns dim 0)
+
+        Args:
+            other: Shape to find contacts with
+            tolerance: tolerance for contact detection
+            _found_faces: (internal) pre-found faces to filter against
+            _found_edges: (internal) pre-found edges to filter against
+
+        Returns:
+            ShapeList of contact shapes (Vertex only for 2D+2D)
+        """
+        results: ShapeList = ShapeList()
+
+        if isinstance(other, (Face, Shell)):
+            # Get intersect results to filter against if not provided
+            if _found_faces is None or _found_edges is None:
+                _intersect_results = self._intersect(
+                    other, tolerance, include_touched=False
+                )
+                _found_faces = ShapeList()
+                _found_edges = ShapeList()
+                if _intersect_results:
+                    for r in _intersect_results:
+                        if isinstance(r, Face):
+                            _found_faces.append(r)
+                        elif isinstance(r, Edge):
+                            _found_edges.append(r)
+
+            found_faces = _found_faces
+            found_edges = _found_edges
+
+            # Use BRepExtrema to find all contact points (vertex-vertex, vertex-edge, vertex-face)
+            found_vertices: ShapeList = ShapeList()
+            extrema = BRepExtrema_DistShapeShape(self.wrapped, other.wrapped)
+            if extrema.IsDone() and extrema.Value() <= tolerance:
+                for i in range(1, extrema.NbSolution() + 1):
+                    pnt1 = extrema.PointOnShape1(i)
+                    pnt2 = extrema.PointOnShape2(i)
+                    if pnt1.Distance(pnt2) > tolerance:
+                        continue
+
+                    contact_pt = Vector(pnt1.X(), pnt1.Y(), pnt1.Z())
+                    new_vertex = Vertex(pnt1.X(), pnt1.Y(), pnt1.Z())
+
+                    # Check if point is on edge boundary of either face
+                    on_self_edge = any(
+                        new_vertex.distance_to(e) <= tolerance for e in self.edges()
+                    )
+                    on_other_edge = any(
+                        new_vertex.distance_to(e) <= tolerance for e in other.edges()
+                    )
+
+                    # Skip if point is on edges of both faces (edge-edge intersection)
+                    if on_self_edge and on_other_edge:
+                        continue
+
+                    # For tangent contacts (point in interior of both faces),
+                    # verify normals are parallel or anti-parallel (tangent surfaces)
+                    if not on_self_edge and not on_other_edge:
+                        normal1 = self.normal_at(contact_pt)
+                        normal2 = other.normal_at(contact_pt)
+                        dot = normal1.dot(normal2)
+                        if abs(dot) < 0.99:  # Not parallel or anti-parallel
+                            continue
+
+                    # Filter: only keep vertices that are not boundaries of
+                    # higher-dimensional contacts (faces or edges) and not duplicates
+                    on_face = any(
+                        new_vertex.distance_to(f) <= tolerance for f in found_faces
+                    )
+                    on_edge = any(
+                        new_vertex.distance_to(e) <= tolerance for e in found_edges
+                    )
+                    already = any(
+                        new_vertex.distance_to(v) <= tolerance for v in found_vertices
+                    )
+                    if not on_face and not on_edge and not already:
+                        results.append(new_vertex)
+                        found_vertices.append(new_vertex)
+
+        # Face + Edge/Vertex: no touch (intersect already covers dim 0)
+        # Delegate to other shapes (Compound iterates, others return empty)
+        else:
+            results.extend(other.touch(self, tolerance))
+
+        return results
 
     @abstractmethod
     def location_at(self, *args: Any, **kwargs: Any) -> Location:
