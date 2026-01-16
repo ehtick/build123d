@@ -16,14 +16,19 @@ class Case:
     expected: list | Vector | Location | Axis | Plane
     name: str
     xfail: None | str = None
+    include_touched: bool = False
 
 
 @pytest.mark.skip
-def run_test(obj, target, expected):
+def run_test(obj, target, expected, include_touched=False):
+    # Only Shape objects support include_touched parameter
+    kwargs = {}
+    if include_touched and isinstance(obj, Shape):
+        kwargs["include_touched"] = include_touched
     if isinstance(target, list):
-        result = obj.intersect(*target)
+        result = obj.intersect(*target, **kwargs)
     else:
-        result = obj.intersect(target)
+        result = obj.intersect(target, **kwargs)
     if INTERSECT_DEBUG:
         show([obj, target, result])
     if expected is None:
@@ -50,11 +55,15 @@ def make_params(matrix):
             marks = [pytest.mark.xfail(reason=case.xfail)]
         else:
             marks = []
-        uid = f"{i} {obj_type}, {tar_type}, {case.name}"
-        params.append(pytest.param(case.object, case.target, case.expected, marks=marks, id=uid))
-        if tar_type != obj_type and not isinstance(case.target, list):
-            uid = f"{i + 1} {tar_type}, {obj_type}, {case.name}"
-            params.append(pytest.param(case.target, case.object, case.expected, marks=marks, id=uid))
+        # Add include_touched info to test id if specified
+        touched_suffix = ", touched" if case.include_touched else ""
+        uid = f"{i} {obj_type}, {tar_type}, {case.name}{touched_suffix}"
+        params.append(pytest.param(case.object, case.target, case.expected, case.include_touched, marks=marks, id=uid))
+        # Swap obj and target to test symmetry, but NOT for include_touched tests
+        # (swapping may change behavior with boundary contacts)
+        if tar_type != obj_type and not isinstance(case.target, list) and not case.include_touched:
+            uid = f"{i + 1} {tar_type}, {obj_type}, {case.name}{touched_suffix}"
+            params.append(pytest.param(case.target, case.object, case.expected, case.include_touched, marks=marks, id=uid))
 
     return params
 
@@ -118,9 +127,9 @@ geometry_matrix = [
     Case(lc1, lc1, Location, "coincident, co-z", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(geometry_matrix))
-def test_geometry(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(geometry_matrix))
+def test_geometry(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 
 # Shape test matrices
@@ -147,9 +156,9 @@ shape_0d_matrix = [
     Case(vt1, [vt1, lc1], [Vertex], "multi to_intersect, coincident", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(shape_0d_matrix))
-def test_shape_0d(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_0d_matrix))
+def test_shape_0d(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 
 # 1d Shapes
@@ -216,9 +225,9 @@ shape_1d_matrix = [
     Case(wi5, [ed1, Vector(1, 0)], [Vertex], "multi to_intersect, multi intersect", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(shape_1d_matrix))
-def test_shape_1d(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_1d_matrix))
+def test_shape_1d(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 
 # 2d Shapes
@@ -272,7 +281,9 @@ shape_2d_matrix = [
     Case(fc1, fc3, [Edge], "intersecting", None),
     Case(fc1, fc4, [Face], "coplanar", None),
     Case(fc1, fc5, [Edge], "intersecting edge", None),
-    Case(fc1, fc6, [Vertex], "intersecting vertex", None),
+    # Face + Face crossing vertex: now requires include_touched
+    Case(fc1, fc6, None, "crossing vertex", None),
+    Case(fc1, fc6, [Vertex], "crossing vertex", None, True),
     Case(fc1, fc7, [Edge, Edge], "multi-intersecting", None),
     Case(fc7, Pos(Y=2) * fc7, [Face], "cyl intersecting", None),
 
@@ -287,9 +298,9 @@ shape_2d_matrix = [
     Case(fc7, [wi5, fc1], [Vertex], "multi to_intersect, intersecting", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(shape_2d_matrix))
-def test_shape_2d(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_2d_matrix))
+def test_shape_2d(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 # 3d Shapes
 sl1 = Box(2, 2, 2).solid()
@@ -323,8 +334,10 @@ shape_3d_matrix = [
 
     Case(sl1, ed3, None, "non-coincident", None),
     Case(sl1, ed1, [Edge], "intersecting", None),
-    Case(sl1, Pos(0, 1, 1) * ed1, [Edge], "edge collinear", "duplicate edges, BRepAlgoAPI_Common and _Section both return edge"),
-    Case(sl1, Pos(1, 1, 1) * ed1, [Vertex], "corner coincident", None),
+    Case(sl1, Pos(0, 1, 1) * ed1, [Edge], "edge collinear", None),  # xfail removed
+    # Solid + Edge corner coincident: now requires include_touched
+    Case(sl1, Pos(1, 1, 1) * ed1, None, "corner coincident", None),
+    Case(sl1, Pos(1, 1, 1) * ed1, [Vertex], "corner coincident", None, True),
     Case(Pos(2.1, 1) * sl1, ed4, [Edge, Edge], "multi-intersect", None),
 
     Case(Pos(2, .5, -1) * sl1, wi6, None, "non-coincident", None),
@@ -333,8 +346,12 @@ shape_3d_matrix = [
 
     Case(sl2, fc1, None, "non-coincident", None),
     Case(sl1, fc1, [Face], "intersecting", None),
-    Case(Pos(3.5, 0, 1) * sl1, fc1, [Edge], "edge collinear", None),
-    Case(Pos(3.5, 3.5) * sl1, fc1, [Vertex], "corner coincident", None),
+    # Solid + Face edge collinear: now requires include_touched
+    Case(Pos(3.5, 0, 1) * sl1, fc1, None, "edge collinear", None),
+    Case(Pos(3.5, 0, 1) * sl1, fc1, [Edge], "edge collinear", None, True),
+    # Solid + Face corner coincident: now requires include_touched
+    Case(Pos(3.5, 3.5) * sl1, fc1, None, "corner coincident", None),
+    Case(Pos(3.5, 3.5) * sl1, fc1, [Vertex], "corner coincident", None, True),
     Case(Pos(.9) * sl1, fc7, [Face, Face], "multi-intersecting", None),
 
     Case(sl2, sh1, None, "non-coincident", None),
@@ -342,17 +359,24 @@ shape_3d_matrix = [
 
     Case(sl1, sl2, None, "non-coincident", None),
     Case(sl1, Pos(1, 1, 1) * sl1, [Solid], "intersecting", None),
-    Case(sl1, Pos(2, 2, 1) * sl1, [Edge], "edge collinear", None),
-    Case(sl1, Pos(2, 2, 2) * sl1, [Vertex], "corner coincident", None),
+    # Solid + Solid edge collinear: now requires include_touched
+    Case(sl1, Pos(2, 2, 1) * sl1, None, "edge collinear", None),
+    Case(sl1, Pos(2, 2, 1) * sl1, [Edge], "edge collinear", None, True),
+    # Solid + Solid corner coincident: now requires include_touched
+    Case(sl1, Pos(2, 2, 2) * sl1, None, "corner coincident", None),
+    Case(sl1, Pos(2, 2, 2) * sl1, [Vertex], "corner coincident", None, True),
     Case(sl1, Pos(.45) * sl3, [Solid, Solid], "multi-intersect", None),
+    # New test: Solid + Solid face coincident (touch)
+    Case(sl1, Pos(2, 0, 0) * sl1, None, "face coincident", None),
+    Case(sl1, Pos(2, 0, 0) * sl1, [Face], "face coincident", None, True),
 
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid], "multi to_intersect, intersecting", None),
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(Z=.5) * fc1], [Face], "multi to_intersect, intersecting", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(shape_3d_matrix))
-def test_shape_3d(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_3d_matrix))
+def test_shape_3d(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 # Compound Shapes
 cp1 = Compound(GridLocations(5, 0, 2, 1) * Vertex())
@@ -400,15 +424,15 @@ shape_compound_matrix = [
 
     Case(cp2, [cp3, cp4], [Edge, Edge], "multi to_intersect, intersecting", None),
 
-    Case(cv1, cp3, [Edge, Edge], "intersecting", "duplicate edges, BRepAlgoAPI_Common and _Section both return edge"),
+    Case(cv1, cp3, [Edge, Edge, Edge, Edge], "intersecting", None),  # xfail removed
     Case(sk1, cp3, [Face, Face], "intersecting", None),
     Case(pt1, cp3, [Face, Face], "intersecting", None),
 
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(shape_compound_matrix))
-def test_shape_compound(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_compound_matrix))
+def test_shape_compound(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 # FreeCAD issue example
 c1 = CenterArc((0, 0), 10, 0, 360).edge()
@@ -437,9 +461,9 @@ freecad_matrix = [
     Case(c2, vert, [Vertex], "circle, vert, intersect", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(freecad_matrix))
-def test_freecad(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(freecad_matrix))
+def test_freecad(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 
 # Issue tests
@@ -460,9 +484,9 @@ issues_matrix = [
     Case(e1, f1, [Edge], "issue #697", None),
 ]
 
-@pytest.mark.parametrize("obj, target, expected", make_params(issues_matrix))
-def test_issues(obj, target, expected):
-    run_test(obj, target, expected)
+@pytest.mark.parametrize("obj, target, expected, include_touched", make_params(issues_matrix))
+def test_issues(obj, target, expected, include_touched):
+    run_test(obj, target, expected, include_touched)
 
 
 # Exceptions
