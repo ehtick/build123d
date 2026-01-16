@@ -225,9 +225,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         Returns:
             Edge: extruded shape
         """
-        return Compound(
-            TopoDS.Compound(_extrude_topods_shape(obj.wrapped, direction))
-        )
+        return Compound(TopoDS.Compound(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_text(
@@ -389,10 +387,15 @@ class Compound(Mixin3D[TopoDS_Compound]):
             return face
 
         # Outline single line text
+        # offset_2d distance is radius, treat single_line_width as diameter/overall height
         if system_font.IsSingleStrokeFont() and single_line_width > 0:
-            outline = [e.offset_2d(single_line_width) for e in text_flat.edges()]
+            outline = [e.offset_2d(single_line_width / 2) for e in text_flat.edges()]
             outline = [_make_face(o.edges()) for o in outline]
             text_flat = Compound([]) + outline
+            if any([not f.is_valid for f in text_flat.get_top_level_shapes()]):
+                raise ValueError(
+                    f"single_line_width ({single_line_width}) is too large for the text and produces invalid faces. Try a smaller width"
+                )
 
         return text_flat
 
