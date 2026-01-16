@@ -182,6 +182,7 @@ class TestExportGltf(DirectApiTestCase):
             gltf_json_str = file.read()
         gltf_json = json.loads(gltf_json_str)
         self.assertEqual(gltf_json["meshes"][0]["name"], box.label)
+        self.assertEqual(gltf_json["nodes"][0]["name"], box.label)
         os.remove("box.gltf")
         os.remove("box.bin")
 
