@@ -259,7 +259,7 @@ class Mixin3D(Shape[TOPODS]):
                 topo_face = edge_face_map.FindFromKey(native_edge).First()
 
             chamfer_builder.Add(
-                distance1, distance2, native_edge, TopoDS.Face_s(topo_face)
+                distance1, distance2, native_edge, TopoDS.Face(topo_face)
             )  # NB: edge_face_map return a generic TopoDS_Shape
 
         try:
@@ -837,7 +837,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         Returns:
             Edge: extruded shape
         """
-        return Solid(TopoDS.Solid_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Solid(TopoDS.Solid(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def extrude_linear_with_rotation(
@@ -924,10 +924,10 @@ class Solid(Mixin3D[TopoDS_Solid]):
 
         # convert to a TopoDS_Solid - might be wrapped in a TopoDS_Compound
         try:
-            result = TopoDS.Solid_s(difference)
+            result = TopoDS.Solid(difference)
         except Standard_TypeMismatch:
-            result = TopoDS.Solid_s(
-                unwrap_topods_compound(TopoDS.Compound_s(difference), True)
+            result = TopoDS.Solid(
+                unwrap_topods_compound(TopoDS.Compound(difference), True)
             )
 
         return Solid(result)
@@ -971,7 +971,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 direction.length / cos(radians(taper)),
                 radians(taper),
             )
-            new_solid = Solid(TopoDS.Solid_s(prism_builder.Shape()))
+            new_solid = Solid(TopoDS.Solid(prism_builder.Shape()))
         else:
             # Determine the offset to get the taper
             offset_amt = -direction.length * tan(radians(taper))
@@ -1072,10 +1072,10 @@ class Solid(Mixin3D[TopoDS_Solid]):
         modified_target_faces = []
         face_explorer = TopExp_Explorer(target.wrapped, ta.TopAbs_FACE)
         while face_explorer.More():
-            target_face = TopoDS.Face_s(face_explorer.Current())
+            target_face = TopoDS.Face(face_explorer.Current())
             modified_los: TopTools_ListOfShape = history.Modified(target_face)
             while not modified_los.IsEmpty():
-                modified_face = TopoDS.Face_s(modified_los.First())
+                modified_face = TopoDS.Face(modified_los.First())
                 modified_los.RemoveFirst()
                 modified_target_faces.append(modified_face)
             face_explorer.Next()
@@ -1150,7 +1150,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: Box
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeBox(
                     plane.to_gp_ax2(),
                     length,
@@ -1184,7 +1184,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: Full or partial cone
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeCone(
                     plane.to_gp_ax2(),
                     base_radius,
@@ -1217,7 +1217,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: Full or partial cylinder
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeCylinder(
                     plane.to_gp_ax2(),
                     radius,
@@ -1245,7 +1245,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         Returns:
             Solid: Lofted object
         """
-        return cls(TopoDS.Solid_s(_make_loft(objs, True, ruled)))
+        return cls(TopoDS.Solid(_make_loft(objs, True, ruled)))
 
     @classmethod
     def make_sphere(
@@ -1271,7 +1271,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: sphere
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeSphere(
                     plane.to_gp_ax2(),
                     radius,
@@ -1307,7 +1307,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: Full or partial torus
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeTorus(
                     plane.to_gp_ax2(),
                     major_radius,
@@ -1347,7 +1347,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             Solid: wedge
         """
         return cls(
-            TopoDS.Solid_s(
+            TopoDS.Solid(
                 BRepPrimAPI_MakeWedge(
                     plane.to_gp_ax2(),
                     delta_x,
@@ -1396,7 +1396,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
             True,
         )
 
-        return cls(TopoDS.Solid_s(revol_builder.Shape()))
+        return cls(TopoDS.Solid(revol_builder.Shape()))
 
     @classmethod
     def sweep(
@@ -1544,7 +1544,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         if make_solid:
             builder.MakeSolid()
 
-        return cls(TopoDS.Solid_s(builder.Shape()))
+        return cls(TopoDS.Solid(builder.Shape()))
 
     @classmethod
     def thicken(
@@ -1600,7 +1600,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         )
         offset_builder.MakeOffsetShape()
         try:
-            result = Solid(TopoDS.Solid_s(offset_builder.Shape()))
+            result = Solid(TopoDS.Solid(offset_builder.Shape()))
         except StdFail_NotDone as err:
             raise RuntimeError("Error applying thicken to given surface") from err
 
@@ -1647,7 +1647,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
 
         try:
             draft_angle_builder.Build()
-            result = Solid(TopoDS.Solid_s(draft_angle_builder.Shape()))
+            result = Solid(TopoDS.Solid(draft_angle_builder.Shape()))
         except StdFail_NotDone as err:
             raise DraftAngleError(
                 "Draft build failed on the given solid.",

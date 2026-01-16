@@ -295,7 +295,7 @@ class TestCounterSinkHole(unittest.TestCase):
 
 
 class TestCylinder(unittest.TestCase):
-    def test_simple_torus(self):
+    def test_simple_cylinder(self):
         with BuildPart() as test:
             Cylinder(2, 10)
         self.assertAlmostEqual(test.part.volume, pi * 2**2 * 10, 5)
@@ -691,6 +691,19 @@ class TestWedge(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             Wedge(1, 1, 0, 0, 0, 2, 5)
+
+
+class TestConvexPolyhedron(unittest.TestCase):
+    def test_convex_polyhedron(self):
+        with BuildPart() as test:
+            Box(30, 20, 20)
+            Box(20, 30, 20)
+            Box(20, 20, 30)
+            with Locations((10, 0, 0)):
+                Box(40, 23, 23)
+            ConvexPolyhedron(test.vertices())
+        self.assertAlmostEqual(test.part.volume, 33876.66666666667, 5)
+        self.assertEqual(len(test.faces()), 26)
 
 
 if __name__ == "__main__":

@@ -175,6 +175,15 @@ class ObjectTests(unittest.TestCase):
         self.assertTupleAlmostEquals(s.bounding_box().min, (-0.5, -0.5, -0.5), 3)
         self.assertTupleAlmostEquals(s.bounding_box().max, (0.5, 0.5, 0.5), 3)
 
+    def test_convex_polyhedron(self):
+        base = Box(30, 20, 20)
+        base += Box(20, 30, 20)
+        base += Box(20, 20, 30)
+        base += Pos(10, 0, 0) * Box(40, 23, 23)
+        part = ConvexPolyhedron(base.vertices())
+        self.assertAlmostEqual(part.volume, 33876.66666666667, 5)
+        self.assertEqual(len(part.faces()), 26)
+
     def test_hole(self):
         obj = Box(10, 10, 10)
         obj -= Hole(3, 10)

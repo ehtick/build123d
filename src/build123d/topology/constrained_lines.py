@@ -678,7 +678,7 @@ def _make_tan_on_rad_arcs(
 
         # Project center onto the (trimmed) 2D locus
         proj = Geom2dAPI_ProjectPointOnCurve(center2d, h_on2d)
-        u_on = proj.Parameter(1)
+        u_on = tcast(float, proj.Parameter(1))
 
         # Respect the trimmed interval (handles periodic curves too)
         if not _param_in_trim(u_on, on_first, on_last, h_on2d):

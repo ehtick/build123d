@@ -236,7 +236,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             Edge: extruded shape
         """
         return Compound(
-            TopoDS.Compound_s(_extrude_topods_shape(obj.wrapped, direction))
+            TopoDS.Compound(_extrude_topods_shape(obj.wrapped, direction))
         )
 
     @classmethod
@@ -376,7 +376,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         )
 
         text_flat = Compound(
-            TopoDS.Compound_s(
+            TopoDS.Compound(
                 builder.Perform(
                     font_i,
                     NCollection_Utf8String(txt),

@@ -88,7 +88,12 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.GC import GC_MakeArcOfCircle, GC_MakeArcOfEllipse
+from OCP.GC import (
+    GC_MakeArcOfCircle,
+    GC_MakeArcOfEllipse,
+    GC_MakeArcOfParabola,
+    GC_MakeArcOfHyperbola,
+)
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
@@ -151,6 +156,8 @@ from OCP.gp import (
     gp_Dir,
     gp_Dir2d,
     gp_Elips,
+    gp_Parab,
+    gp_Hypr,
     gp_Pln,
     gp_Pnt,
     gp_Pnt2d,
@@ -473,7 +480,9 @@ class Mixin1D(Shape[TOPODS]):
             middle = self.bounding_box().center()
         return middle
 
-    def common_plane(self, *lines: Edge | Wire | None) -> None | Plane:
+    def common_plane(
+        self, *lines: Edge | Wire | None, tolerance: float = TOLERANCE
+    ) -> None | Plane:
         """common_plane
 
         Find the plane containing all the edges/wires (including self). If there
@@ -482,6 +491,7 @@ class Mixin1D(Shape[TOPODS]):
 
         Args:
             lines (sequence of Edge | Wire): edges in common with self
+            tolerance (float): amount lines can deviate from plane. Defaults to TOLERANCE.
 
         Returns:
             None |  Plane: Either the common plane or None
@@ -505,8 +515,7 @@ class Mixin1D(Shape[TOPODS]):
                 origin = as_axis[0].position
                 x_dir = as_axis[0].direction
                 z_dir = Plane(as_axis[0]).x_dir
-                c_plane = Plane(origin, z_dir=z_dir)
-                result = c_plane.shift_origin((0, 0))
+                result = Plane(origin, z_dir=z_dir)
 
         if result is None:  # not coaxial
             # Shorten any infinite lines (from converted Axis)
@@ -537,16 +546,26 @@ class Mixin1D(Shape[TOPODS]):
                 c_plane = Plane(
                     origin=(sum(extremes, Vector(0, 0, 0)) / 3), z_dir=z_dir
                 )
-                c_plane = c_plane.shift_origin((0, 0))
             except ValueError:
                 # There is no valid common plane
                 result = None
             else:
                 # Are all of the points on the common plane
-                common = all(c_plane.contains(p) for p in points)
+                common = all(c_plane.contains(p, tolerance) for p in points)
                 result = c_plane if common else None
 
-        return result
+        if result is None:
+            return result
+
+        # Center the plane on the lines
+        global_center = sum(
+            [e.position_at(0.5) for e in all_lines], start=Vector(0, 0, 0)
+        ) / len(all_lines)
+        center_axis = Axis(global_center, result.z_dir)
+        plane_origin = result.intersect(center_axis)
+        assert isinstance(plane_origin, Vector)
+
+        return result.shift_origin(plane_origin)
 
     def curvature_comb(
         self, count: int = 100, max_tooth_size: float | None = None
@@ -1506,7 +1525,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         """
         if not obj:
             raise ValueError("Can't extrude empty vertex")
-        return Edge(TopoDS.Edge_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Edge(TopoDS.Edge(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_bezier(
@@ -2040,6 +2059,95 @@ class Edge(Mixin1D[TopoDS_Edge]):
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_geom).Edge())
 
         return ellipse
+
+    @classmethod
+    def make_parabola(
+        cls,
+        focal_length: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 0.0,
+        end_angle: float = 90.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make parabola
+
+        Makes an parabola centered at the origin of plane.
+
+        Args:
+            focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 0.0.
+            end_angle (float, optional): Defaults to 90.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial parabola
+        """
+        parabola_gp = gp_Parab(plane.to_gp_ax2(), focal_length)
+
+        parabola_geom = GC_MakeArcOfParabola(
+            parabola_gp,
+            start_angle * DEG2RAD,
+            end_angle * DEG2RAD,
+            angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+        ).Value()
+        parabola = cls(BRepBuilderAPI_MakeEdge(parabola_geom).Edge())
+
+        return parabola
+
+    @classmethod
+    def make_hyperbola(
+        cls,
+        x_radius: float,
+        y_radius: float,
+        plane: Plane = Plane.XY,
+        start_angle: float = 360.0,
+        end_angle: float = 360.0,
+        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+    ) -> Edge:
+        """make hyperbola
+
+        Makes a hyperbola centered at the origin of plane.
+
+        Args:
+            x_radius (float): x radius of the hyperbola (along the x-axis of plane)
+            y_radius (float): y radius of the hyperbola (along the y-axis of plane)
+            plane (Plane, optional): base plane. Defaults to Plane.XY.
+            start_angle (float, optional): Defaults to 360.0.
+            end_angle (float, optional): Defaults to 360.0.
+            angular_direction (AngularDirection, optional): arc direction.
+                Defaults to AngularDirection.COUNTER_CLOCKWISE.
+
+        Returns:
+            Edge: full or partial hyperbola
+        """
+        ax1 = gp_Ax1(plane.origin.to_pnt(), plane.z_dir.to_dir())
+
+        if y_radius > x_radius:
+            # swap x and y radius and rotate by 90° afterwards to create an ellipse
+            # with x_radius < y_radius
+            correction_angle = 90.0 * DEG2RAD
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), y_radius, x_radius).Rotated(
+                ax1, correction_angle
+            )
+        else:
+            correction_angle = 0.0
+            hyperbola_gp = gp_Hypr(plane.to_gp_ax2(), x_radius, y_radius)
+
+        if start_angle == end_angle:  # full hyperbola case
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_gp).Edge())
+        else:  # arc case
+            # take correction_angle into account
+            hyperbola_geom = GC_MakeArcOfHyperbola(
+                hyperbola_gp,
+                start_angle * DEG2RAD - correction_angle,
+                end_angle * DEG2RAD - correction_angle,
+                angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+            ).Value()
+            hyperbola = cls(BRepBuilderAPI_MakeEdge(hyperbola_geom).Edge())
+
+        return hyperbola
 
     @classmethod
     def make_helix(
@@ -2759,7 +2867,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Edge]:
+    ) -> ShapeList[Edge]:
         """Project Edge
 
         Project an Edge onto a Shape generating new wires on the surfaces of the object
@@ -2785,10 +2893,8 @@ class Edge(Mixin1D[TopoDS_Edge]):
           ValueError: Only one of direction or center must be provided
 
         """
-        wire = Wire([self])
-        projected_wires = wire.project_to_shape(target_object, direction, center)
-        projected_edges = [w.edges()[0] for w in projected_wires]
-        return projected_edges
+        projected_wires = Wire(self).project_to_shape(target_object, direction, center)
+        return projected_wires.edges()
 
     def reversed(self, reconstruct: bool = False) -> Edge:
         """reversed
@@ -2817,7 +2923,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
             topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
             reversed_edge.wrapped = topods_edge
         else:
-            reversed_edge.wrapped = TopoDS.Edge_s(self.wrapped.Reversed())
+            reversed_edge.wrapped = TopoDS.Edge(self.wrapped.Reversed())
         return reversed_edge
 
     def to_axis(self) -> Axis:
@@ -3509,8 +3615,8 @@ class Wire(Mixin1D[TopoDS_Wire]):
             edge1, edge2 = Wire.order_chamfer_edges(reference_edge, edges)
             if edge1.wrapped is not None and edge2.wrapped is not None:
                 chamfer_builder.AddChamfer(
-                    TopoDS.Edge_s(edge1.wrapped),
-                    TopoDS.Edge_s(edge2.wrapped),
+                    TopoDS.Edge(edge1.wrapped),
+                    TopoDS.Edge(edge2.wrapped),
                     distance,
                     distance2,
                 )
@@ -3777,7 +3883,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         target_object: Shape,
         direction: VectorLike | None = None,
         center: VectorLike | None = None,
-    ) -> list[Wire]:
+    ) -> ShapeList[Wire]:
         """Project Wire
 
         Project a Wire onto a Shape generating new wires on the surfaces of the object
@@ -3831,7 +3937,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
             )
 
         # Generate a list of the projected wires with aligned orientation
-        output_wires = []
+        output_wires: ShapeList[Wire] = ShapeList()
         target_orientation = self.wrapped.Orientation()
         while projection_object.More():
             projected_wire = projection_object.Current()
@@ -3877,9 +3983,12 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 "projected, filtered and sorted wire list is of length %d",
                 len(output_wires_distances),
             )
-            output_wires = [w[0] for w in output_wires_distances]
+            output_wires = ShapeList([w[0] for w in output_wires_distances])
 
-        return output_wires
+        # Clean the wires remove cases where projection artificially split edges
+        cleaned_wires = ShapeList([w.clean() for w in output_wires])
+
+        return cleaned_wires
 
     def stitch(self, other: Wire) -> Wire:
         """Attempt to stitch wires
@@ -3897,8 +4006,8 @@ class Wire(Mixin1D[TopoDS_Wire]):
             raise ValueError("Can't stitch empty wires")
 
         wire_builder = BRepBuilderAPI_MakeWire()
-        wire_builder.Add(TopoDS.Wire_s(self.wrapped))
-        wire_builder.Add(TopoDS.Wire_s(other.wrapped))
+        wire_builder.Add(TopoDS.Wire(self.wrapped))
+        wire_builder.Add(TopoDS.Wire(other.wrapped))
         wire_builder.Build()
 
         return self.__class__.cast(wire_builder.Wire())
@@ -4049,7 +4158,7 @@ def edges_to_wires(edges: Iterable[Edge], tol: float = 1e-6) -> ShapeList[Wire]:
     wires: ShapeList[Wire] = ShapeList()
     for i in range(wires_out.Length()):
         # wires.append(Wire(downcast(wires_out.Value(i + 1))))
-        wires.append(Wire(TopoDS.Wire_s(wires_out.Value(i + 1))))
+        wires.append(Wire(TopoDS.Wire(wires_out.Value(i + 1))))
 
     return wires
 
@@ -4154,6 +4263,6 @@ def topo_explore_connected_faces(
         for face in edge_face_map.FindFromKey(edge.wrapped):
             unique_face_map.Add(face)
     for i in range(unique_face_map.Extent()):
-        unique_faces.append(TopoDS.Face_s(unique_face_map(i + 1)))
+        unique_faces.append(TopoDS.Face(unique_face_map(i + 1)))
 
     return unique_faces

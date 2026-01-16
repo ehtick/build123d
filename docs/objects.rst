@@ -118,6 +118,20 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Elliptical arc defined by center,  radii & angles
 
+    .. grid-item-card:: :class:`~objects_curve.ParabolicCenterArc`
+
+        .. image:: assets/parabolic_center_arc_example.svg
+
+        +++
+        Parabolic arc defined by vertex, focal length & angles
+
+    .. grid-item-card:: :class:`~objects_curve.HyperbolicCenterArc`
+
+        .. image:: assets/hyperbolic_center_arc_example.svg
+
+        +++
+        Hyperbolic arc defined by center, radii & angles
+
     .. grid-item-card:: :class:`~objects_curve.FilletPolyline`
 
         .. image:: assets/filletpolyline_example.svg
@@ -241,6 +255,8 @@ Reference
 .. autoclass:: CenterArc
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
+.. autoclass:: ParabolicCenterArc
+.. autoclass:: HyperbolicCenterArc
 .. autoclass:: FilletPolyline
 .. autoclass:: Helix
 .. autoclass:: IntersectingLine
@@ -439,6 +455,13 @@ Reference
         +++
         Cone defined by radii and height
 
+    .. grid-item-card:: :class:`~objects_part.ConvexPolyhedron`
+
+        .. image:: assets/convex_polyhedron_example.svg
+
+        +++
+        Convex Polyhedron defined by points
+
     .. grid-item-card:: :class:`~objects_part.CounterBoreHole`
 
         .. image:: assets/counter_bore_hole_example.svg
@@ -496,6 +519,7 @@ Reference
 .. autoclass:: BasePartObject
 .. autoclass:: Box
 .. autoclass:: Cone
+.. autoclass:: ConvexPolyhedron
 .. autoclass:: CounterBoreHole
 .. autoclass:: CounterSinkHole
 .. autoclass:: Cylinder

@@ -174,6 +174,53 @@ class BuildLineTests(unittest.TestCase):
         self.assertLessEqual(bbox.max.Y, 5)
         self.assertTrue(isinstance(e1, Edge))
 
+    def test_parabolic_center_arc(self):
+        # General conic section equation: (1+K)x^2-2Rx+y^2=0
+        # parabola (K = -1) => -2Rx+y^2=0
+        center = (0, 0)
+        C = 1
+        R = 1 / C
+        focal_length = R / 2
+        with BuildLine() as el:
+            ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = el.line.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+
+        e1 = ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = e1.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+        self.assertTrue(isinstance(e1, Edge))
+
+    def test_hyperbolic_center_arc(self):
+        # General conic section equation: (1+K)x^2-2Rx+y^2=0
+        # hyperbola (K < -1)
+        center = (0, 0)
+        C = 1
+        R = 1 / C
+        K = -2 # => -(x^2)-2Rx+y^2=0
+        a, b = R / (-K - 1), R / sqrt(-K - 1)
+        with BuildLine() as el:
+            HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = el.line.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+
+        e1 = HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        bbox = e1.bounding_box()
+        self.assertGreaterEqual(bbox.min.X, -10)
+        self.assertGreaterEqual(bbox.min.Y, 0)
+        self.assertLessEqual(bbox.max.X, 10)
+        self.assertLessEqual(bbox.max.Y, 5)
+        self.assertTrue(isinstance(e1, Edge))
+
     def test_filletpolyline(self):
         with BuildLine(Plane.YZ):
             p = FilletPolyline(

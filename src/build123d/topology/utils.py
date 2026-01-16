@@ -255,7 +255,7 @@ def _make_topods_face_from_wires(
     # fix outer wire
     sf_s = ShapeFix_Shape(outer_wire)
     sf_s.Perform()
-    topo_wire = TopoDS.Wire_s(sf_s.Shape())
+    topo_wire = TopoDS.Wire(sf_s.Shape())
 
     face_builder = BRepBuilderAPI_MakeFace(topo_wire, True)
 
@@ -264,7 +264,7 @@ def _make_topods_face_from_wires(
             raise ValueError("Cannot build face(s): inner wire is not closed")
         sf_s = ShapeFix_Shape(inner_wire)
         sf_s.Perform()
-        fixed_inner_wire = TopoDS.Wire_s(sf_s.Shape())
+        fixed_inner_wire = TopoDS.Wire(sf_s.Shape())
         face_builder.Add(fixed_inner_wire)
 
     face_builder.Build()
@@ -278,7 +278,7 @@ def _make_topods_face_from_wires(
     sf_f.FixOrientation()
     sf_f.Perform()
 
-    return TopoDS.Face_s(sf_f.Result())
+    return TopoDS.Face(sf_f.Result())
 
 
 def delta(shapes_one: Iterable[Shape], shapes_two: Iterable[Shape]) -> list[Shape]:
