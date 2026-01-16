@@ -2606,6 +2606,26 @@ class ShapeList(list[T]):
         """Differences between two ShapeLists operator -"""
         return ShapeList(set(self) - set(other))
 
+    def expand(self) -> ShapeList:
+        """Expand by dissolving compounds, wires, and shells, filtering nulls.
+
+        Returns:
+            ShapeList with compounds dissolved to children, wires to edges,
+            shells to faces, and nulls filtered out
+        """
+        expanded: ShapeList = ShapeList()
+        for shape in self:
+            if hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Compound):
+                # Recursively expand nested compounds
+                expanded.extend(ShapeList(list(shape)).expand())
+            elif hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Shell):
+                expanded.extend(shape.faces())
+            elif hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Wire):
+                expanded.extend(shape.edges())
+            elif not shape.is_null:
+                expanded.append(shape)
+        return expanded
+
     def center(self) -> Vector:
         """The average of the center of objects within the ShapeList"""
         if not self:
