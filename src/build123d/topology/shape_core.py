@@ -2271,7 +2271,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args: Iterable[Shape],
         tools: Iterable[Shape],
         operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter,
-    ) -> Self | ShapeList[Self]:
+        as_list: bool = False,
+    ) -> Self | ShapeList:
         """Generic boolean operation
 
         Args:
@@ -2279,8 +2280,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
           tools: Iterable[Shape]:
           operation: Union[BRepAlgoAPI_BooleanOperation:
           BRepAlgoAPI_Splitter]:
+          as_list: If True, always return ShapeList (wrapping single results,
+            returning empty ShapeList for null results)
 
         Returns:
+            Shape, ShapeList, or empty ShapeList depending on result and as_list
 
         """
         args = list(args)
@@ -2339,6 +2343,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         result = highest_order[0].cast(topo_result)
         base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
+
+        # Handle as_list mode
+        if as_list:
+            if result.is_null:
+                return ShapeList()
+            return ShapeList([result])
 
         return result
 
