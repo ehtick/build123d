@@ -29,10 +29,11 @@ license:
 import colorsys
 import copy
 import math
+
 import numpy as np
 import pytest
-
 from OCP.Quantity import Quantity_ColorRGBA
+
 from build123d.geometry import Color
 
 
@@ -250,7 +251,7 @@ def test_str_repr_is():
 
 def test_str_repr_near():
     c = Color(1, 0.5, 0)
-    assert str(c) == "Color: (1.0, 0.5, 0.0, 1.0) near 'DARKGOLDENROD1'"
+    assert str(c) == "Color: (1.0, 0.5, 0.0, 1.0) near 'DARKORANGE1'"
     assert repr(c) == "Color(1.0, 0.5, 0.0, 1.0)"
 
 

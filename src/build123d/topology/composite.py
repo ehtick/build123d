@@ -226,7 +226,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             Edge: extruded shape
         """
         return Compound(
-            TopoDS.Compound_s(_extrude_topods_shape(obj.wrapped, direction))
+            TopoDS.Compound(_extrude_topods_shape(obj.wrapped, direction))
         )
 
     @classmethod
@@ -358,7 +358,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             brep_font.SetCompositeCurveMode(False)
 
         text_flat = Compound(
-            TopoDS.Compound_s(
+            TopoDS.Compound(
                 builder.Perform(
                     brep_font,
                     NCollection_Utf8String(txt),

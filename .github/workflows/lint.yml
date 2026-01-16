@@ -12,6 +12,6 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-
+          optional-dependencies: "development"
       - name: lint
         run: pylint --rcfile=.pylintrc --fail-under=9.5 src/build123d

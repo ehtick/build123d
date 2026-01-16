@@ -115,6 +115,13 @@ A gear generation framework that allows easy creation of a wide range of gears a
 
 See `gggears <https://github.com/GarryBGoode/gggears>`_
 
+bd_vslot
+=================
+
+A library of V-Slot linear rail components, including V-Slot rails.
+
+See: `bd_vslot <https://bd-vslot.readthedocs.io>`_
+
 *****
 Tools
 *****

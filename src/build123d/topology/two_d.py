@@ -172,8 +172,6 @@ T = TypeVar("T", Edge, Wire, "Face")
 class Mixin2D(ABC, Shape[TOPODS]):
     """Additional methods to add to Face and Shell class"""
 
-    # project_to_viewport = Mixin1D.project_to_viewport
-
     # ---- Properties ----
 
     @property
@@ -1032,7 +1030,7 @@ class Face(Mixin2D[TopoDS_Face]):
         """
         if not obj:
             raise ValueError("Can't extrude empty object")
-        return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Face(TopoDS.Face(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_bezier_surface(
@@ -1482,7 +1480,7 @@ class Face(Mixin2D[TopoDS_Face]):
 
         try:
             patch.Build()
-            result = cls(TopoDS.Face_s(patch.Shape()))
+            result = cls(TopoDS.Face(patch.Shape()))
         except (
             Standard_Failure,
             StdFail_NotDone,
@@ -1688,15 +1686,15 @@ class Face(Mixin2D[TopoDS_Face]):
             # Index or iterator access to OCP.TopTools.TopTools_ListOfShape is slow on M1 macs
             # Using First() and Last() to omit
             edges = (
-                Edge(TopoDS.Edge_s(edge_list.First())),
-                Edge(TopoDS.Edge_s(edge_list.Last())),
+                Edge(TopoDS.Edge(edge_list.First())),
+                Edge(TopoDS.Edge(edge_list.Last())),
             )
 
             edge1, edge2 = Wire.order_chamfer_edges(reference_edge, edges)
 
             chamfer_builder.AddChamfer(
-                TopoDS.Edge_s(edge1.wrapped),
-                TopoDS.Edge_s(edge2.wrapped),
+                TopoDS.Edge(edge1.wrapped),
+                TopoDS.Edge(edge2.wrapped),
                 distance,
                 distance2,
             )
@@ -2080,7 +2078,7 @@ class Face(Mixin2D[TopoDS_Face]):
                     BRepAlgoAPI_Common(),
                 )
                 for topods_shell in get_top_level_topods_shapes(topods_shape):
-                    intersected_shapes.append(Shell(TopoDS.Shell_s(topods_shell)))
+                    intersected_shapes.append(Shell(TopoDS.Shell(topods_shell)))
 
         intersected_shapes = intersected_shapes.sort_by(Axis(self.center(), direction))
         projected_shapes: ShapeList[Face | Shell] = ShapeList()
@@ -2137,7 +2135,7 @@ class Face(Mixin2D[TopoDS_Face]):
         for hole_wire in inner_wires:
             reshaper.Remove(hole_wire.wrapped)
         modified_shape = downcast(reshaper.Apply(self.wrapped))
-        holeless.wrapped = TopoDS.Face_s(modified_shape)
+        holeless.wrapped = TopoDS.Face(modified_shape)
         return holeless
 
     def wire(self) -> Wire:
@@ -2541,7 +2539,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             obj = shell
         elif isinstance(obj, Iterable):
             try:
-                obj = TopoDS.Shell_s(_sew_topods_faces([f.wrapped for f in obj]))
+                obj = TopoDS.Shell(_sew_topods_faces([f.wrapped for f in obj]))
             except Standard_TypeMismatch:
                 raise TypeError("Unable to create Shell, invalid input type")
 
@@ -2584,7 +2582,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         Returns:
             Edge: extruded shape
         """
-        return Shell(TopoDS.Shell_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Shell(TopoDS.Shell(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_loft(cls, objs: Iterable[Vertex | Wire], ruled: bool = False) -> Shell:
@@ -2604,7 +2602,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         Returns:
             Shell: Lofted object
         """
-        return cls(TopoDS.Shell_s(_make_loft(objs, False, ruled)))
+        return cls(TopoDS.Shell(_make_loft(objs, False, ruled)))
 
     @classmethod
     def revolve(
@@ -2630,7 +2628,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             profile.wrapped, axis.wrapped, angle * DEG2RAD, True
         )
 
-        return cls(TopoDS.Shell_s(revol_builder.Shape()))
+        return cls(TopoDS.Shell(revol_builder.Shape()))
 
     @classmethod
     def sweep(
@@ -2658,7 +2656,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         builder.Add(profile.wrapped, False, False)
         builder.SetTransitionMode(Shape._transModeDict[transition])
         builder.Build()
-        result = Shell(TopoDS.Shell_s(builder.Shape()))
+        result = Shell(TopoDS.Shell(builder.Shape()))
         if SkipClean.clean:
             result = result.clean()
 

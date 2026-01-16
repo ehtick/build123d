@@ -23,6 +23,8 @@ Cheat Sheet
             | :class:`~objects_curve.CenterArc`
             | :class:`~objects_curve.DoubleTangentArc`
             | :class:`~objects_curve.EllipticalCenterArc`
+            | :class:`~objects_curve.ParabolicCenterArc`
+            | :class:`~objects_curve.HyperbolicCenterArc`
             | :class:`~objects_curve.FilletPolyline`
             | :class:`~objects_curve.Helix`
             | :class:`~objects_curve.IntersectingLine`
@@ -63,6 +65,7 @@ Cheat Sheet
 
             | :class:`~objects_part.Box`
             | :class:`~objects_part.Cone`
+            | :class:`~objects_part.ConvexPolyhedron`
             | :class:`~objects_part.CounterBoreHole`
             | :class:`~objects_part.CounterSinkHole`
             | :class:`~objects_part.Cylinder`
