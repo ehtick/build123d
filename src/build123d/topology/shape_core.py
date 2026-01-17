@@ -1379,7 +1379,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         # Chained iteration for AND semantics: c.intersect(s1, s2) = c ∩ s1 ∩ s2
         common_set = ShapeList([self])
         for other in shapes:
-            next_set = ShapeList()
+            next_set: ShapeList = ShapeList()
             for obj in common_set:
                 result = obj._intersect(other, tolerance, include_touched)
                 if result:
@@ -2625,15 +2625,18 @@ class ShapeList(list[T]):
         """
         expanded: ShapeList = ShapeList()
         for shape in self:
-            if hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Compound):
-                # Recursively expand nested compounds
-                expanded.extend(ShapeList(list(shape)).expand())
-            elif hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Shell):
-                expanded.extend(shape.faces())
-            elif hasattr(shape, "wrapped") and isinstance(shape.wrapped, TopoDS_Wire):
-                expanded.extend(shape.edges())
-            elif not shape.is_null:
+            if isinstance(shape, Vector):
                 expanded.append(shape)
+            elif hasattr(shape, "wrapped"):
+                if isinstance(shape.wrapped, TopoDS_Compound):
+                    # Recursively expand nested compounds
+                    expanded.extend(ShapeList(list(shape)).expand())
+                elif isinstance(shape.wrapped, TopoDS_Shell):
+                    expanded.extend(shape.faces())
+                elif isinstance(shape.wrapped, TopoDS_Wire):
+                    expanded.extend(shape.edges())
+                elif not shape.is_null:
+                    expanded.append(shape)
         return expanded
 
     def center(self) -> Vector:

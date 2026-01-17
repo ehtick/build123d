@@ -479,12 +479,12 @@ class Mixin3D(Shape[TOPODS]):
                 for r in results
                 if not (
                     isinstance(r, Vertex)
-                    and any(r.distance_to(e) <= tolerance for e in edges_in_results)
+                    and any(e.distance_to(r) <= tolerance for e in edges_in_results)
                 )
                 and not (
                     isinstance(r, Edge)
                     and any(
-                        r.center().distance_to(f) <= tolerance for f in faces_in_results
+                        f.distance_to(r.center()) <= tolerance for f in faces_in_results
                     )
                 )
             )
