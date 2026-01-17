@@ -230,7 +230,7 @@ def extrude(
                     )
                 )
 
-    if len(new_solids) > 1:
+    if both and len(new_solids) > 1:
         fused_solids = new_solids.pop().fuse(*new_solids)
         new_solids = fused_solids if isinstance(fused_solids, list) else [fused_solids]
     if clean:

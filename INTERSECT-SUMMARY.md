@@ -14,20 +14,20 @@ And given the apporach, n x m comparisions are needed in the filter function (pe
 
 ## Goal of the new apporach
 
--   Define "real" intersections and distinguish them from touches (single point touch for faces, edge touch for solids, tangential touch, ...)
-    -   The definition of intersect should be based on "what a CAD user expects", e.g. solid-solid = solid, face-face = face|edge, ...
--   Calculate intersect in the most efficient way, specifically for each shape type combination.
-    -   No use of n x m comparisions with faces involved (note that comparisions of edges are significantly cheaper, in some test 5-15 times faster)
-    -   For every costly OCCT method when filtering results, a non-optimal bounding box comparision should be done as early exit (no bbox overlap => no need to do the costly calculation)
--   Separate touch methods that calculate all possible touch results for the faces and solids
-    -   intersect methods get a parameter `include_touched` that add touch results to the intersect results
+- Define "real" intersections and distinguish them from touches (single point touch for faces, edge touch for solids, tangential touch, ...)
+    - The definition of intersect should be based on "what a CAD user expects", e.g. solid-solid = solid, face-face = face|edge, ...
+- Calculate intersect in the most efficient way, specifically for each shape type combination.
+    - No use of n x m comparisions with faces involved (note that comparisions of edges are significantly cheaper, in some test 5-15 times faster)
+    - For every costly OCCT method when filtering results, a non-optimal bounding box comparision should be done as early exit (no bbox overlap => no need to do the costly calculation)
+- Separate touch methods that calculate all possible touch results for the faces and solids
+    - intersect methods get a parameter `include_touched` that add touch results to the intersect results
 
 ### Intersect vs Touch
 
 The distinction between `intersect` and `touch` is based on result dimension:
 
--   **Intersect**: Returns results down to a minimum dimension (interior overlap or crossing)
--   **Touch**: Returns boundary contacts with dimension below the minimum intersect dimension, filtered to the highest dimension at each contact location
+- **Intersect**: Returns results down to a minimum dimension (interior overlap or crossing)
+- **Touch**: Returns boundary contacts with dimension below the minimum intersect dimension, filtered to the highest dimension at each contact location
 
 | Combination     | Intersect result dims | Touch dims                   |
 | --------------- | --------------------- | ---------------------------- |
@@ -46,10 +46,10 @@ The distinction between `intersect` and `touch` is based on result dimension:
 
 **Examples**:
 
--   Two boxes sharing a face: `touch` → `[Face]` (not the 4 edges and 4 vertices of that face)
--   Two boxes sharing an edge: `touch` → `[Edge]` (not the 2 endpoint vertices)
--   Two boxes sharing only a corner: `touch` → `[Vertex]`
--   Two faces with coplanar overlap AND crossing curve: `intersect` → `[Face, Edge]`
+- Two boxes sharing a face: `touch` → `[Face]` (not the 4 edges and 4 vertices of that face)
+- Two boxes sharing an edge: `touch` → `[Edge]` (not the 2 endpoint vertices)
+- Two boxes sharing only a corner: `touch` → `[Vertex]`
+- Two faces with coplanar overlap AND crossing curve: `intersect` → `[Face, Edge]`
 
 ### Multi-object and Compound handling
 
@@ -63,8 +63,8 @@ The distinction between `intersect` and `touch` is based on result dimension:
 
 Key:
 
--   AND: c ∩ c1 ∩ c2
--   OR: c ∩ (c1 ∪ c2)
+- AND: c ∩ c1 ∩ c2
+- OR: c ∩ (c1 ∪ c2)
 
 \* A compound as tool shall not have overlapping solids according to OCCT docs
 
@@ -82,10 +82,10 @@ For tangent contacts (surfaces touching at a point), the `touch()` method valida
 
 Legend:
 
--   → handle: handles directly
--   → delegate: calls `other._intersect(self, ...)`
--   → distribute: iterates elements, calls `elem._intersect(...)`
--   `t`: `include_touched` passed through
+- → handle: handles directly
+- → delegate: calls `other._intersect(self, ...)`
+- → distribute: iterates elements, calls `elem._intersect(...)`
+- `t`: `include_touched` passed through
 
 ### intersect() Call Flow
 
@@ -131,10 +131,10 @@ Legend:
 
 **Delegation chains** (examples):
 
--   `Edge._intersect(Solid, t)` → `Solid._intersect(Edge, t)` → handle
--   `Vertex._intersect(Face, t)` → `Face._intersect(Vertex, t)` → handle
--   `Face._intersect(Solid, t)` → `Solid._intersect(Face, t)` → handle
--   `Edge._intersect(Compound, t)` → `Compound._intersect(Edge, t)` → distribute
+- `Edge._intersect(Solid, t)` → `Solid._intersect(Edge, t)` → handle
+- `Vertex._intersect(Face, t)` → `Face._intersect(Vertex, t)` → handle
+- `Face._intersect(Solid, t)` → `Solid._intersect(Face, t)` → handle
+- `Edge._intersect(Compound, t)` → `Compound._intersect(Edge, t)` → distribute
 
 ### touch() Call Flow
 
@@ -295,10 +295,10 @@ Runtime imports happen after all modules are loaded, breaking the cycle.
 
 ### Infrastructure Changes (support for `include_touched`)
 
--   Added `include_touched: bool = False` to `Case` dataclass
--   Updated `run_test` to pass `include_touched` to `Shape.intersect` (geometry objects don't have it)
--   Updated `make_params` to include `include_touched` in test parameters
--   Updated all test function signatures and `@pytest.mark.parametrize` decorators
+- Added `include_touched: bool = False` to `Case` dataclass
+- Updated `run_test` to pass `include_touched` to `Shape.intersect` (geometry objects don't have it)
+- Updated `make_params` to include `include_touched` in test parameters
+- Updated all test function signatures and `@pytest.mark.parametrize` decorators
 
 ### Behavioral: Solid boundary contacts (intersect vs touch separation)
 
@@ -350,9 +350,9 @@ These test cases verify correct handling when both `BRepAlgoAPI_Common` (overlap
 
 Added `test_touch_edge_tolerance()` to test filtering of false positive vertices:
 
--   Tests torus (fillet) surface vs cylinder surface where BRepExtrema finds a point near edges of both faces
--   With `tolerance=1e-3`, the point is detected as on both edges and filtered out
--   `touch(tolerance=1e-3)` returns empty, `intersect(include_touched=True, tolerance=1e-3)` returns only `[Edge]`
+- Tests torus (fillet) surface vs cylinder surface where BRepExtrema finds a point near edges of both faces
+- With `tolerance=1e-3`, the point is detected as on both edges and filtered out
+- `touch(tolerance=1e-3)` returns empty, `intersect(include_touched=True, tolerance=1e-3)` returns only `[Edge]`
 
 ### Performance tests
 
@@ -360,29 +360,29 @@ Added `test_touch_edge_tolerance()` to test filtering of false positive vertices
 
 | name                                                    |        dev | this branch | commit fa8e936 | this branch / dev | this branch / commit fa8e936 |
 | ------------------------------------------------------- | ---------: | ----------: | -------------: | ----------------: | ---------------------------: |
-| tests/test_benchmarks.py::test_mesher_benchmark[100]    |     1.5717 |      1.1761 |         1.5013 |           -25.17% |                      -21.66% |
-| tests/test_benchmarks.py::test_mesher_benchmark[1000]   |     3.1709 |      2.6653 |         2.9810 |           -15.95% |                      -10.59% |
-| tests/test_benchmarks.py::test_mesher_benchmark[10000]  |    18.8172 |     18.3698 |        18.5138 |            -2.38% |                       -0.78% |
-| tests/test_benchmarks.py::test_mesher_benchmark[100000] |   272.6479 |    260.0706 |       349.1587 |            -4.61% |                      -25.51% |
-| tests/test_benchmarks.py::test_ppp_0101                 | 2,840.2942 |    147.7914 |       146.8151 |           -94.80% |                       +0.66% |
-| tests/test_benchmarks.py::test_ppp_0102                 |   183.6392 |    182.4804 |       181.5972 |            -0.63% |                       +0.49% |
-| tests/test_benchmarks.py::test_ppp_0103                 |    68.3975 |     68.1508 |        68.0329 |            -0.36% |                       +0.17% |
-| tests/test_benchmarks.py::test_ppp_0104                 |   114.2050 |    113.7093 |       113.0657 |            -0.43% |                       +0.57% |
-| tests/test_benchmarks.py::test_ppp_0105                 |    83.0605 |     80.7737 |        80.0031 |            -2.75% |                       +0.96% |
-| tests/test_benchmarks.py::test_ppp_0106                 | 9,311.8187 |     82.1598 |        82.4856 |           -99.12% |                       -0.40% |
-| tests/test_benchmarks.py::test_ppp_0107                 |   308.6340 |    296.7623 |       298.2377 |            -3.85% |                       -0.49% |
-| tests/test_benchmarks.py::test_ppp_0108                 |   136.9441 |     83.1816 |        82.4641 |           -39.25% |                       +0.87% |
-| tests/test_benchmarks.py::test_ppp_0109                 |   113.9680 |    109.5960 |       128.6220 |            -3.84% |                      -14.79% |
-| tests/test_benchmarks.py::test_ppp_0110                 |   244.0596 |    223.9091 |       222.1242 |            -8.26% |                       +0.80% |
-| tests/test_benchmarks.py::test_ttt_23_02_02             |   646.0093 |    628.2953 |       631.9749 |            -2.74% |                       -0.58% |
-| tests/test_benchmarks.py::test_ttt_23_T_24              |   236.9038 |    148.0144 |       146.1597 |           -37.52% |                       +1.27% |
-| tests/test_benchmarks.py::test_ttt_24_SPO_06            |   150.4492 |    144.2704 |       142.6785 |            -4.11% |                       +1.12% |
+| tests/test_benchmarks.py::test_mesher_benchmark[100]    |     1.5717 |      1.1397 |         1.5013 |            -27.5% |                       -24.1% |
+| tests/test_benchmarks.py::test_mesher_benchmark[1000]   |     3.1709 |      2.5261 |         2.9810 |            -20.3% |                       -15.3% |
+| tests/test_benchmarks.py::test_mesher_benchmark[10000]  |    18.8172 |     17.6889 |        18.5138 |             -6.0% |                        -4.5% |
+| tests/test_benchmarks.py::test_mesher_benchmark[100000] |   272.6479 |    254.8131 |       349.1587 |             -6.5% |                       -27.0% |
+| tests/test_benchmarks.py::test_ppp_0101                 | 2,840.2942 |    148.3832 |       146.8151 |            -94.8% |                        +1.1% |
+| tests/test_benchmarks.py::test_ppp_0102                 |   183.6392 |    176.3687 |       181.5972 |             -4.0% |                        -2.9% |
+| tests/test_benchmarks.py::test_ppp_0103                 |    68.3975 |     69.5209 |        68.0329 |             +1.6% |                        +2.2% |
+| tests/test_benchmarks.py::test_ppp_0104                 |   114.2050 |    115.6945 |       113.0657 |             +1.3% |                        +2.3% |
+| tests/test_benchmarks.py::test_ppp_0105                 |    83.0605 |     78.0547 |        80.0031 |             -6.0% |                        -2.4% |
+| tests/test_benchmarks.py::test_ppp_0106                 | 9,311.8187 |     85.0790 |        82.4856 |            -99.1% |                        +3.1% |
+| tests/test_benchmarks.py::test_ppp_0107                 |   308.6340 |    286.2196 |       298.2377 |             -7.3% |                        -4.0% |
+| tests/test_benchmarks.py::test_ppp_0108                 |   136.9441 |     69.9309 |        82.4641 |            -48.9% |                       -15.2% |
+| tests/test_benchmarks.py::test_ppp_0109                 |   113.9680 |    111.8273 |       128.6220 |             -1.9% |                       -13.1% |
+| tests/test_benchmarks.py::test_ppp_0110                 |   244.0596 |    217.1883 |       222.1242 |            -11.0% |                        -2.2% |
+| tests/test_benchmarks.py::test_ttt_23_02_02             |   646.0093 |    620.3012 |       631.9749 |             -4.0% |                        -1.8% |
+| tests/test_benchmarks.py::test_ttt_23_T_24              |   236.9038 |    147.6732 |       146.1597 |            -37.7% |                        +1.0% |
+| tests/test_benchmarks.py::test_ttt_24_SPO_06            |   150.4492 |    144.6859 |       142.6785 |             -3.8% |                        +1.4% |
 
 \* Changed to use `extrude(UNTIL)` as in dev
 
 #### Details
 
--   **Against dev ()**
+- **Against dev ()**
 
     ```text
     ---------------------------------------------------------------------------------------------- benchmark: 17 tests ----------------------------------------------------------------------------------------------
@@ -408,33 +408,34 @@ Added `test_touch_edge_tolerance()` to test filtering of false positive vertices
     -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ```
 
--   **With this PR**
+- **With this PR**
 
-    ```text
+    ````text
     ----------------------------------------------------------------------------------------- benchmark: 17 tests ------------------------------------------------------------------------------------------
     Name (time in ms)                      Min                 Max                Mean             StdDev              Median                IQR            Outliers       OPS            Rounds  Iterations
     --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    test_mesher_benchmark[100]          1.0956 (1.0)       69.3311 (1.0)        1.9552 (1.0)       5.4247 (8.91)       1.1761 (1.0)       0.2108 (1.0)          1;30  511.4671 (1.0)         159           1
-    test_mesher_benchmark[1000]         2.5016 (2.28)      81.8406 (1.18)       3.4415 (1.76)      5.3939 (8.86)       2.6653 (2.27)      1.1725 (5.56)          2;2  290.5734 (0.57)        351           1
-    test_mesher_benchmark[10000]       17.9532 (16.39)     87.1914 (1.26)      30.6284 (15.67)    25.7683 (42.34)     18.3698 (15.62)     0.5098 (2.42)        10;10   32.6494 (0.06)         53           1
-    test_mesher_benchmark[100000]     253.4639 (231.35)   403.4200 (5.82)     300.8966 (153.90)   65.6729 (107.91)   260.0706 (221.12)   92.8300 (440.36)        1;0    3.3234 (0.01)          5           1
-    test_ppp_0101                     146.7774 (133.97)   149.4735 (2.16)     147.9447 (75.67)     0.8912 (1.46)     147.7914 (125.66)    1.1141 (5.29)          2;0    6.7593 (0.01)          7           1
-    test_ppp_0102                     180.5352 (164.78)   185.5049 (2.68)     182.7296 (93.46)     1.8601 (3.06)     182.4804 (155.15)    3.0510 (14.47)         2;0    5.4726 (0.01)          6           1
-    test_ppp_0103                      67.2411 (61.37)    124.2962 (1.79)      72.2580 (36.96)    14.5204 (23.86)     68.1508 (57.95)     1.1235 (5.33)          1;2   13.8393 (0.03)         15           1
-    test_ppp_0104                     111.7916 (102.04)   115.5179 (1.67)     113.7953 (58.20)     1.2992 (2.13)     113.7093 (96.68)     1.9166 (9.09)          4;0    8.7877 (0.02)          9           1
-    test_ppp_0105                      71.0350 (64.84)     87.2390 (1.26)      80.2263 (41.03)     4.7796 (7.85)      80.7737 (68.68)     7.4897 (35.53)         5;0   12.4647 (0.02)         13           1
-    test_ppp_0106                      78.6643 (71.80)     83.4581 (1.20)      81.7541 (41.81)     1.4432 (2.37)      82.1598 (69.86)     1.8966 (9.00)          5;0   12.2318 (0.02)         12           1
-    test_ppp_0107                     290.1933 (264.88)   302.6345 (4.37)     296.2779 (151.54)    5.0355 (8.27)     296.7623 (252.32)    8.2492 (39.13)         2;0    3.3752 (0.01)          5           1
-    test_ppp_0108                      82.7089 (75.49)     85.0884 (1.23)      83.5954 (42.76)     0.8842 (1.45)      83.1816 (70.73)     1.5849 (7.52)          4;0   11.9624 (0.02)         12           1
-    test_ppp_0109                     108.6753 (99.19)    110.3898 (1.59)     109.6267 (56.07)     0.6086 (1.0)      109.5960 (93.18)     0.7843 (3.72)          4;0    9.1219 (0.02)         10           1
-    test_ppp_0110                     221.1847 (201.89)   226.9487 (3.27)     224.2491 (114.70)    2.2437 (3.69)     223.9091 (190.38)    3.3070 (15.69)         2;0    4.4593 (0.01)          5           1
-    test_ttt_23_02_02                 627.2946 (572.57)   639.3529 (9.22)     630.5674 (322.51)    4.9883 (8.20)     628.2953 (534.21)    4.1876 (19.86)         1;1    1.5859 (0.00)          5           1
-    test_ttt_23_T_24                  146.2842 (133.52)   149.4915 (2.16)     147.9576 (75.68)     1.2978 (2.13)     148.0144 (125.85)    2.1337 (10.12)         2;0    6.7587 (0.01)          5           1
-    test_ttt_24_SPO_06                143.4400 (130.93)   145.8922 (2.10)     144.6000 (73.96)     1.0524 (1.73)     144.2704 (122.67)    2.0361 (9.66)          4;0    6.9156 (0.01)          7           1
-    --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    ```
+    test_mesher_benchmark[100]          1.0574 (1.0)       70.4643 (1.0)        1.8813 (1.0)       5.4627 (8.54)       1.1397 (1.0)       0.2145 (1.06)         1;30  531.5461 (1.0)         162           1
+    test_mesher_benchmark[1000]         2.4607 (2.33)      77.6734 (1.10)       3.2727 (1.74)      5.4347 (8.50)       2.5261 (2.22)      0.9649 (4.76)          2;2  305.5623 (0.57)        379           1
+    test_mesher_benchmark[10000]       17.5591 (16.61)     80.8897 (1.15)      27.3925 (14.56)    23.6991 (37.06)     17.6889 (15.52)     0.2028 (1.0)           2;2   36.5064 (0.07)         13           1
+    test_mesher_benchmark[100000]     251.0655 (237.44)   392.6514 (5.57)     296.1126 (157.40)   62.7306 (98.09)    254.8131 (223.57)   89.8318 (443.07)        1;0    3.3771 (0.01)          5           1
+    test_ppp_0101                     145.0982 (137.22)   149.1414 (2.12)     147.7855 (78.55)     1.4913 (2.33)     148.3832 (130.19)    2.0036 (9.88)          1;0    6.7666 (0.01)          7           1
+    test_ppp_0102                     175.2033 (165.70)   178.3188 (2.53)     176.4481 (93.79)     1.0492 (1.64)     176.3687 (154.75)    0.7466 (3.68)          2;1    5.6674 (0.01)          6           1
+    test_ppp_0103                      67.6037 (63.94)    120.4952 (1.71)      72.7045 (38.65)    13.2495 (20.72)     69.5209 (61.00)     1.0713 (5.28)          1;2   13.7543 (0.03)         15           1
+    test_ppp_0104                     114.5725 (108.36)   116.3083 (1.65)     115.5820 (61.44)     0.6395 (1.0)      115.6945 (101.51)    0.9241 (4.56)          4;0    8.6519 (0.02)          9           1
+    test_ppp_0105                      75.7650 (71.65)     79.4025 (1.13)      77.9072 (41.41)     1.0489 (1.64)      78.0547 (68.49)     1.7325 (8.54)          2;0   12.8358 (0.02)         13           1
+    test_ppp_0106                      84.4754 (79.89)     86.6812 (1.23)      85.3290 (45.36)     0.6590 (1.03)      85.0790 (74.65)     1.0335 (5.10)          3;0   11.7193 (0.02)         12           1
+    test_ppp_0107                     285.1950 (269.72)   288.7532 (4.10)     286.7046 (152.40)    1.3588 (2.12)     286.2196 (251.13)    1.7592 (8.68)          2;0    3.4879 (0.01)          5           1
+    test_ppp_0108                      65.4866 (61.93)     70.9025 (1.01)      69.5202 (36.95)     1.3768 (2.15)      69.9309 (61.36)     0.8998 (4.44)          3;2   14.3843 (0.03)         15           1
+    test_ppp_0109                     110.2980 (104.31)   113.0410 (1.60)     111.7263 (59.39)     0.7629 (1.19)     111.8273 (98.12)     0.4203 (2.07)          3;3    8.9504 (0.02)          9           1
+    test_ppp_0110                     214.6389 (202.99)   218.8224 (3.11)     217.1718 (115.44)    1.7101 (2.67)     217.1883 (190.56)    2.6129 (12.89)         1;0    4.6046 (0.01)          5           1
+    test_ttt_23_02_02                 617.3580 (583.86)   623.1470 (8.84)     620.1268 (329.63)    2.1388 (3.34)     620.3012 (544.25)    2.6976 (13.30)         2;0    1.6126 (0.00)          5           1
+    test_ttt_23_T_24                  145.4708 (137.58)   148.7882 (2.11)     147.1501 (78.22)     1.3564 (2.12)     147.6732 (129.57)    2.1137 (10.43)         2;0    6.7958 (0.01)          5           1
+    test_ttt_24_SPO_06                143.1023 (135.34)   147.4160 (2.09)     144.8468 (76.99)     1.3698 (2.14)     144.6859 (126.95)    1.3559 (6.69)          2;1    6.9038 (0.01)          7           1
+    -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ```
 
--   **Before all intersect PR (commit fa8e936)**
+    ````
+
+- **Before all intersect PR (commit fa8e936)**
 
     ```text
     ----------------------------------------------------------------------------------------- benchmark: 17 tests ------------------------------------------------------------------------------------------
