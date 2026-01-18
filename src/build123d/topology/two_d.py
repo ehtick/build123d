@@ -86,10 +86,13 @@ from OCP.gce import gce_MakeLin
 from OCP.Geom import (
     Geom_BezierSurface,
     Geom_BSplineCurve,
+    Geom_OffsetSurface,
     Geom_RectangularTrimmedSurface,
     Geom_Surface,
+    Geom_SurfaceOfRevolution,
     Geom_TrimmedCurve,
 )
+from OCP.GeomAdaptor import GeomAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_C0, GeomAbs_CurveType, GeomAbs_G1, GeomAbs_G2
 from OCP.GeomAPI import (
     GeomAPI_ExtremaCurveCurve,
@@ -97,7 +100,7 @@ from OCP.GeomAPI import (
     GeomAPI_ProjectPointOnSurf,
 )
 from OCP.GeomProjLib import GeomProjLib
-from OCP.gp import gp_Pnt, gp_Vec
+from OCP.gp import gp_Ax1, gp_Pnt, gp_Vec
 from OCP.GProp import GProp_GProps
 from OCP.Precision import Precision
 from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Wire
@@ -696,23 +699,39 @@ class Face(Mixin2D[TopoDS_Face]):
     @property
     def axis_of_rotation(self) -> None | Axis:
         """Get the rotational axis of a cylinder or torus"""
-        if type(self.geom_adaptor()) == Geom_RectangularTrimmedSurface:
-            return None
 
-        if self.geom_type == GeomType.CONE:
-            return Axis(
-                self.geom_adaptor().Cone().Axis()  # type:ignore[attr-defined]
-            )
+        # Get the underlying geometric surface
+        surf: Geom_Surface = self.geom_adaptor()
 
-        if self.geom_type == GeomType.CYLINDER:
-            return Axis(
-                self.geom_adaptor().Cylinder().Axis()  # type:ignore[attr-defined]
-            )
+        # Unwrap trimmed and offset surfaces to get at the basis surface
+        while isinstance(surf, (Geom_RectangularTrimmedSurface, Geom_OffsetSurface)):
+            surf = surf.BasisSurface()
 
-        if self.geom_type == GeomType.TORUS:
-            return Axis(self.geom_adaptor().Torus().Axis())  # type:ignore[attr-defined]
+        # Get the geometry type from the geometric surface
+        geom_type = Shape.geom_LUT_FACE[GeomAdaptor_Surface(surf).GetType()]
 
-        return None
+        # Determine the axis of rotation if there is one
+        match geom_type:
+            case GeomType.CONE:
+                return Axis(
+                    surf.Cone().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.CYLINDER:
+                return Axis(
+                    surf.Cylinder().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.SPHERE:
+                ax3 = surf.Position()  # type:ignore[attr-defined]
+                return Axis(gp_Ax1(ax3.Location(), ax3.Direction()))
+
+            case GeomType.TORUS:
+                return Axis(
+                    surf.Torus().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.REVOLUTION:
+                return Axis(surf.Axis())  # type:ignore[attr-defined]
+            case _:
+                return None
 
     @property
     def axes_of_symmetry(self) -> list[Axis]:
