@@ -843,7 +843,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
 
             # Check face's edges touching solid's faces
             # Track found edges to avoid duplicates (edge may touch multiple adjacent faces)
-            found_edges: list[Edge] = []
+            touching_edges: list[Edge] = []
             for oe, oe_bb in other_edges:
                 for sf, sf_bb in self_faces:
                     if not oe_bb.overlaps(sf_bb, tolerance):
@@ -856,11 +856,11 @@ class Solid(Mixin3D[TopoDS_Solid]):
                         already = any(
                             (s.center() - e.center()).length <= tolerance
                             and abs(s.length - e.length) <= tolerance
-                            for e in found_edges
+                            for e in touching_edges
                         )
                         if not already:
                             results.append(s)
-                            found_edges.append(s)
+                            touching_edges.append(s)
             # Check face's vertices touching solid's edges (corner coincident)
             for ov in other.vertices():
                 for se in self.edges():
