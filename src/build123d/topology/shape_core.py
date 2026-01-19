@@ -1389,6 +1389,27 @@ class Shape(NodeMixin, Generic[TOPODS]):
             common_set = ShapeList(set(next_set))  # deduplicate
         return common_set if common_set else None
 
+    def _intersect(
+        self,
+        other: Shape,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection implementation.
+
+        Base implementation returns None. Subclasses (Vertex, Mixin1D, Mixin2D,
+        Mixin3D, Compound) override this to provide actual intersection logic.
+
+        Args:
+            other: Shape to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+
+        Returns:
+            ShapeList of intersection shapes, or None if no intersection
+        """
+        return None
+
     def touch(self, other: Shape, tolerance: float = 1e-6) -> ShapeList:
         """Find boundary contacts between this shape and another.
 
