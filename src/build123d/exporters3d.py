@@ -68,7 +68,9 @@ from build123d.geometry import Location
 from build123d.topology import Compound, Curve, Part, Shape, Sketch
 
 
-def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
+def _create_xde(
+    to_export: Shape, unit: Unit = Unit.MM, auto_naming: bool = False
+) -> TDocStd_Document:
     """create_xde
 
     An OpenCASCADE Technology (OCCT) XDE (eXtended Data Exchange) document is a
@@ -86,6 +88,8 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
     Args:
         to_export (Shape): object or assembly
         unit (Unit, optional): shape units. Defaults to Unit.MM.
+        auto_naming (bool, optional): whether to use ShapeTool AutoNaming.
+            Defaults to False.
 
     Returns:
         TDocStd_Document: XDE document
@@ -105,7 +109,11 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
     # Get the tools for handling shapes & colors section of the XCAF document.
     shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
-    # shape_tool.SetAutoNaming_s(True)
+
+    # Auto Naming names shapes and links. Enabling it for glTF's prevents user defined
+    # labels from ending up on nodes which is undesirable. Enabling it for STEP files
+    # does not seem to affect user labels.
+    shape_tool.SetAutoNaming_s(auto_naming)
 
     # Add all the shapes in the b3d object either as a single object or assembly
     is_assembly = isinstance(to_export, Compound) and len(to_export.children) > 0
@@ -234,7 +242,7 @@ def export_gltf(
             node.mesh(linear_deflection, angular_deflection)
 
     # Create the XCAF document
-    doc: TDocStd_Document = _create_xde(to_export, unit)
+    doc: TDocStd_Document = _create_xde(to_export, unit, auto_naming=False)
 
     # Write the glTF file
     writer = RWGltf_CafWriter(
@@ -294,7 +302,7 @@ def export_step(
     """
 
     # Create the XCAF document
-    doc = _create_xde(to_export, unit)
+    doc = _create_xde(to_export, unit, auto_naming=True)
 
     # Disable writing OCCT info to console
     messenger = Message.DefaultMessenger_s()
