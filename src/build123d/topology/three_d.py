@@ -447,13 +447,37 @@ class Mixin3D(Shape[TOPODS]):
                 (shapes touching the solid's surface without penetrating)
         """
 
+        def filter_redundant_touches(items: ShapeList) -> ShapeList:
+            """Remove vertices/edges that lie on higher-dimensional results."""
+            edges = [r for r in items if isinstance(r, Edge)]
+            faces = [r for r in items if isinstance(r, Face)]
+            solids = [r for r in items if isinstance(r, Solid)]
+            return ShapeList(
+                r
+                for r in items
+                if not (
+                    isinstance(r, Vertex)
+                    and (
+                        any(e.distance_to(r) <= tolerance for e in edges)
+                        or any(f.distance_to(r) <= tolerance for f in faces)
+                        or any(
+                            sf.distance_to(r) <= tolerance
+                            for s in solids
+                            for sf in s.faces()
+                        )
+                    )
+                )
+                and not (
+                    isinstance(r, Edge)
+                    and any(f.distance_to(r.center()) <= tolerance for f in faces)
+                )
+            )
+
         results: ShapeList = ShapeList()
 
         # Solid + Solid/Face/Shell/Edge/Wire: use Common
         if isinstance(other, (Solid, Face, Shell, Edge, Wire)):
-            intersection = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Common()
-            )
+            intersection = self._bool_op_list((self,), (other,), BRepAlgoAPI_Common())
             results.extend(intersection.expand())
         # Solid + Vertex: point containment check
         elif isinstance(other, Vertex):
@@ -469,25 +493,8 @@ class Mixin3D(Shape[TOPODS]):
         # Add boundary contacts if requested (only Solid has touch method)
         if include_touched and isinstance(self, Solid):
             results.extend(self.touch(other, tolerance))
-            results = ShapeList(set(results))
-            # Filter: remove lower-dimensional shapes that are boundaries of
-            # higher-dimensional results (e.g., vertices on edges, edges on faces)
-            edges_in_results = [r for r in results if isinstance(r, Edge)]
-            faces_in_results = [r for r in results if isinstance(r, Face)]
-            results = ShapeList(
-                r
-                for r in results
-                if not (
-                    isinstance(r, Vertex)
-                    and any(e.distance_to(r) <= tolerance for e in edges_in_results)
-                )
-                and not (
-                    isinstance(r, Edge)
-                    and any(
-                        f.distance_to(r.center()) <= tolerance for f in faces_in_results
-                    )
-                )
-            )
+            results = filter_redundant_touches(ShapeList(set(results)))
+
         return results if results else None
 
     def is_inside(self, point: VectorLike, tolerance: float = 1.0e-6) -> bool:
