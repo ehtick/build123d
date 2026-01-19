@@ -453,11 +453,32 @@ class Mixin2D(ABC, Shape[TOPODS]):
                     # For tangent contacts (point in interior of both faces),
                     # verify normals are parallel or anti-parallel (tangent surfaces)
                     if not on_self_edge and not on_other_edge:
-                        normal1 = self.normal_at(contact_pt)
-                        normal2 = other.normal_at(contact_pt)
-                        dot = normal1.dot(normal2)
-                        if abs(dot) < 0.99:  # Not parallel or anti-parallel
-                            continue
+                        # Find the specific face containing the contact point
+                        self_face: Face | None = None
+                        other_face: Face | None = None
+
+                        if isinstance(self, Face):
+                            self_face = self
+                        else:  # Shell - find face containing point
+                            for f in self.faces():
+                                if f.distance_to(contact_pt) <= tolerance:
+                                    self_face = f
+                                    break
+
+                        if isinstance(other, Face):
+                            other_face = other
+                        else:  # Shell - find face containing point
+                            for f in other.faces():
+                                if f.distance_to(contact_pt) <= tolerance:
+                                    other_face = f
+                                    break
+
+                        if self_face and other_face:
+                            normal1 = self_face.normal_at(contact_pt)
+                            normal2 = other_face.normal_at(contact_pt)
+                            dot = normal1.dot(normal2)
+                            if abs(dot) < 0.99:  # Not parallel or anti-parallel
+                                continue
 
                     # Filter: only keep vertices that are not boundaries of
                     # higher-dimensional contacts (faces or edges) and not duplicates
