@@ -238,6 +238,16 @@ fc4 = Rot(Z=45) * Rectangle(5, 5).face()
 fc5 = Pos(2.5, 2.5, 2.5) * Rot(0, 90) * Rectangle(5, 5).face()
 fc6 = Pos(2.5, 2.5) * Rot(0, 90, 45, Extrinsic.XYZ) * Rectangle(5, 5).face()
 fc7 = (Rot(90) * Cylinder(2, 4)).faces().filter_by(GeomType.CYLINDER)[0]
+fc8 = make_face(
+    Polyline(
+        (-1.5, 1, 1),
+        (-1.5, -1, 1),
+        (3.5, -1, -1),
+        (3.5, 1, -1),
+        (-1.5, 1, 1),
+    )
+)
+fc9 = Pos(-2) * mirror(fc8, Plane.XY)
 
 fc11 = Rectangle(4, 4).face()
 fc22 = sweep(Rot(90) * CenterArc((0, 0), 2, 0, 180), Line((0, 2), (0, -2)))
@@ -246,6 +256,13 @@ sh2 = Pos(Z=1) * sh1
 sh3 = Shell([Pos(-4) * fc11, fc22, Pos(2, 0, -2) * Rot(0, 90) * fc11])
 sh4 = Shell([Pos(-4) * fc11, fc22, Pos(4) * fc11])
 sh5 = Pos(Z=1) * Shell([Pos(-2, 0, -2) * Rot(0, -90) * fc11, fc22, Pos(2, 0, -2) * Rot(0, 90) * fc11])
+sh6 = Box(2, 2, 2).shell()
+
+# Shell tangent touch test objects (half spheres)
+_half_sphere_solid = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
+sh7 = Shell(_half_sphere_solid.faces())
+sh8 = Pos(2, 0, 0) * sh7  # tangent at (1, 0, 0)
+fc10 = Pos(1, 0, 0) * (Rot(0, 90, 0) * Rectangle(2, 2).face())  # tangent to sphere at x=1
 
 shape_2d_matrix = [
     Case(fc1, vl2, None, "non-coincident", None),
@@ -292,6 +309,15 @@ shape_2d_matrix = [
     Case(sh1, fc1, [Face, Edge], "coplanar + intersecting", None),
     Case(sh4, fc1, [Face, Face], "2 coplanar", None),
     Case(sh5, fc1, [Edge, Edge], "2 intersecting", None),
+    Case(sh6, Pos(0,0,1) * fc1, [Face], "2 intersecting boundary", None),
+    Case(sh6, Pos(2, 1, 1) * sh6, [Face], "2 intersecting boundary", None),
+
+    # Shell + Face tangent touch
+    Case(sh7, fc10, None, "tangent touch", None),
+    Case(sh7, fc10, [Vertex], "tangent touch", None, True),
+    # Shell + Shell tangent touch
+    Case(sh7, sh8, None, "tangent touch", None),
+    Case(sh7, sh8, [Vertex], "tangent touch", None, True),
 
     Case(fc1, [fc4, Pos(2, 2) * fc1], [Face], "multi to_intersect, intersecting", None),
     Case(fc1, [ed1, Pos(2.5, 2.5) * fc1], [Edge], "multi to_intersect, intersecting", None),
@@ -306,6 +332,7 @@ def test_shape_2d(obj, target, expected, include_touched):
 sl1 = Box(2, 2, 2).solid()
 sl2 = Pos(Z=5) * Box(2, 2, 2).solid()
 sl3 = Cylinder(2, 1).solid() - Cylinder(1.5, 1).solid()
+sl4 = Box(3, 1, 1)
 
 wi7 = Wire([l1 := sl3.faces().sort_by(Axis.Z)[-1].edges()[0].trim(.3, .4),
           l2 := l1.trim(2, 3),
@@ -327,6 +354,7 @@ shape_3d_matrix = [
 
     Case(sl1, pl3, None, "non-coincident", None),
     Case(sl1, pl2, [Face], "intersecting", None),
+    Case(sl1, pl2.offset(1), [Face], "intersecting boondary", None),
 
     Case(sl2, vt1, None, "non-coincident", None),
     Case(Pos(2) * sl1, vt1, [Vertex], "contained", None),
@@ -339,13 +367,17 @@ shape_3d_matrix = [
     Case(sl1, Pos(1, 1, 1) * ed1, None, "corner coincident", None),
     Case(sl1, Pos(1, 1, 1) * ed1, [Vertex], "corner coincident", None, True),
     Case(Pos(2.1, 1) * sl1, ed4, [Edge, Edge], "multi-intersect", None),
+    Case(Pos(2.1, 1, -1) * sl1, ed4, [Edge, Edge], "multi-intersect, boundary", None),
 
     Case(Pos(2, .5, -1) * sl1, wi6, None, "non-coincident", None),
     Case(Pos(2, .5, 1) * sl1, wi6, [Edge, Edge], "multi-intersecting", None),
+    Case(Pos(2, .5, 2) * sl1, wi6, [Edge, Edge], "multi-intersecting, boundary", None),
     Case(sl3, wi7, [Edge, Edge], "multi-coincident, is_equal check", None),
 
     Case(sl2, fc1, None, "non-coincident", None),
     Case(sl1, fc1, [Face], "intersecting", None),
+    Case(Pos(0,0,-1) * sl1, fc1, [Face], "intersecting, boundary", None),
+    Case(Pos(0,0,1) * sl1, fc1, [Face], "intersecting, boundary", None),
     # Solid + Face edge collinear: now requires include_touched
     Case(Pos(3.5, 0, 1) * sl1, fc1, None, "edge collinear", None),
     Case(Pos(3.5, 0, 1) * sl1, fc1, [Edge], "edge collinear", None, True),
@@ -353,15 +385,23 @@ shape_3d_matrix = [
     Case(Pos(3.5, 3.5) * sl1, fc1, None, "corner coincident", None),
     Case(Pos(3.5, 3.5) * sl1, fc1, [Vertex], "corner coincident", None, True),
     Case(Pos(.9) * sl1, fc7, [Face, Face], "multi-intersecting", None),
+    Case(Pos(.9,1) * sl1, fc7, [Face, Face], "multi-intersecting", None),
+    Case(Pos(.9,1.5) * sl1, fc7, [Face, Face], "multi-intersecting", None),
 
     Case(sl2, sh1, None, "non-coincident", None),
     Case(Pos(-2) * sl1, sh1, [Face, Face], "multi-intersecting", None),
+    Case(Pos(-2) * sl1, sh1, [Face, Face], "multi-intersecting", None),
+    Case(Pos(-2,3) * sl1, sh1, None, "multi-intersecting", None),
+    Case(Pos(-2,3) * sl1, sh1, [Edge, Edge], "multi-intersecting", None, True),
 
     Case(sl1, sl2, None, "non-coincident", None),
     Case(sl1, Pos(1, 1, 1) * sl1, [Solid], "intersecting", None),
     # Solid + Solid edge collinear: now requires include_touched
     Case(sl1, Pos(2, 2, 1) * sl1, None, "edge collinear", None),
     Case(sl1, Pos(2, 2, 1) * sl1, [Edge], "edge collinear", None, True),
+    # Solid + Solid face collinear: now requires include_touched
+    Case(sl1, Pos(2, 1.5, 1) * sl1, None, "edge collinear", None),
+    Case(sl1, Pos(2, 1.5, 1) * sl1, [Face], "edge collinear", None, True),
     # Solid + Solid corner coincident: now requires include_touched
     Case(sl1, Pos(2, 2, 2) * sl1, None, "corner coincident", None),
     Case(sl1, Pos(2, 2, 2) * sl1, [Vertex], "corner coincident", None, True),
@@ -371,6 +411,10 @@ shape_3d_matrix = [
     Case(sl1, Pos(2, 0, 0) * sl1, [Face], "face coincident", None, True),
 
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid], "multi to_intersect, intersecting", None),
+    Case(Pos(0, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid, Solid], "multi to_intersect, intersecting", None),
+    Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid, Solid], "multi to_intersect, intersecting", None),
+    Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Face, Face, Solid, Solid], "multi to_intersect, intersecting", None, True),
+
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(Z=.5) * fc1], [Face], "multi to_intersect, intersecting", None),
 ]
 
@@ -383,6 +427,8 @@ cp1 = Compound(GridLocations(5, 0, 2, 1) * Vertex())
 cp2 = Compound(GridLocations(5, 0, 2, 1) * Line((0, -1), (0, 1)))
 cp3 = Compound(GridLocations(5, 0, 2, 1) * Rectangle(2, 2))
 cp4 = Compound(GridLocations(5, 0, 2, 1) * Box(2, 2, 2))
+cp5 = Compound([fc8, fc9])
+cp6 = Compound(GridLocations(4, 0, 2, 1) * Rectangle(2, 2))
 
 cv1 = Curve() + [ed1, ed2, ed3]
 sk1 = Sketch() + [fc1, fc2, fc3]
@@ -391,43 +437,56 @@ pt1 = Part() + [sl1, sl2, sl3]
 
 shape_compound_matrix = [
     Case(cp1, vl1, None, "non-coincident", None),
-    Case(Pos(-.5) * cp1, vl1, [Vertex], "intersecting", None),
-
+    Case(Pos(-0.5) * cp1, vl1, [Vertex], "intersecting", None),
     Case(cp2, lc1, None, "non-coincident", None),
-    Case(Pos(-.5) * cp2, lc1, [Vertex], "intersecting", None),
-
+    Case(Pos(-0.5) * cp2, lc1, [Vertex], "intersecting", None),
     Case(Pos(Z=1) * cp3, ax1, None, "non-coincident", None),
     Case(cp3, ax1, [Edge, Edge], "intersecting", None),
-
     Case(Pos(Z=3) * cp4, pl2, None, "non-coincident", None),
     Case(cp4, pl2, [Face, Face], "intersecting", None),
-
+    Case(Pos(Z=1) * cp4, pl2, [Face, Face], "non-coincident, boundary", None),
+    Case(Pos(Z=-1) * cp4, pl2, [Face, Face], "non-coincident, boundary", None),
     Case(cp1, vt1, None, "non-coincident", None),
-    Case(Pos(-.5) * cp1, vt1, [Vertex], "intersecting", None),
-
+    Case(Pos(-0.5) * cp1, vt1, [Vertex], "intersecting", None),
     Case(Pos(Z=1) * cp2, ed1, None, "non-coincident", None),
     Case(cp2, ed1, [Vertex], "intersecting", None),
-
     Case(Pos(Z=1) * cp3, fc1, None, "non-coincident", None),
     Case(cp3, fc1, [Face, Face], "intersecting", None),
-
+    Case(Pos(1) * cp3, fc1, [Face, Edge], "intersectingPos(0.5), ", None),
     Case(Pos(Z=5) * cp4, sl1, None, "non-coincident", None),
     Case(Pos(2) * cp4, sl1, [Solid], "intersecting", None),
-
+    Case(cp4, sl4, None, "intersecting", None),
+    Case(cp4, sl4, [Face, Face], "intersecting", None, True),
+    Case(cp4, Pos(0, 1, 1) * sl4, [Face, Face], "intersecting", None, True),
+    Case(cp4, Pos(0, 1, 1.5) * sl4, [Edge, Edge], "intersecting", None, True),
+    Case(cp4, Pos(0, 1.5, 1.5) * sl4, [Vertex, Vertex], "intersecting", None, True),
     Case(cp1, Pos(Z=1) * cp1, None, "non-coincident", None),
     Case(cp1, cp2, [Vertex, Vertex], "intersecting", None),
     Case(cp2, cp3, [Edge, Edge], "intersecting", None),
+    Case(Pos(0, 2, 0) * cp2, cp3, [Vertex, Vertex], "intersecting", None),
     Case(cp3, cp4, [Face, Face], "intersecting", None),
-
-    Case(cp1, Compound(children=cp1.get_type(Vertex)), [Vertex, Vertex], "mixed child type", None),
-    Case(cp4, Compound(children=cp3.get_type(Face)), [Face, Face], "mixed child type", None),
-
+    Case(cp5, cp4, [Face, Face], "intersecting", None),
+    Case(cp5, cp4, [Face, Face, Edge, Edge], "intersecting", None, True),
+    Case(
+        cp1,
+        Compound(children=cp1.get_type(Vertex)),
+        [Vertex, Vertex],
+        "mixed child type",
+        None,
+    ),
+    Case(
+        cp4,
+        Compound(children=cp3.get_type(Face)),
+        [Face, Face],
+        "mixed child type",
+        None,
+    ),
     Case(cp2, [cp3, cp4], [Edge, Edge], "multi to_intersect, intersecting", None),
-
     Case(cv1, cp3, [Edge, Edge, Edge, Edge], "intersecting", None),  # xfail removed
     Case(sk1, cp3, [Face, Face], "intersecting", None),
     Case(pt1, cp3, [Face, Face], "intersecting", None),
-
+    Case(pt1, cp6, [Face, Face], "intersecting", None),
+    Case(pt1, cp6, [Face, Face, Edge, Edge], "intersecting", None, True),
 ]
 
 @pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_compound_matrix))
