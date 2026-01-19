@@ -451,8 +451,8 @@ class Mixin3D(Shape[TOPODS]):
 
         # Solid + Solid/Face/Shell/Edge/Wire: use Common
         if isinstance(other, (Solid, Face, Shell, Edge, Wire)):
-            intersection = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            intersection = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Common()
             )
             results.extend(intersection.expand())
         # Solid + Vertex: point containment check
@@ -770,8 +770,8 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 for of, of_bb in other_faces:
                     if not sf_bb.overlaps(of_bb, tolerance):
                         continue
-                    common = self._bool_op(
-                        (sf,), (of,), BRepAlgoAPI_Common(), as_list=True
+                    common = self._bool_op_list(
+                        (sf,), (of,), BRepAlgoAPI_Common()
                     )
                     found_faces.extend(s for s in common if not s.is_null)
             results.extend(found_faces)
@@ -782,8 +782,8 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 for oe, oe_bb in other_edges:
                     if not se_bb.overlaps(oe_bb, tolerance):
                         continue
-                    common = self._bool_op(
-                        (se,), (oe,), BRepAlgoAPI_Common(), as_list=True
+                    common = self._bool_op_list(
+                        (se,), (oe,), BRepAlgoAPI_Common()
                     )
                     for s in common:
                         if s.is_null:
@@ -843,8 +843,8 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 for sf, sf_bb in self_faces:
                     if not oe_bb.overlaps(sf_bb, tolerance):
                         continue
-                    common = self._bool_op(
-                        (oe,), (sf,), BRepAlgoAPI_Common(), as_list=True
+                    common = self._bool_op_list(
+                        (oe,), (sf,), BRepAlgoAPI_Common()
                     )
                     results.extend(s for s in common if not s.is_null)
             # Check face's vertices touching solid's edges (corner coincident)
@@ -868,8 +868,8 @@ class Solid(Mixin3D[TopoDS_Solid]):
             # Use BRepExtrema to find tangent contacts (edge tangent to surface)
             # Only valid if edge doesn't penetrate solid (Common returns nothing)
             # If Common returns something, contact points are entry/exit (intersect, not touches)
-            common_result = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            common_result = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Common()
             )
             if not common_result:  # No penetration - could be tangent
                 for sf, sf_bb in self_faces:

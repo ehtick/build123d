@@ -2271,7 +2271,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args: Iterable[Shape],
         tools: Iterable[Shape],
         operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter,
-        as_list: bool = False,
     ) -> Self | ShapeList:
         """Generic boolean operation
 
@@ -2280,11 +2279,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
           tools: Iterable[Shape]:
           operation: Union[BRepAlgoAPI_BooleanOperation:
           BRepAlgoAPI_Splitter]:
-          as_list: If True, always return ShapeList (wrapping single results,
-            returning empty ShapeList for null results)
 
         Returns:
-            Shape, ShapeList, or empty ShapeList depending on result and as_list
+            Shape or ShapeList depending on result
 
         """
         args = list(args)
@@ -2344,13 +2341,34 @@ class Shape(NodeMixin, Generic[TOPODS]):
         result = highest_order[0].cast(topo_result)
         base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
 
-        # Handle as_list mode
-        if as_list:
-            if result.is_null:
-                return ShapeList()
-            return ShapeList([result])
-
         return result
+
+    def _bool_op_list(
+        self,
+        args: Iterable[Shape],
+        tools: Iterable[Shape],
+        operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter,
+    ) -> ShapeList:
+        """Generic boolean operation that always returns ShapeList.
+
+        Wrapper around _bool_op that guarantees ShapeList return type,
+        wrapping single results and returning empty ShapeList for null results.
+
+        Args:
+          args: Iterable[Shape]:
+          tools: Iterable[Shape]:
+          operation: Union[BRepAlgoAPI_BooleanOperation, BRepAlgoAPI_Splitter]:
+
+        Returns:
+            ShapeList (possibly empty)
+
+        """
+        result = self._bool_op(args, tools, operation)
+        if isinstance(result, ShapeList):
+            return result
+        if result.is_null:
+            return ShapeList()
+        return ShapeList([result])
 
     def _ocp_section(
         self: Shape, other: Vertex | Edge | Wire | Face

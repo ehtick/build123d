@@ -736,12 +736,12 @@ class Mixin1D(Shape[TOPODS]):
 
         # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
         if isinstance(other, (Edge, Wire)):
-            common = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            common = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Common()
             )
             results.extend(common.expand())
-            section = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            section = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Section()
             )
             # Extract vertices from section (edges already in Common for wires)
             for shape in section:

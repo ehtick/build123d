@@ -328,16 +328,16 @@ class Mixin2D(ABC, Shape[TOPODS]):
         # 2D + 2D: Common (coplanar overlap) AND Section (crossing curves)
         if isinstance(other, (Face, Shell)):
             # Common for coplanar overlap
-            common = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Common(), as_list=True
+            common = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Common()
             )
             common_faces = common.expand()
             results.extend(common_faces)
 
             # Section for crossing curves (only edges, not vertices)
             # Vertices from Section are boundary contacts (touch), not intersections
-            section = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            section = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Section()
             )
             section_edges = ShapeList(
                 [s for s in section if isinstance(s, Edge)]
@@ -356,8 +356,8 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         # 2D + Edge: Section for intersection
         elif isinstance(other, (Edge, Wire)):
-            section = self._bool_op(
-                (self,), (other,), BRepAlgoAPI_Section(), as_list=True
+            section = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Section()
             )
             results.extend(section)
 
