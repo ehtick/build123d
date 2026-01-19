@@ -33,11 +33,14 @@ import random
 import unittest
 from unittest.mock import PropertyMock, patch
 
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt
 from OCP.Geom import Geom_RectangularTrimmedSurface
 from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
+from OCP.Geom import Geom_CylindricalSurface, Geom_OffsetSurface
 
 from build123d.build_common import Locations, PolarLocations
-from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType
+from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType, Keep
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -1083,32 +1086,56 @@ class TestFace(unittest.TestCase):
         self.assertIsNone(b.radius)
 
     def test_axis_of_rotation_property(self):
-        c = (
-            Cylinder(1.5, 2, rotation=(90, 0, 0))
+        # CONE
+        cone = (
+            Cone(2, 1, 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
             .faces()
-            .filter_by(GeomType.CYLINDER)[0]
+            .filter_by(GeomType.CONE)[0]
         )
-        s = Sphere(3).faces().filter_by(GeomType.SPHERE)[0]
-        self.assertAlmostEqual(c.axis_of_rotation.direction, (0, -1, 0), 5)
-        self.assertAlmostEqual(c.axis_of_rotation.position, (0, 1, 0), 5)
-        self.assertIsNone(s.axis_of_rotation)
+        self.assertAlmostEqual(cone.axis_of_rotation.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(cone.axis_of_rotation.position, (0, 0, 0), 5)
 
-    @patch.object(
-        Face,
-        "geom_adaptor",
-        return_value=Geom_RectangularTrimmedSurface(
-            Face.make_rect(1, 1).geom_adaptor(), 0.0, 1.0, True
-        ),
-    )
-    def test_axis_of_rotation_property_error(self, mock_is_valid):
-        c = (
+        # CYLINDER
+        cyl = (
             Cylinder(1.5, 2, rotation=(90, 0, 0))
             .faces()
             .filter_by(GeomType.CYLINDER)[0]
         )
-        self.assertIsNone(c.axis_of_rotation)
-        # Verify is_valid was called
-        mock_is_valid.assert_called_once()
+        self.assertAlmostEqual(cyl.axis_of_rotation.direction, (0, -1, 0), 5)
+        self.assertAlmostEqual(cyl.axis_of_rotation.position, (0, 1, 0), 5)
+
+        # REVOLUTION
+        r = Face.revolve(Spline((0, 0, 0), (1, 0, 0.5), (1, 0, 2)), 90, Axis.Z)
+        self.assertAlmostEqual(r.axis_of_rotation.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(r.axis_of_rotation.position, (0, 0, 0), 5)
+
+        # SPHERE
+        s = Sphere(3).faces().filter_by(GeomType.SPHERE)[0]
+        self.assertAlmostEqual(s.axis_of_rotation.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(s.axis_of_rotation.position, (0, 0, 0), 5)
+
+        # TORUS
+        t = Torus(4, 1, rotation=(90, 0, 0)).faces().filter_by(GeomType.TORUS)[0]
+        self.assertAlmostEqual(t.axis_of_rotation.direction, (0, -1, 0), 5)
+        self.assertAlmostEqual(t.axis_of_rotation.position, (0, 0, 0), 5)
+
+        # Geom_RectangularTrimmedSurface
+        cyl_surf = Geom_CylindricalSurface(
+            gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 2.0
+        )
+        trim_surf = Geom_RectangularTrimmedSurface(cyl_surf, 0.0, 1.0, 0.5, 1.5)
+        trim_face = Face(BRepBuilderAPI_MakeFace(trim_surf, 1e-6).Face())
+        self.assertAlmostEqual(trim_face.axis_of_rotation.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(trim_face.axis_of_rotation.position, (0, 0, 0), 5)
+
+        # Geom_OffsetSurface
+        cyl_off_surf = Geom_OffsetSurface(cyl_surf, 0.5)
+        off_face = Face(BRepBuilderAPI_MakeFace(cyl_off_surf, 1e-6).Face())
+        self.assertAlmostEqual(off_face.axis_of_rotation.direction, (0, 0, 1), 5)
+        self.assertAlmostEqual(off_face.axis_of_rotation.position, (0, 0, 0), 5)
+
+        # Invalid
+        self.assertIsNone(Face.make_rect(1, 1).axis_of_rotation)
 
     def test_is_convex_concave(self):
 

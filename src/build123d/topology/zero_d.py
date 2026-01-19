@@ -161,7 +161,7 @@ class Vertex(Shape[TopoDS_Vertex]):
 
         shape_type = shapetype(obj)
         # NB downcast is needed to handle TopoDS_Shape types
-        return constructor_lut[shape_type](TopoDS.Vertex_s(obj))
+        return constructor_lut[shape_type](TopoDS.Vertex(obj))
 
     @classmethod
     def extrude(cls, obj: Shape, direction: VectorLike) -> Vertex:
@@ -360,7 +360,7 @@ def topo_explore_common_vertex(
 
             # Check if the vertices are the same
             if vertex1.IsSame(vertex2):
-                return Vertex(TopoDS.Vertex_s(vertex1))  # Common vertex found
+                return Vertex(TopoDS.Vertex(vertex1))  # Common vertex found
 
             explorer2.Next()
         vert_exp.Next()

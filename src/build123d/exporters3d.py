@@ -33,6 +33,7 @@ from datetime import datetime
 import warnings
 from io import BytesIO
 from os import PathLike, fsdecode, fspath
+from typing import BinaryIO, cast
 
 import OCP.TopAbs as ta
 from anytree import PreOrderIter
@@ -67,7 +68,9 @@ from build123d.geometry import Location
 from build123d.topology import Compound, Curve, Part, Shape, Sketch
 
 
-def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
+def _create_xde(
+    to_export: Shape, unit: Unit = Unit.MM, auto_naming: bool = False
+) -> TDocStd_Document:
     """create_xde
 
     An OpenCASCADE Technology (OCCT) XDE (eXtended Data Exchange) document is a
@@ -85,6 +88,8 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
     Args:
         to_export (Shape): object or assembly
         unit (Unit, optional): shape units. Defaults to Unit.MM.
+        auto_naming (bool, optional): whether to use ShapeTool AutoNaming.
+            Defaults to False.
 
     Returns:
         TDocStd_Document: XDE document
@@ -104,7 +109,11 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
     # Get the tools for handling shapes & colors section of the XCAF document.
     shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
-    # shape_tool.SetAutoNaming_s(True)
+
+    # Auto Naming names shapes and links. Enabling it for glTF's prevents user defined
+    # labels from ending up on nodes which is undesirable. Enabling it for STEP files
+    # does not seem to affect user labels.
+    shape_tool.SetAutoNaming_s(auto_naming)
 
     # Add all the shapes in the b3d object either as a single object or assembly
     is_assembly = isinstance(to_export, Compound) and len(to_export.children) > 0
@@ -161,7 +170,7 @@ def _create_xde(to_export: Shape, unit: Unit = Unit.MM) -> TDocStd_Document:
 
 def export_brep(
     to_export: Shape,
-    file_path: PathLike | str | bytes | BytesIO,
+    file_path: PathLike | str | bytes | BytesIO | BinaryIO,
 ) -> bool:
     """Export this shape to a BREP file
 
@@ -172,9 +181,10 @@ def export_brep(
     Returns:
         bool: write status
     """
-    if not isinstance(file_path, BytesIO):
+    if isinstance(file_path, (PathLike | str | bytes)):
         file_path = fsdecode(file_path)
-
+    else:
+        file_path = cast(BytesIO, file_path)
     return_value = BRepTools.Write_s(to_export.wrapped, file_path)
 
     return True if return_value is None else return_value
@@ -232,7 +242,7 @@ def export_gltf(
             node.mesh(linear_deflection, angular_deflection)
 
     # Create the XCAF document
-    doc: TDocStd_Document = _create_xde(to_export, unit)
+    doc: TDocStd_Document = _create_xde(to_export, unit, auto_naming=False)
 
     # Write the glTF file
     writer = RWGltf_CafWriter(
@@ -262,7 +272,7 @@ def export_gltf(
 
 def export_step(
     to_export: Shape,
-    file_path: PathLike | str | bytes | BytesIO,
+    file_path: PathLike | str | bytes | BytesIO | BinaryIO,
     unit: Unit = Unit.MM,
     write_pcurves: bool = True,
     precision_mode: PrecisionMode = PrecisionMode.AVERAGE,
@@ -292,7 +302,7 @@ def export_step(
     """
 
     # Create the XCAF document
-    doc = _create_xde(to_export, unit)
+    doc = _create_xde(to_export, unit, auto_naming=True)
 
     # Disable writing OCCT info to console
     messenger = Message.DefaultMessenger_s()
@@ -306,6 +316,12 @@ def export_step(
     writer.SetNameMode(True)
 
     header = APIHeaderSection_MakeHeader(writer.Writer().Model())
+
+    if not header.IsDone():  # As in OCCT 7.9.x
+        # Create an empty consistent header, i.e. IsDone() return True
+        header = APIHeaderSection_MakeHeader(0)
+        header.Apply(writer.Writer().Model())    
+        
     if to_export.label:
         header.SetName(TCollection_HAsciiString(to_export.label))
     if timestamp is not None:
@@ -326,17 +342,17 @@ def export_step(
     Interface_Static.SetIVal_s("write.precision.mode", precision_mode.value)
     writer.Transfer(doc, STEPControl_StepModelType.STEPControl_AsIs)
 
-    if not isinstance(file_path, BytesIO):
-        status = (
-            writer.Write(fsdecode(file_path)) == IFSelect_ReturnStatus.IFSelect_RetDone
-        )
+    if isinstance(file_path, (PathLike, str, bytes)):
+        status = writer.Write(fsdecode(file_path))
     else:
-        status = writer.WriteStream(file_path) == IFSelect_ReturnStatus.IFSelect_RetDone
+        # need to cast for type checker because BinaryIO is OK but OCP doesn't know
+        status = writer.WriteStream(cast(BytesIO, file_path))
 
-    if not status:
+    success = status == IFSelect_ReturnStatus.IFSelect_RetDone
+    if not success:
         raise RuntimeError("Failed to write STEP file")
 
-    return status
+    return success
 
 
 def export_stl(

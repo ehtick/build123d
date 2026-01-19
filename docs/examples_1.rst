@@ -29,6 +29,11 @@ Most of the examples show the builder and algebra modes.
         :link: examples-bicycle_tire
         :link-type: ref
 
+    .. grid-item-card:: Bracelet |Algebra|
+        :img-top:  assets/examples/bracelet.png
+        :link: examples-bracelet
+        :link-type: ref
+
     .. grid-item-card:: Canadian Flag Blowing in The Wind |Builder| |Algebra|
             :img-top: assets/examples/example_canadian_flag_01.png
             :link: examples-canadian_flag
@@ -185,6 +190,39 @@ surface.
 .. dropdown:: |Builder| Reference Implementation (Builder Mode)
 
     .. literalinclude:: ../examples/bicycle_tire.py
+        :language: build123d
+        :start-after: [Code]
+        :end-before: [End]
+
+
+.. _examples-bracelet:
+
+Bracelet
+--------------------------------
+.. image:: assets/examples/bracelet.png
+    :align: center
+
+Doubly-curved bracelet with an embossed label
+
+This model is a good “stress test” for OCCT because most of the final boundary
+surfaces are *freeform* (not analytic planes/cylinders/spheres). The geometry
+is assembled from:
+
+- a swept center section (using a curved solid end-face as the sweep profile)
+- two freeform “tip caps” built as Gordon surfaces (network of curves)
+- an optional embossed text label projected onto a curved solid
+- alignment holes for splitting/printing/assembly
+
+Key techniques demonstrated:
+
+- using location_at/position_at/tangent (%) to extract local frames & tangents
+- projecting curves onto a non-planar surface to create “true” 3D guide curves
+- Gordon surfaces to build high-quality doubly-curved skins
+- projecting faces (text) onto a complex solid and thickening them
+
+.. dropdown:: |Algebra| Reference Implementation (Algebra Mode)
+
+    .. literalinclude:: ../examples/bracelet.py
         :language: build123d
         :start-after: [Code]
         :end-before: [End]

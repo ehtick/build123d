@@ -87,10 +87,13 @@ from OCP.gce import gce_MakeLin
 from OCP.Geom import (
     Geom_BezierSurface,
     Geom_BSplineCurve,
+    Geom_OffsetSurface,
     Geom_RectangularTrimmedSurface,
     Geom_Surface,
+    Geom_SurfaceOfRevolution,
     Geom_TrimmedCurve,
 )
+from OCP.GeomAdaptor import GeomAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_C0, GeomAbs_CurveType, GeomAbs_G1, GeomAbs_G2
 from OCP.GeomAPI import (
     GeomAPI_ExtremaCurveCurve,
@@ -98,7 +101,7 @@ from OCP.GeomAPI import (
     GeomAPI_ProjectPointOnSurf,
 )
 from OCP.GeomProjLib import GeomProjLib
-from OCP.gp import gp_Pnt, gp_Vec
+from OCP.gp import gp_Ax1, gp_Pnt, gp_Vec
 from OCP.GProp import GProp_GProps
 from OCP.Precision import Precision
 from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Wire
@@ -802,23 +805,39 @@ class Face(Mixin2D[TopoDS_Face]):
     @property
     def axis_of_rotation(self) -> None | Axis:
         """Get the rotational axis of a cylinder or torus"""
-        if type(self.geom_adaptor()) == Geom_RectangularTrimmedSurface:
-            return None
 
-        if self.geom_type == GeomType.CONE:
-            return Axis(
-                self.geom_adaptor().Cone().Axis()  # type:ignore[attr-defined]
-            )
+        # Get the underlying geometric surface
+        surf: Geom_Surface = self.geom_adaptor()
 
-        if self.geom_type == GeomType.CYLINDER:
-            return Axis(
-                self.geom_adaptor().Cylinder().Axis()  # type:ignore[attr-defined]
-            )
+        # Unwrap trimmed and offset surfaces to get at the basis surface
+        while isinstance(surf, (Geom_RectangularTrimmedSurface, Geom_OffsetSurface)):
+            surf = surf.BasisSurface()
 
-        if self.geom_type == GeomType.TORUS:
-            return Axis(self.geom_adaptor().Torus().Axis())  # type:ignore[attr-defined]
+        # Get the geometry type from the geometric surface
+        geom_type = Shape.geom_LUT_FACE[GeomAdaptor_Surface(surf).GetType()]
 
-        return None
+        # Determine the axis of rotation if there is one
+        match geom_type:
+            case GeomType.CONE:
+                return Axis(
+                    surf.Cone().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.CYLINDER:
+                return Axis(
+                    surf.Cylinder().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.SPHERE:
+                ax3 = surf.Position()  # type:ignore[attr-defined]
+                return Axis(gp_Ax1(ax3.Location(), ax3.Direction()))
+
+            case GeomType.TORUS:
+                return Axis(
+                    surf.Torus().Axis()  # type:ignore[attr-defined]
+                )
+            case GeomType.REVOLUTION:
+                return Axis(surf.Axis())  # type:ignore[attr-defined]
+            case _:
+                return None
 
     @property
     def axes_of_symmetry(self) -> list[Axis]:
@@ -1136,7 +1155,7 @@ class Face(Mixin2D[TopoDS_Face]):
         """
         if not obj:
             raise ValueError("Can't extrude empty object")
-        return Face(TopoDS.Face_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Face(TopoDS.Face(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_bezier_surface(
@@ -1586,7 +1605,7 @@ class Face(Mixin2D[TopoDS_Face]):
 
         try:
             patch.Build()
-            result = cls(TopoDS.Face_s(patch.Shape()))
+            result = cls(TopoDS.Face(patch.Shape()))
         except (
             Standard_Failure,
             StdFail_NotDone,
@@ -1792,15 +1811,15 @@ class Face(Mixin2D[TopoDS_Face]):
             # Index or iterator access to OCP.TopTools.TopTools_ListOfShape is slow on M1 macs
             # Using First() and Last() to omit
             edges = (
-                Edge(TopoDS.Edge_s(edge_list.First())),
-                Edge(TopoDS.Edge_s(edge_list.Last())),
+                Edge(TopoDS.Edge(edge_list.First())),
+                Edge(TopoDS.Edge(edge_list.Last())),
             )
 
             edge1, edge2 = Wire.order_chamfer_edges(reference_edge, edges)
 
             chamfer_builder.AddChamfer(
-                TopoDS.Edge_s(edge1.wrapped),
-                TopoDS.Edge_s(edge2.wrapped),
+                TopoDS.Edge(edge1.wrapped),
+                TopoDS.Edge(edge2.wrapped),
                 distance,
                 distance2,
             )
@@ -2184,7 +2203,7 @@ class Face(Mixin2D[TopoDS_Face]):
                     BRepAlgoAPI_Common(),
                 )
                 for topods_shell in get_top_level_topods_shapes(topods_shape):
-                    intersected_shapes.append(Shell(TopoDS.Shell_s(topods_shell)))
+                    intersected_shapes.append(Shell(TopoDS.Shell(topods_shell)))
 
         intersected_shapes = intersected_shapes.sort_by(Axis(self.center(), direction))
         projected_shapes: ShapeList[Face | Shell] = ShapeList()
@@ -2241,7 +2260,7 @@ class Face(Mixin2D[TopoDS_Face]):
         for hole_wire in inner_wires:
             reshaper.Remove(hole_wire.wrapped)
         modified_shape = downcast(reshaper.Apply(self.wrapped))
-        holeless.wrapped = TopoDS.Face_s(modified_shape)
+        holeless.wrapped = TopoDS.Face(modified_shape)
         return holeless
 
     def wire(self) -> Wire:
@@ -2645,7 +2664,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             obj = shell
         elif isinstance(obj, Iterable):
             try:
-                obj = TopoDS.Shell_s(_sew_topods_faces([f.wrapped for f in obj]))
+                obj = TopoDS.Shell(_sew_topods_faces([f.wrapped for f in obj]))
             except Standard_TypeMismatch:
                 raise TypeError("Unable to create Shell, invalid input type")
 
@@ -2688,7 +2707,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         Returns:
             Edge: extruded shape
         """
-        return Shell(TopoDS.Shell_s(_extrude_topods_shape(obj.wrapped, direction)))
+        return Shell(TopoDS.Shell(_extrude_topods_shape(obj.wrapped, direction)))
 
     @classmethod
     def make_loft(cls, objs: Iterable[Vertex | Wire], ruled: bool = False) -> Shell:
@@ -2708,7 +2727,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         Returns:
             Shell: Lofted object
         """
-        return cls(TopoDS.Shell_s(_make_loft(objs, False, ruled)))
+        return cls(TopoDS.Shell(_make_loft(objs, False, ruled)))
 
     @classmethod
     def revolve(
@@ -2734,7 +2753,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
             profile.wrapped, axis.wrapped, angle * DEG2RAD, True
         )
 
-        return cls(TopoDS.Shell_s(revol_builder.Shape()))
+        return cls(TopoDS.Shell(revol_builder.Shape()))
 
     @classmethod
     def sweep(
@@ -2762,7 +2781,7 @@ class Shell(Mixin2D[TopoDS_Shell]):
         builder.Add(profile.wrapped, False, False)
         builder.SetTransitionMode(Shape._transModeDict[transition])
         builder.Build()
-        result = Shell(TopoDS.Shell_s(builder.Shape()))
+        result = Shell(TopoDS.Shell(builder.Shape()))
         if SkipClean.clean:
             result = result.clean()
 

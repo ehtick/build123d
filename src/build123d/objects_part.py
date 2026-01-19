@@ -28,13 +28,31 @@ license:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from math import radians, tan
+from scipy.spatial import ConvexHull
 
 from build123d.build_common import LocationList, validate_inputs
 from build123d.build_enums import Align, Mode
 from build123d.build_part import BuildPart
-from build123d.geometry import Location, Plane, Rotation, RotationLike
-from build123d.topology import Compound, Part, ShapeList, Solid, tuplify
+from build123d.geometry import (
+    Location,
+    Plane,
+    Rotation,
+    RotationLike,
+    Vector,
+    VectorLike,
+)
+from build123d.topology import (
+    Compound,
+    Face,
+    Part,
+    ShapeList,
+    Shell,
+    Solid,
+    Wire,
+    tuplify,
+)
 
 
 class BasePartObject(Part):
@@ -194,6 +212,50 @@ class Cone(BasePartObject):
 
         super().__init__(
             part=solid, rotation=rotation, align=tuplify(align, 3), mode=mode
+        )
+
+
+class ConvexPolyhedron(BasePartObject):
+    """Part Object: ConvexPolyhedron
+
+    Create a convex solid from the convex hull of the provided points.
+
+    Args:
+        points (Iterable[VectorLike]): vertices of the polyhedron
+        rotation (RotationLike, optional): angles to rotate about axes. Defaults to (0, 0, 0)
+        align (Align | tuple[Align, Align, Align] | None, optional): align MIN, CENTER,
+            or MAX of object. Defaults to Align.NONE
+        mode (Mode, optional): combine mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildPart._tag]
+
+    def __init__(
+        self,
+        points: Iterable[VectorLike],
+        rotation: RotationLike = (0, 0, 0),
+        align: Align | tuple[Align, Align, Align] | None = Align.NONE,
+        mode: Mode = Mode.ADD,
+    ):
+        context: BuildPart | None = BuildPart._get_context(self)
+        validate_inputs(context, self)
+
+        pnts: list[tuple] = [tuple(Vector(p)) for p in points]
+
+        # Create a convex hull from the vertices
+        convex_hull = ConvexHull(pnts).simplices.tolist()
+
+        # Create faces from the vertex indices
+        polyhedron_faces = []
+        for face_vertex_indices in convex_hull:
+            corner_vertices = [pnts[i] for i in face_vertex_indices]
+            polyhedron_faces.append(Face(Wire.make_polygon(corner_vertices)))
+
+        # Create the solid from the Faces
+        polyhedron = Solid(Shell(polyhedron_faces)).clean()
+
+        super().__init__(
+            part=polyhedron, rotation=rotation, align=tuplify(align, 3), mode=mode
         )
 
 

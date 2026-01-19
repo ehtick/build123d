@@ -1118,7 +1118,7 @@ class ExportSVG(Export2D):
         )
         while explorer.More():
             topo_wire = explorer.Current()
-            loose_wires.append(Wire(TopoDS.Wire_s(topo_wire)))
+            loose_wires.append(Wire(TopoDS.Wire(topo_wire)))
             explorer.Next()
         # print(f"{len(loose_wires)} loose wires")
         for wire in loose_wires:
@@ -1137,7 +1137,7 @@ class ExportSVG(Export2D):
         )
         while explorer.More():
             topo_edge = explorer.Current()
-            loose_edges.append(Edge(TopoDS.Edge_s(topo_edge)))
+            loose_edges.append(Edge(TopoDS.Edge(topo_edge)))
             explorer.Next()
         # print(f"{len(loose_edges)} loose edges")
         loose_edge_elements = [self._edge_element(edge) for edge in loose_edges]
