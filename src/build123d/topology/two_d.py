@@ -408,6 +408,13 @@ class Mixin2D(ABC, Shape[TOPODS]):
         Returns:
             ShapeList of contact shapes (Vertex only for 2D+2D)
         """
+        # Helper functions for common geometric checks
+        def vertex_on_edge(v: Vertex, e: Edge) -> bool:
+            return v.distance_to(e) <= tolerance
+
+        def is_duplicate_vertex(v: Vertex, existing: ShapeList) -> bool:
+            return any(v.distance_to(ev) <= tolerance for ev in existing)
+
         results: ShapeList = ShapeList()
 
         if isinstance(other, (Face, Shell)):
@@ -443,10 +450,10 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
                     # Check if point is on edge boundary of either face
                     on_self_edge = any(
-                        new_vertex.distance_to(e) <= tolerance for e in self.edges()
+                        vertex_on_edge(new_vertex, e) for e in self.edges()
                     )
                     on_other_edge = any(
-                        new_vertex.distance_to(e) <= tolerance for e in other.edges()
+                        vertex_on_edge(new_vertex, e) for e in other.edges()
                     )
 
                     # Skip if point is on edges of both faces (edge-edge intersection)
@@ -489,12 +496,11 @@ class Mixin2D(ABC, Shape[TOPODS]):
                         new_vertex.distance_to(f) <= tolerance for f in found_faces
                     )
                     on_edge = any(
-                        new_vertex.distance_to(e) <= tolerance for e in found_edges
+                        vertex_on_edge(new_vertex, e) for e in found_edges
                     )
-                    already = any(
-                        new_vertex.distance_to(v) <= tolerance for v in found_vertices
-                    )
-                    if not on_face and not on_edge and not already:
+                    if not on_face and not on_edge and not is_duplicate_vertex(
+                        new_vertex, found_vertices
+                    ):
                         results.append(new_vertex)
                         found_vertices.append(new_vertex)
 

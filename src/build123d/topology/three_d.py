@@ -127,6 +127,7 @@ from .shape_core import (
 )
 
 from .two_d import sort_wires_by_build_order, Mixin2D, Face, Shell
+from .helpers import geom_equal
 from .utils import (
     _extrude_topods_shape,
     find_max_dimension,
@@ -743,7 +744,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
     # ---- Instance Methods ----
 
     def touch(
-        self, other: Shape, tolerance: float = 1e-6
+        self, other: Shape, tolerance: float = 1e-6, check_num_points: int = 5
     ) -> ShapeList[Vertex | Edge | Face]:
         """Find where this Solid's boundary contacts another shape.
 
@@ -757,10 +758,35 @@ class Solid(Mixin3D[TopoDS_Solid]):
         Args:
             other: Shape to check boundary contacts with
             tolerance: tolerance for contact detection
+            check_num_points: number of interpolation points for edge-on-face check
 
         Returns:
             ShapeList of boundary contact geometry (empty if no contact)
         """
+        # Helper functions for common geometric checks
+        def vertex_on_edge(v: Vertex, e: Edge) -> bool:
+            return v.distance_to(e) <= tolerance
+
+        def vertex_on_face(v: Vertex, f: Face) -> bool:
+            return v.distance_to(f) <= tolerance
+
+        def edge_on_face(e: Edge, f: Face) -> bool:
+            # Check start, end, and interpolated points are all on the face
+            for i in range(check_num_points + 2):
+                t = i / (check_num_points + 1)
+                if f.distance_to(e @ t) > tolerance:
+                    return False
+            return True
+
+        def is_duplicate(shape: Vertex | Edge, existing: Iterable[Shape]) -> bool:
+            if isinstance(shape, Vertex):
+                return any(shape.distance_to(s) <= tolerance for s in existing)
+            # Edge: use geom_equal for full geometric comparison
+            return any(
+                isinstance(e, Edge) and geom_equal(shape, e, tolerance)
+                for e in existing
+            )
+
         results: ShapeList = ShapeList()
 
         if isinstance(other, Solid):
@@ -791,12 +817,8 @@ class Solid(Mixin3D[TopoDS_Solid]):
                     for s in common:
                         if s.is_null:
                             continue
-                        # Skip if edge is on any found face (use midpoint)
-                        mid = s.center()
-                        on_face = any(
-                            f.distance_to(mid) <= tolerance for f in found_faces
-                        )
-                        if not on_face:
+                        # Skip if edge is on any found face
+                        if not any(edge_on_face(s, f) for f in found_faces):
                             found_edges.append(s)
             results.extend(found_edges)
 
@@ -805,16 +827,9 @@ class Solid(Mixin3D[TopoDS_Solid]):
             for sv in self.vertices():
                 for ov in other.vertices():
                     if sv.distance_to(ov) <= tolerance:
-                        on_face = any(
-                            sv.distance_to(f) <= tolerance for f in found_faces
-                        )
-                        on_edge = any(
-                            sv.distance_to(e) <= tolerance for e in found_edges
-                        )
-                        already = any(
-                            sv.distance_to(v) <= tolerance for v in found_vertices
-                        )
-                        if not on_face and not on_edge and not already:
+                        on_face = any(vertex_on_face(sv, f) for f in found_faces)
+                        on_edge = any(vertex_on_edge(sv, e) for e in found_edges)
+                        if not on_face and not on_edge and not is_duplicate(sv, found_vertices):
                             results.append(sv)
                             found_vertices.append(sv)
                         break
@@ -827,11 +842,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
                         continue
                     tangent_vertices = sf.touch(of, tolerance, found_faces, found_edges)
                     for v in tangent_vertices:
-                        already_found = any(
-                            v.distance_to(existing) <= tolerance
-                            for existing in found_vertices
-                        )
-                        if not already_found:
+                        if not is_duplicate(v, found_vertices):
                             results.append(v)
                             found_vertices.append(v)
 
@@ -853,18 +864,13 @@ class Solid(Mixin3D[TopoDS_Solid]):
                         if s.is_null or not isinstance(s, Edge):
                             continue
                         # Check if geometrically same edge already found
-                        already = any(
-                            (s.center() - e.center()).length <= tolerance
-                            and abs(s.length - e.length) <= tolerance
-                            for e in touching_edges
-                        )
-                        if not already:
+                        if not is_duplicate(s, touching_edges):
                             results.append(s)
                             touching_edges.append(s)
             # Check face's vertices touching solid's edges (corner coincident)
             for ov in other.vertices():
                 for se in self.edges():
-                    if ov.distance_to(se) <= tolerance:
+                    if vertex_on_edge(ov, se):
                         results.append(ov)
                         break
 
@@ -876,7 +882,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
 
             for ov in other.vertices():
                 for sf, _ in self_faces:
-                    if ov.distance_to(sf) <= tolerance:
+                    if vertex_on_face(ov, sf):
                         results.append(ov)
                         break
             # Use BRepExtrema to find tangent contacts (edge tangent to surface)
@@ -897,16 +903,13 @@ class Solid(Mixin3D[TopoDS_Solid]):
                                 continue
                             new_vertex = Vertex(pnt1.X(), pnt1.Y(), pnt1.Z())
                             # Only add if not already covered by existing results
-                            already_found = any(
-                                new_vertex.distance_to(r) <= tolerance for r in results
-                            )
-                            if not already_found:
+                            if not is_duplicate(new_vertex, results):
                                 results.append(new_vertex)
 
         elif isinstance(other, Vertex):
             # Solid + Vertex: check if vertex is on boundary
             for sf in self.faces():
-                if other.distance_to(sf) <= tolerance:
+                if vertex_on_face(other, sf):
                     results.append(other)
                     break
 
