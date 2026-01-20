@@ -66,13 +66,13 @@ def geom_equal(
 
     # NOTE: == for Vector and Location values is tolerance based equality!
 
-    if isinstance(value1, Vector):
+    if isinstance(value1, Vector) and isinstance(value2, Vector):
         return value1 == value2
 
-    elif isinstance(value1, Vertex):
+    elif isinstance(value1, Vertex) and isinstance(value2, Vertex):
         return Vector(value1) == Vector(value2)
 
-    elif isinstance(value1, Location):
+    elif isinstance(value1, Location) and isinstance(value2, Location):
         return value1 == value2
 
     elif isinstance(value1, Wire) and isinstance(value2, Wire):
