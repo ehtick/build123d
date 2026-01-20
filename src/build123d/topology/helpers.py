@@ -54,28 +54,24 @@ def convert_to_shapes(
 
 
 def geom_equal(
-    value1: Vector | Location | Vertex | Edge | Wire,
-    value2: Vector | Location | Vertex | Edge | Wire,
+    value1: Vertex | Edge | Wire,
+    value2: Vertex | Edge | Wire,
     tol: float = 1e-6,
     num_interpolation_points: int = 5,
 ) -> bool:
-    """Compare two geometric objects for equality within tolerance."""
+    """Compare two geometric objects for equality within tolerance.
+
+    Note: For Vector and Location, use the built-in == operator directly,
+    which already performs tolerance-based comparison.
+    """
     # Type must match
     if type(value1) != type(value2):
         return False
 
-    # NOTE: == for Vector and Location values is tolerance based equality!
-
-    if isinstance(value1, Vector) and isinstance(value2, Vector):
-        return value1 == value2
-
-    elif isinstance(value1, Vertex) and isinstance(value2, Vertex):
+    if isinstance(value1, Vertex) and isinstance(value2, Vertex):
         return Vector(value1) == Vector(value2)
 
-    elif isinstance(value1, Location) and isinstance(value2, Location):
-        return value1 == value2
-
-    elif isinstance(value1, Wire) and isinstance(value2, Wire):
+    if isinstance(value1, Wire) and isinstance(value2, Wire):
         edges1 = value1.edges()
         edges2 = value2.edges()
         if len(edges1) != len(edges2):
