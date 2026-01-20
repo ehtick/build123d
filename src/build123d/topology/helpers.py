@@ -103,13 +103,20 @@ def geom_equal(
                 return True
 
             case GeomType.CIRCLE:
-                return abs(ga1.Circle().Radius() - ga2.Circle().Radius()) < tol
+                c1, c2 = ga1.Circle(), ga2.Circle()
+                return (
+                    abs(c1.Radius() - c2.Radius()) < tol
+                    and Vector(c1.Location()) == Vector(c2.Location())
+                    and Vector(c1.Axis().Direction()) == Vector(c2.Axis().Direction())
+                )
 
             case GeomType.ELLIPSE:
                 e1, e2 = ga1.Ellipse(), ga2.Ellipse()
                 return (
                     abs(e1.MajorRadius() - e2.MajorRadius()) < tol
                     and abs(e1.MinorRadius() - e2.MinorRadius()) < tol
+                    and Vector(e1.Location()) == Vector(e2.Location())
+                    and Vector(e1.Axis().Direction()) == Vector(e2.Axis().Direction())
                 )
 
             case GeomType.HYPERBOLA:
@@ -117,10 +124,17 @@ def geom_equal(
                 return (
                     abs(h1.MajorRadius() - h2.MajorRadius()) < tol
                     and abs(h1.MinorRadius() - h2.MinorRadius()) < tol
+                    and Vector(h1.Location()) == Vector(h2.Location())
+                    and Vector(h1.Axis().Direction()) == Vector(h2.Axis().Direction())
                 )
 
             case GeomType.PARABOLA:
-                return abs(ga1.Parabola().Focal() - ga2.Parabola().Focal()) < tol
+                p1, p2 = ga1.Parabola(), ga2.Parabola()
+                return (
+                    abs(p1.Focal() - p2.Focal()) < tol
+                    and Vector(p1.Location()) == Vector(p2.Location())
+                    and Vector(p1.Axis().Direction()) == Vector(p2.Axis().Direction())
+                )
 
             case GeomType.BEZIER:
                 b1, b2 = ga1.Bezier(), ga2.Bezier()

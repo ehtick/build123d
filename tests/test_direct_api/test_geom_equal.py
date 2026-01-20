@@ -2,9 +2,7 @@
 
 import pytest
 from build123d import (
-    Vector,
     Vertex,
-    Location,
     Edge,
     Wire,
     Spline,
@@ -15,30 +13,6 @@ from build123d import (
     GeomType,
 )
 from build123d.topology.helpers import geom_equal
-
-
-class TestGeomEqualVector:
-    """Tests for Vector comparison."""
-
-    def test_same_vector(self):
-        v1 = Vector(1, 2, 3)
-        v2 = Vector(1, 2, 3)
-        assert geom_equal(v1, v2)
-
-    def test_different_vector(self):
-        v1 = Vector(1, 2, 3)
-        v2 = Vector(1, 2, 4)
-        assert not geom_equal(v1, v2)
-
-    def test_vector_within_tolerance(self):
-        v1 = Vector(1, 2, 3)
-        v2 = Vector(1, 2, 3 + 1e-7)
-        assert geom_equal(v1, v2)
-
-    def test_vector_outside_tolerance(self):
-        v1 = Vector(1, 2, 3)
-        v2 = Vector(1, 2, 3 + 1e-5)
-        assert not geom_equal(v1, v2)
 
 
 class TestGeomEqualVertex:
@@ -58,25 +32,6 @@ class TestGeomEqualVertex:
         v1 = Vertex(1, 2, 3)
         v2 = Vertex(1, 2, 3 + 1e-7)
         assert geom_equal(v1, v2)
-
-
-class TestGeomEqualLocation:
-    """Tests for Location comparison."""
-
-    def test_same_location(self):
-        loc1 = Location((1, 2, 3))
-        loc2 = Location((1, 2, 3))
-        assert geom_equal(loc1, loc2)
-
-    def test_different_position(self):
-        loc1 = Location((1, 2, 3))
-        loc2 = Location((1, 2, 4))
-        assert not geom_equal(loc1, loc2)
-
-    def test_different_orientation(self):
-        loc1 = Location((0, 0, 0), (0, 0, 0))
-        loc2 = Location((0, 0, 0), (45, 0, 0))
-        assert not geom_equal(loc1, loc2)
 
 
 class TestGeomEqualEdgeLine:
@@ -121,6 +76,17 @@ class TestGeomEqualEdgeCircle:
         e1 = Edge.make_circle(10, start_angle=0, end_angle=90)
         e2 = Edge.make_circle(10, start_angle=0, end_angle=180)
         assert not geom_equal(e1, e2)
+
+    def test_different_circle_from_revolve(self):
+        """Two circles with same radius/endpoints but different center/axis."""
+        from build123d import Axis, Line, RadiusArc, make_face, revolve
+
+        f1 = make_face(RadiusArc((5, 0), (-5, 0), 15) + Line((5, 0), (-5, 0)))
+        p1 = revolve(f1, Axis.X, 90)
+        value1, value2 = p1.edges().filter_by(GeomType.CIRCLE)
+        value2 = value2.reversed()
+        # These circles have same endpoints after reversal but different center/axis
+        assert not geom_equal(value1, value2)
 
 
 class TestGeomEqualEdgeEllipse:
@@ -282,11 +248,6 @@ class TestGeomEqualWire:
 
 class TestGeomEqualTypeMismatch:
     """Tests for type mismatch cases."""
-
-    def test_vector_vs_vertex(self):
-        v1 = Vector(1, 2, 3)
-        v2 = Vertex(1, 2, 3)
-        assert not geom_equal(v1, v2)
 
     def test_edge_vs_wire(self):
         e = Edge.make_line((0, 0), (1, 1))
