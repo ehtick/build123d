@@ -429,7 +429,7 @@ class Mixin3D(Shape[TOPODS]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -441,11 +441,20 @@ class Mixin3D(Shape[TOPODS]):
         - Solid + Edge → Edge (portion through solid)
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
                 (shapes touching the solid's surface without penetrating)
         """
+        # Convert geometry objects to shapes
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
+        elif isinstance(other, Plane):
+            other = Face(other)
 
         def filter_redundant_touches(items: ShapeList) -> ShapeList:
             """Remove vertices/edges that lie on higher-dimensional results."""

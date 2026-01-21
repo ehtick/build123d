@@ -170,7 +170,7 @@ class Vertex(Shape[TopoDS_Vertex]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -179,11 +179,26 @@ class Vertex(Shape[TopoDS_Vertex]):
         For a vertex (0D), intersection means the vertex lies on/in the other shape.
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
                 (only relevant when Solids are involved)
         """
+        # Convert geometry objects to Vertex
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            # Check if vertex lies on the axis
+            if other.intersect(self.center()):
+                return ShapeList([self])
+            return None
+        elif isinstance(other, Plane):
+            # Check if vertex lies on the plane
+            if other.contains(self.center(), tolerance):
+                return ShapeList([self])
+            return None
 
         if isinstance(other, Vertex):
             # Vertex + Vertex: check distance

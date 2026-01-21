@@ -715,7 +715,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -729,11 +729,21 @@ class Compound(Mixin3D[TopoDS_Compound]):
         Nested Compounds are handled by recursion.
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
                 (only relevant when Solids are involved)
         """
+        # Convert geometry objects
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
+        elif isinstance(other, Plane):
+            other = Face(other)
+
         # Get self elements: assembly children or OCCT direct children
         self_elements = self.children if self.children else list(self)
 

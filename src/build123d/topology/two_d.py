@@ -286,7 +286,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -298,11 +298,20 @@ class Mixin2D(ABC, Shape[TOPODS]):
         - 2D + Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
                 (only relevant when Solids are involved)
         """
+        # Convert geometry objects to shapes
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
+        elif isinstance(other, Plane):
+            other = Face(other)
 
         def filter_edges(
             section_edges: ShapeList[Edge], common_edges: ShapeList[Edge]

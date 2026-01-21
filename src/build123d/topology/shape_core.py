@@ -85,7 +85,6 @@ from OCP.BRepAlgoAPI import (
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_Copy,
     BRepBuilderAPI_GTransform,
-    BRepBuilderAPI_MakeEdge,
     BRepBuilderAPI_MakeFace,
     BRepBuilderAPI_MakeVertex,
     BRepBuilderAPI_RightCorner,
@@ -103,7 +102,6 @@ from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.gce import gce_MakeLin
-from OCP.Geom import Geom_Line
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomLib import GeomLib_IsPlanarSurface
 from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec, gp_XYZ
@@ -1375,8 +1373,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 raise ValueError(f"Unsupported type for intersect: {type(obj)}")
 
         # Chained iteration for AND semantics: c.intersect(s1, s2) = c ∩ s1 ∩ s2
+        # Geometry objects (Vector, Location, Axis, Plane) are converted in _intersect
         common_set = ShapeList([self])
-        for other in shapes:
+        for other in to_intersect:
             next_set: ShapeList = ShapeList()
             for obj in common_set:
                 result = obj._intersect(other, tolerance, include_touched)
@@ -1389,7 +1388,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -1399,7 +1398,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Mixin3D, Compound) override this to provide actual intersection logic.
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
 

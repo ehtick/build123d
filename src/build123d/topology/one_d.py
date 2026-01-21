@@ -715,7 +715,7 @@ class Mixin1D(Shape[TOPODS]):
 
     def _intersect(
         self,
-        other: Shape,
+        other: Shape | Vector | Location | Axis | Plane,
         tolerance: float = 1e-6,
         include_touched: bool = False,
     ) -> ShapeList | None:
@@ -726,11 +726,18 @@ class Mixin1D(Shape[TOPODS]):
         - 1D + Face/Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            other: Shape to intersect with
+            other: Shape or geometry object to intersect with
             tolerance: tolerance for intersection detection
             include_touched: if True, include boundary contacts
                 (only relevant when Solids are involved)
         """
+        # Convert geometry objects to shapes
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
 
         results: ShapeList = ShapeList()
 
@@ -741,8 +748,14 @@ class Mixin1D(Shape[TOPODS]):
                 bbox.diagonal + (other.center() - bbox.center()).length
             )
 
+        # 1D + Plane: run Section directly with OCP Face
+        if isinstance(other, Plane):
+            face: Shape = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
+            section = self._bool_op_list((self,), (face,), BRepAlgoAPI_Section())
+            results.extend(section.expand())
+
         # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
-        if isinstance(other, (Edge, Wire)):
+        elif isinstance(other, (Edge, Wire)):
             common = self._bool_op_list(
                 (self,), (other,), BRepAlgoAPI_Common()
             )
