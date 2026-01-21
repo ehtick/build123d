@@ -573,3 +573,371 @@ def make_exception_params(matrix):
 def test_exceptions(obj, target, expected):
     with pytest.raises(Exception):
         obj.intersect(target)
+
+
+# Direct touch() method tests
+class TestTouchMethod:
+    """Tests for direct touch() method calls to cover specific code paths."""
+
+    def test_solid_vertex_touch_on_face(self):
+        """Solid.touch(Vertex) where vertex is on a face of the solid."""
+        solid = Box(2, 2, 2)  # Box from -1 to 1 in all axes
+        # Vertex on the top face (z=1)
+        vertex = Vertex(0, 0, 1)
+        result = solid.touch(vertex)
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+    def test_solid_vertex_touch_on_edge(self):
+        """Solid.touch(Vertex) where vertex is on an edge of the solid."""
+        solid = Box(2, 2, 2)
+        # Vertex on an edge (corner of top face)
+        vertex = Vertex(1, 0, 1)
+        result = solid.touch(vertex)
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+    def test_solid_vertex_touch_on_corner(self):
+        """Solid.touch(Vertex) where vertex is on a corner of the solid."""
+        solid = Box(2, 2, 2)
+        # Vertex on a corner
+        vertex = Vertex(1, 1, 1)
+        result = solid.touch(vertex)
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+    def test_solid_vertex_touch_not_touching(self):
+        """Solid.touch(Vertex) where vertex is not on the solid boundary."""
+        solid = Box(2, 2, 2)
+        vertex = Vertex(5, 5, 5)  # Far away
+        result = solid.touch(vertex)
+        assert len(result) == 0
+
+    def test_solid_vertex_touch_inside(self):
+        """Solid.touch(Vertex) where vertex is inside the solid (not touch)."""
+        solid = Box(2, 2, 2)
+        vertex = Vertex(0, 0, 0)  # Center of box
+        result = solid.touch(vertex)
+        # Inside is not a touch - touch is boundary contact only
+        assert len(result) == 0
+
+    def test_shell_tangent_touch(self):
+        """Shell.touch(Face) for tangent contact (sphere touching plane)."""
+        # Create a hemisphere shell
+        sphere = Sphere(1).faces()[0]
+        shell = Shell([sphere])
+
+        # Create a plane tangent to the sphere at bottom (z=-1)
+        tangent_face = Face(Plane.XY.offset(-1))
+
+        result = shell.touch(tangent_face)
+        # Should find tangent vertex contact at (0, 0, -1)
+        assert len(result) >= 1
+        # Result should be vertex (tangent point)
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+
+# ShapeList.expand() tests
+class TestShapeListExpand:
+    """Tests for ShapeList.expand() method."""
+
+    def test_expand_with_vector(self):
+        """ShapeList containing Vector objects."""
+        from build123d import Vector, ShapeList
+
+        v1 = Vector(1, 2, 3)
+        v2 = Vector(4, 5, 6)
+        shapes = ShapeList([v1, v2])
+        expanded = shapes.expand()
+        assert len(expanded) == 2
+        assert v1 in expanded
+        assert v2 in expanded
+
+    def test_expand_nested_compound(self):
+        """ShapeList with nested compounds."""
+        # Create inner compound
+        inner = Compound([Box(1, 1, 1), Pos(3, 0, 0) * Box(1, 1, 1)])
+        # Create outer compound containing inner compound
+        outer = Compound([inner, Pos(0, 3, 0) * Box(1, 1, 1)])
+
+        shapes = ShapeList([outer])
+        expanded = shapes.expand()
+
+        # Should have 3 solids after expanding nested compounds
+        solids = [s for s in expanded if isinstance(s, Solid)]
+        assert len(solids) == 3
+
+    def test_expand_shell_to_faces(self):
+        """ShapeList with Shell expands to faces."""
+        shells = Box(1, 1, 1).shells()  # Get shell from solid
+        if shells:
+            shell = shells[0]
+            shapes = ShapeList([shell])
+            expanded = shapes.expand()
+            faces = [s for s in expanded if isinstance(s, Face)]
+            assert len(faces) == 6  # Box has 6 faces
+
+    def test_expand_wire_to_edges(self):
+        """ShapeList with Wire expands to edges."""
+        wire = Rectangle(2, 2).wire()
+        shapes = ShapeList([wire])
+        expanded = shapes.expand()
+        edges = [s for s in expanded if isinstance(s, Edge)]
+        assert len(edges) == 4  # Rectangle has 4 edges
+
+    def test_expand_mixed(self):
+        """ShapeList with mixed types."""
+        from build123d import Vector
+
+        v = Vector(1, 2, 3)
+        wire = Rectangle(2, 2).wire()
+        solid = Box(1, 1, 1)
+        compound = Compound([Pos(5, 0, 0) * Box(1, 1, 1)])
+
+        shapes = ShapeList([v, wire, solid, compound])
+        expanded = shapes.expand()
+
+        # Vector stays as vector
+        assert v in expanded
+        # Wire expands to 4 edges
+        edges = [s for s in expanded if isinstance(s, Edge)]
+        assert len(edges) == 4
+        # Solid stays as solid
+        solids = [s for s in expanded if isinstance(s, Solid)]
+        assert len(solids) == 2  # Original + from compound
+
+
+class TestShellTangentTouchCoverage:
+    """Tests for Shell tangent touch to cover two_d.py lines 467-491.
+
+    These tests specifically target the Shell-specific code paths in Face.touch()
+    where we need to find which face in a Shell contains the contact point.
+    """
+
+    def test_shell_self_tangent_touch_multiple_faces(self):
+        """Shell.touch(Face) where Shell has multiple faces.
+
+        Covers lines 472-476: finding face containing contact point in self Shell.
+        """
+        # Create a shell with multiple faces (half-sphere has curved + flat faces)
+        half_sphere = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
+        shell = Shell(half_sphere.faces())
+
+        # Create a plane tangent to the curved part at x=1
+        tangent_face = Pos(1, 0, 0) * (Rot(0, 90, 0) * Rectangle(2, 2).face())
+
+        result = shell.touch(tangent_face)
+        # Should find tangent vertex at (1, 0, 0)
+        assert len(result) >= 1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+    def test_face_shell_other_tangent_touch_multiple_faces(self):
+        """Face.touch(Shell) where Shell (other) has multiple faces.
+
+        Covers lines 480-484: finding face containing contact point in other Shell.
+        """
+        # Create a face
+        face = Pos(1, 0, 0) * (Rot(0, 90, 0) * Rectangle(2, 2).face())
+
+        # Create a shell with multiple faces (half-sphere)
+        half_sphere = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
+        shell = Shell(half_sphere.faces())
+
+        result = face.touch(shell)
+        # Should find tangent vertex at (1, 0, 0)
+        assert len(result) >= 1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+    def test_shell_shell_tangent_touch_multiple_faces(self):
+        """Shell.touch(Shell) where both Shells have multiple faces.
+
+        Covers both line ranges 472-476 and 480-484.
+        """
+        # Create two half-spheres touching at their curved surfaces
+        half_sphere1 = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
+        shell1 = Shell(half_sphere1.faces())
+
+        half_sphere2 = Pos(2, 0, 0) * (Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2))
+        shell2 = Shell(half_sphere2.faces())
+
+        result = shell1.touch(shell2)
+        # Should find tangent vertex at (1, 0, 0)
+        assert len(result) >= 1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+    def test_interior_tangent_contact_shell_face(self):
+        """Shell.touch(Face) with interior tangent contact (not on any edges).
+
+        Covers lines 467-491: the full interior tangent detection code path
+        including Shell face lookup and normal direction validation.
+
+        Contact point must be:
+        - NOT on any edge of the shell (self)
+        - NOT on any edge of the face (other)
+        """
+        import math
+
+        # Create a sphere shell
+        sphere = Sphere(2)
+        shell = Shell(sphere.faces())
+
+        # Contact at (1, 1, sqrt(2)) - away from the y=0 seam plane of the sphere
+        # This point is in the interior of the spherical surface
+        x, y, z = 1.0, 1.0, math.sqrt(2)
+
+        # Normal direction at this point on the sphere
+        normal = Vector(x, y, z).normalized()
+
+        # Create a small face tangent to sphere at this point
+        # The face must be small enough that its edges don't reach the contact point
+        tangent_plane = Plane(origin=(x, y, z), z_dir=(normal.X, normal.Y, normal.Z))
+        small_face = tangent_plane * Rectangle(0.1, 0.1).face()
+
+        result = shell.touch(small_face)
+        # Should find interior tangent vertex near (1, 1, sqrt(2))
+        assert len(result) >= 1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+    def test_interior_tangent_contact_face_shell(self):
+        """Face.touch(Shell) with interior tangent contact.
+
+        Same as above but with arguments swapped to test the 'other is Shell' path.
+        Covers lines 480-484: finding face in other Shell.
+        """
+        import math
+
+        # Create a sphere shell
+        sphere = Sphere(2)
+        shell = Shell(sphere.faces())
+
+        # Contact at (1, 1, sqrt(2))
+        x, y, z = 1.0, 1.0, math.sqrt(2)
+        normal = Vector(x, y, z).normalized()
+
+        # Create a small face tangent to sphere
+        tangent_plane = Plane(origin=(x, y, z), z_dir=(normal.X, normal.Y, normal.Z))
+        small_face = tangent_plane * Rectangle(0.1, 0.1).face()
+
+        # Call face.touch(shell) - 'other' is the Shell
+        result = small_face.touch(shell)
+        assert len(result) >= 1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+
+class TestSolidEdgeTangentTouch:
+    """Tests for Solid.touch(Edge) tangent cases to cover three_d.py lines 891-906.
+
+    These tests cover the BRepExtrema tangent detection for edges tangent to
+    solid surfaces (not penetrating).
+    """
+
+    def test_edge_tangent_to_cylinder(self):
+        """Edge tangent to cylinder surface returns touch vertex.
+
+        Covers lines 902, 906: tangent contact detection via BRepExtrema.
+        """
+        # Create a cylinder along Z axis
+        cylinder = Cylinder(1, 2)
+
+        # Create an edge that is tangent to the cylinder at x=1
+        # Edge runs along Y at x=1, z=1 (tangent to cylinder surface)
+        tangent_edge = Edge.make_line((1, -2, 1), (1, 2, 1))
+
+        result = cylinder.touch(tangent_edge)
+        # Should find tangent vertices where edge touches cylinder
+        # The edge at x=1 is tangent to the cylinder at radius=1
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        # Should have at least one tangent contact point
+        assert len(vertices) >= 1
+
+    def test_edge_tangent_to_sphere(self):
+        """Edge tangent to sphere surface returns touch vertex.
+
+        Another test for lines 902, 906 with spherical geometry.
+        """
+        # Create a sphere centered at origin
+        sphere = Sphere(1)
+
+        # Create an edge that is tangent to the sphere at x=1
+        # Edge runs along Z at x=1, y=0
+        tangent_edge = Edge.make_line((1, 0, -2), (1, 0, 2))
+
+        result = sphere.touch(tangent_edge)
+        # Should find tangent vertex at (1, 0, 0)
+        vertices = [r for r in result if isinstance(r, Vertex)]
+        assert len(vertices) >= 1
+
+
+class TestConvertToShapes:
+    """Tests for helpers.convert_to_shapes() to cover helpers.py."""
+
+    def test_vector_intersection(self):
+        """Shape.intersect(Vector) converts Vector to Vertex."""
+        box = Box(2, 2, 2)
+        # Vector inside the box
+        result = box.intersect(Vector(0, 0, 0))
+        assert result is not None
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+    def test_location_intersection(self):
+        """Shape.intersect(Location) converts Location to Vertex."""
+        box = Box(2, 2, 2)
+        # Location inside the box
+        result = box.intersect(Location((0, 0, 0)))
+        assert result is not None
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+    def test_location_intersection_with_rotation(self):
+        """Shape.intersect(Location with rotation) still uses position only."""
+        box = Box(2, 2, 2)
+        # Location with rotation - position is still at origin
+        loc = Location((0, 0, 0), (45, 45, 45))
+        result = box.intersect(loc)
+        assert result is not None
+        assert len(result) == 1
+        assert isinstance(result[0], Vertex)
+
+
+class TestEmptyCompoundIntersect:
+    """Tests for Compound._intersect() edge cases to cover composite.py line 741."""
+
+    def test_empty_compound_intersect(self):
+        """Empty Compound.intersect() returns None.
+
+        Covers line 741: early return when compound has no elements.
+        """
+        from OCP.TopoDS import TopoDS_Compound
+        from OCP.BRep import BRep_Builder
+
+        # Create an actual empty OCCT compound (has wrapped but no children)
+        builder = BRep_Builder()
+        empty_occt = TopoDS_Compound()
+        builder.MakeCompound(empty_occt)
+        empty = Compound(empty_occt)
+
+        box = Box(2, 2, 2)
+        result = empty.intersect(box)
+        assert result is None
+
+    def test_empty_compound_intersect_with_face(self):
+        """Empty Compound.intersect(Face) returns None."""
+        from OCP.TopoDS import TopoDS_Compound
+        from OCP.BRep import BRep_Builder
+
+        # Create an actual empty OCCT compound
+        builder = BRep_Builder()
+        empty_occt = TopoDS_Compound()
+        builder.MakeCompound(empty_occt)
+        empty = Compound(empty_occt)
+
+        face = Rectangle(2, 2).face()
+        result = empty.intersect(face)
+        assert result is None
