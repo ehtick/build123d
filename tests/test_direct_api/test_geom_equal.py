@@ -259,6 +259,31 @@ class TestEdgeGeomEqualBezier:
         e2 = b2.edge()
         assert not e1.geom_equal(e2)
 
+    def test_different_degree(self):
+        """Bezier curves with different degrees (different number of control points)."""
+        # Quadratic (degree 2, 3 points)
+        b1 = Bezier((0, 0), (1, 1), (2, 0))
+        # Cubic (degree 3, 4 points) - adjusted to have same endpoints
+        b2 = Bezier((0, 0), (0.5, 1), (1.5, 1), (2, 0))
+        e1 = b1.edge()
+        e2 = b2.edge()
+        assert e1.geom_type == GeomType.BEZIER
+        assert e2.geom_type == GeomType.BEZIER
+        assert not e1.geom_equal(e2)
+
+    def test_rational_bezier_different_weights(self):
+        """Rational Bezier curves with different weights."""
+        pts = [(0, 0, 0), (1, 1, 0), (2, 0, 0)]
+
+        # Create rational Bezier with weights [1, 2, 1]
+        e1 = Edge.make_bezier(*pts, weights=[1.0, 2.0, 1.0])
+
+        # Create rational Bezier with weights [1, 3, 1]
+        e2 = Edge.make_bezier(*pts, weights=[1.0, 3.0, 1.0])
+
+        assert e1.geom_type == GeomType.BEZIER
+        assert not e1.geom_equal(e2)
+
 
 class TestEdgeGeomEqualBSpline:
     """Tests for Edge.geom_equal with BSPLINE type."""
@@ -304,6 +329,169 @@ class TestEdgeGeomEqualBSpline:
         e2 = s2.edge()
         assert e1.geom_equal(e2)
 
+    def test_different_periodicity(self):
+        """BSplines with different periodicity (periodic vs non-periodic)."""
+        # Same control points, different periodicity
+        pts = [(0, 0), (1, 1), (2, 0), (1, -1)]
+
+        e1 = Edge.make_spline(pts, periodic=False)
+        e2 = Edge.make_spline(pts, periodic=True)
+
+        assert e1.geom_type == GeomType.BSPLINE
+        assert e2.geom_type == GeomType.BSPLINE
+        # Different periodicity means not equal
+        assert not e1.geom_equal(e2)
+
+    def test_different_pole_count(self):
+        """BSplines with different number of poles."""
+        # 5 points
+        v1 = [Vertex(p) for p in ((0, 0), (1, 1), (2, 0), (3, 1), (4, 0))]
+        # 6 points with same endpoints
+        v2 = [
+            Vertex(p)
+            for p in ((0, 0), (0.8, 0.8), (1.6, 0.2), (2.4, 0.8), (3.2, 0.2), (4, 0))
+        ]
+        s1 = Spline(*v1)
+        s2 = Spline(*v2)
+        e1 = s1.edge()
+        e2 = s2.edge()
+        assert e1.geom_type == GeomType.BSPLINE
+        assert e2.geom_type == GeomType.BSPLINE
+        assert not e1.geom_equal(e2)
+
+    def test_different_knot_values(self):
+        """BSplines with different internal knot positions have different shapes."""
+        from OCP.Geom import Geom_BSplineCurve
+        from OCP.TColgp import TColgp_Array1OfPnt
+        from OCP.TColStd import TColStd_Array1OfReal, TColStd_Array1OfInteger
+        from OCP.gp import gp_Pnt
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
+
+        # 5 poles for degree 3 with one internal knot
+        poles = TColgp_Array1OfPnt(1, 5)
+        poles.SetValue(1, gp_Pnt(0, 0, 0))
+        poles.SetValue(2, gp_Pnt(1, 2, 0))
+        poles.SetValue(3, gp_Pnt(2, 2, 0))
+        poles.SetValue(4, gp_Pnt(3, 2, 0))
+        poles.SetValue(5, gp_Pnt(4, 0, 0))
+
+        mults = TColStd_Array1OfInteger(1, 3)
+        mults.SetValue(1, 4)
+        mults.SetValue(2, 1)  # Internal knot
+        mults.SetValue(3, 4)
+
+        # Internal knot at 0.5
+        knots1 = TColStd_Array1OfReal(1, 3)
+        knots1.SetValue(1, 0.0)
+        knots1.SetValue(2, 0.5)
+        knots1.SetValue(3, 1.0)
+        curve1 = Geom_BSplineCurve(poles, knots1, mults, 3, False)
+        e1 = Edge(BRepBuilderAPI_MakeEdge(curve1).Edge())
+
+        # Internal knot at 0.3 - different position changes shape!
+        knots2 = TColStd_Array1OfReal(1, 3)
+        knots2.SetValue(1, 0.0)
+        knots2.SetValue(2, 0.3)
+        knots2.SetValue(3, 1.0)
+        curve2 = Geom_BSplineCurve(poles, knots2, mults, 3, False)
+        e2 = Edge(BRepBuilderAPI_MakeEdge(curve2).Edge())
+
+        assert e1.geom_type == GeomType.BSPLINE
+        # Different internal knot position = different geometric shape
+        assert (e1 @ 0.5) != (e2 @ 0.5)
+        assert not e1.geom_equal(e2)
+
+    def test_different_multiplicities(self):
+        """BSplines with same poles/knots but different multiplicities have different shapes."""
+        from OCP.Geom import Geom_BSplineCurve
+        from OCP.TColgp import TColgp_Array1OfPnt
+        from OCP.TColStd import TColStd_Array1OfReal, TColStd_Array1OfInteger
+        from OCP.gp import gp_Pnt
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
+
+        # Same 7 poles for both curves
+        poles = TColgp_Array1OfPnt(1, 7)
+        poles.SetValue(1, gp_Pnt(0, 0, 0))
+        poles.SetValue(2, gp_Pnt(1, 2, 0))
+        poles.SetValue(3, gp_Pnt(2, 1, 0))
+        poles.SetValue(4, gp_Pnt(3, 2, 0))
+        poles.SetValue(5, gp_Pnt(4, 1, 0))
+        poles.SetValue(6, gp_Pnt(5, 2, 0))
+        poles.SetValue(7, gp_Pnt(6, 0, 0))
+
+        # Same 4 knots for both curves
+        knots = TColStd_Array1OfReal(1, 4)
+        knots.SetValue(1, 0.0)
+        knots.SetValue(2, 0.33)
+        knots.SetValue(3, 0.67)
+        knots.SetValue(4, 1.0)
+
+        # Multiplicities [4, 1, 2, 4] - sum = 11 = 7 + 3 + 1
+        mults1 = TColStd_Array1OfInteger(1, 4)
+        mults1.SetValue(1, 4)
+        mults1.SetValue(2, 1)
+        mults1.SetValue(3, 2)
+        mults1.SetValue(4, 4)
+        curve1 = Geom_BSplineCurve(poles, knots, mults1, 3, False)
+        e1 = Edge(BRepBuilderAPI_MakeEdge(curve1).Edge())
+
+        # Multiplicities [4, 2, 1, 4] - same sum, swapped internal mults
+        mults2 = TColStd_Array1OfInteger(1, 4)
+        mults2.SetValue(1, 4)
+        mults2.SetValue(2, 2)
+        mults2.SetValue(3, 1)
+        mults2.SetValue(4, 4)
+        curve2 = Geom_BSplineCurve(poles, knots, mults2, 3, False)
+        e2 = Edge(BRepBuilderAPI_MakeEdge(curve2).Edge())
+
+        assert e1.geom_type == GeomType.BSPLINE
+        assert e2.geom_type == GeomType.BSPLINE
+        # Same poles, same knots, different multiplicities = different shape
+        assert (e1 @ 0.5) != (e2 @ 0.5)
+        assert not e1.geom_equal(e2)
+
+    def test_rational_bspline_different_weights(self):
+        """Rational BSplines with different weights."""
+        from OCP.Geom import Geom_BSplineCurve
+        from OCP.TColgp import TColgp_Array1OfPnt
+        from OCP.TColStd import TColStd_Array1OfReal, TColStd_Array1OfInteger
+        from OCP.gp import gp_Pnt
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
+
+        poles = TColgp_Array1OfPnt(1, 4)
+        poles.SetValue(1, gp_Pnt(0, 0, 0))
+        poles.SetValue(2, gp_Pnt(1, 1, 0))
+        poles.SetValue(3, gp_Pnt(2, 1, 0))
+        poles.SetValue(4, gp_Pnt(3, 0, 0))
+
+        knots = TColStd_Array1OfReal(1, 2)
+        knots.SetValue(1, 0.0)
+        knots.SetValue(2, 1.0)
+        mults = TColStd_Array1OfInteger(1, 2)
+        mults.SetValue(1, 4)
+        mults.SetValue(2, 4)
+
+        # Weights [1, 2, 2, 1]
+        weights1 = TColStd_Array1OfReal(1, 4)
+        weights1.SetValue(1, 1.0)
+        weights1.SetValue(2, 2.0)
+        weights1.SetValue(3, 2.0)
+        weights1.SetValue(4, 1.0)
+        curve1 = Geom_BSplineCurve(poles, weights1, knots, mults, 3, False)
+        e1 = Edge(BRepBuilderAPI_MakeEdge(curve1).Edge())
+
+        # Weights [1, 3, 3, 1]
+        weights2 = TColStd_Array1OfReal(1, 4)
+        weights2.SetValue(1, 1.0)
+        weights2.SetValue(2, 3.0)
+        weights2.SetValue(3, 3.0)
+        weights2.SetValue(4, 1.0)
+        curve2 = Geom_BSplineCurve(poles, weights2, knots, mults, 3, False)
+        e2 = Edge(BRepBuilderAPI_MakeEdge(curve2).Edge())
+
+        assert e1.geom_type == GeomType.BSPLINE
+        assert not e1.geom_equal(e2)
+
 
 class TestEdgeGeomEqualOffset:
     """Tests for Edge.geom_equal with OFFSET type."""
@@ -340,6 +528,31 @@ class TestEdgeGeomEqualOffset:
         ]
 
         assert not offset_edges1[0].geom_equal(offset_edges2[0])
+
+    def test_different_offset_direction(self):
+        """Offset curves with different offset directions (on different planes)."""
+        from build123d import Axis
+
+        v = [Vertex(p) for p in ((0, 0), (1, 1), (2, 0), (3, 1))]
+        s = Spline(*v)
+        w = Wire([s.edge()])
+
+        # Offset on XY plane (Z direction)
+        offset_wire1 = w.offset_2d(0.1)
+        offset_edges1 = [
+            e for e in offset_wire1.edges() if e.geom_type == GeomType.OFFSET
+        ]
+
+        # Rotate wire 90 degrees around X axis to put it on XZ plane
+        w_rotated = w.rotate(Axis.X, 90)
+        offset_wire2 = w_rotated.offset_2d(0.1)
+        offset_edges2 = [
+            e for e in offset_wire2.edges() if e.geom_type == GeomType.OFFSET
+        ]
+
+        if len(offset_edges1) > 0 and len(offset_edges2) > 0:
+            # Different directions means not equal
+            assert not offset_edges1[0].geom_equal(offset_edges2[0])
 
 
 class TestEdgeGeomEqualTolerance:
