@@ -1369,10 +1369,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if not to_intersect:
             return None
 
-        # Runtime import to avoid circular imports. Allows type safe actions in helpers
-        from build123d.topology.helpers import convert_to_shapes
-
-        shapes = convert_to_shapes(to_intersect)
+        # Validate input types
+        for obj in to_intersect:
+            if not isinstance(obj, (Shape, Vector, Location, Axis, Plane)):
+                raise ValueError(f"Unsupported type for intersect: {type(obj)}")
 
         # Chained iteration for AND semantics: c.intersect(s1, s2) = c ∩ s1 ∩ s2
         common_set = ShapeList([self])
