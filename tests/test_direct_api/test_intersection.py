@@ -718,7 +718,7 @@ class TestShellTangentTouchCoverage:
     def test_shell_self_tangent_touch_multiple_faces(self):
         """Shell.touch(Face) where Shell has multiple faces.
 
-        Covers lines 472-476: finding face containing contact point in self Shell.
+        Finding face containing contact point in self Shell.
         """
         # Create a shell with multiple faces (half-sphere has curved + flat faces)
         half_sphere = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
@@ -736,7 +736,7 @@ class TestShellTangentTouchCoverage:
     def test_face_shell_other_tangent_touch_multiple_faces(self):
         """Face.touch(Shell) where Shell (other) has multiple faces.
 
-        Covers lines 480-484: finding face containing contact point in other Shell.
+        Finding face containing contact point in other Shell.
         """
         # Create a face
         face = Pos(1, 0, 0) * (Rot(0, 90, 0) * Rectangle(2, 2).face())
@@ -753,8 +753,6 @@ class TestShellTangentTouchCoverage:
 
     def test_shell_shell_tangent_touch_multiple_faces(self):
         """Shell.touch(Shell) where both Shells have multiple faces.
-
-        Covers both line ranges 472-476 and 480-484.
         """
         # Create two half-spheres touching at their curved surfaces
         half_sphere1 = Sphere(1) & Pos(0, 0, 0.5) * Box(3, 3, 2)
@@ -772,8 +770,8 @@ class TestShellTangentTouchCoverage:
     def test_interior_tangent_contact_shell_face(self):
         """Shell.touch(Face) with interior tangent contact (not on any edges).
 
-        Covers lines 467-491: the full interior tangent detection code path
-        including Shell face lookup and normal direction validation.
+        Full interior tangent detection code path including Shell face
+        lookup and normal direction validation.
 
         Contact point must be:
         - NOT on any edge of the shell (self)
@@ -807,7 +805,6 @@ class TestShellTangentTouchCoverage:
         """Face.touch(Shell) with interior tangent contact.
 
         Same as above but with arguments swapped to test the 'other is Shell' path.
-        Covers lines 480-484: finding face in other Shell.
         """
         import math
 
@@ -840,7 +837,7 @@ class TestSolidEdgeTangentTouch:
     def test_edge_tangent_to_cylinder(self):
         """Edge tangent to cylinder surface returns touch vertex.
 
-        Covers lines 902, 906: tangent contact detection via BRepExtrema.
+        Tangent contact detection via BRepExtrema.
         """
         # Create a cylinder along Z axis
         cylinder = Cylinder(1, 2)
@@ -859,7 +856,7 @@ class TestSolidEdgeTangentTouch:
     def test_edge_tangent_to_sphere(self):
         """Edge tangent to sphere surface returns touch vertex.
 
-        Another test for lines 902, 906 with spherical geometry.
+        Another test with spherical geometry.
         """
         # Create a sphere centered at origin
         sphere = Sphere(1)
@@ -912,7 +909,7 @@ class TestEmptyCompoundIntersect:
     def test_empty_compound_intersect(self):
         """Empty Compound.intersect() returns None.
 
-        Covers line 741: early return when compound has no elements.
+        Early return when compound has no elements.
         """
         from OCP.TopoDS import TopoDS_Compound
         from OCP.BRep import BRep_Builder
