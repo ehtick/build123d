@@ -127,7 +127,6 @@ from .shape_core import (
 )
 
 from .two_d import sort_wires_by_build_order, Mixin2D, Face, Shell
-from .helpers import geom_equal
 from .utils import (
     _extrude_topods_shape,
     find_max_dimension,
@@ -783,7 +782,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 return any(shape.distance_to(s) <= tolerance for s in existing)
             # Edge: use geom_equal for full geometric comparison
             return any(
-                isinstance(e, Edge) and geom_equal(shape, e, tolerance)
+                isinstance(e, Edge) and shape.geom_equal(e, tolerance)
                 for e in existing
             )
 

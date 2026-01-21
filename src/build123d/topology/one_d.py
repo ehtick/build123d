@@ -2619,6 +2619,131 @@ class Edge(Mixin1D[TopoDS_Edge]):
             raise ValueError("Can't find adaptor for empty edge")
         return BRepAdaptor_Curve(self.wrapped)
 
+    def geom_equal(
+        self,
+        other: Edge,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two edges for geometric equality within tolerance.
+
+        This compares the geometric properties of two edges, not their topological
+        identity. Two independently created edges with the same geometry will
+        return True.
+
+        Args:
+            other: Edge to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if edges are geometrically equal within tolerance
+        """
+        if not isinstance(other, Edge):
+            return False
+
+        # geom_type must match
+        if self.geom_type != other.geom_type:
+            return False
+
+        # Common: start and end points
+        if (self @ 0) != (other @ 0) or (self @ 1) != (other @ 1):
+            return False
+
+        ga1 = self.geom_adaptor()
+        ga2 = other.geom_adaptor()
+
+        match self.geom_type:
+            case GeomType.LINE:
+                # Line: fully defined by endpoints (already checked)
+                return True
+
+            case GeomType.CIRCLE:
+                c1, c2 = ga1.Circle(), ga2.Circle()
+                return (
+                    abs(c1.Radius() - c2.Radius()) < tol
+                    and Vector(c1.Location()) == Vector(c2.Location())
+                    and Vector(c1.Axis().Direction()) == Vector(c2.Axis().Direction())
+                )
+
+            case GeomType.ELLIPSE:
+                e1, e2 = ga1.Ellipse(), ga2.Ellipse()
+                return (
+                    abs(e1.MajorRadius() - e2.MajorRadius()) < tol
+                    and abs(e1.MinorRadius() - e2.MinorRadius()) < tol
+                    and Vector(e1.Location()) == Vector(e2.Location())
+                    and Vector(e1.Axis().Direction()) == Vector(e2.Axis().Direction())
+                )
+
+            case GeomType.HYPERBOLA:
+                h1, h2 = ga1.Hyperbola(), ga2.Hyperbola()
+                return (
+                    abs(h1.MajorRadius() - h2.MajorRadius()) < tol
+                    and abs(h1.MinorRadius() - h2.MinorRadius()) < tol
+                    and Vector(h1.Location()) == Vector(h2.Location())
+                    and Vector(h1.Axis().Direction()) == Vector(h2.Axis().Direction())
+                )
+
+            case GeomType.PARABOLA:
+                p1, p2 = ga1.Parabola(), ga2.Parabola()
+                return (
+                    abs(p1.Focal() - p2.Focal()) < tol
+                    and Vector(p1.Location()) == Vector(p2.Location())
+                    and Vector(p1.Axis().Direction()) == Vector(p2.Axis().Direction())
+                )
+
+            case GeomType.BEZIER:
+                b1, b2 = ga1.Bezier(), ga2.Bezier()
+                if b1.Degree() != b2.Degree() or b1.NbPoles() != b2.NbPoles():
+                    return False
+                for i in range(1, b1.NbPoles() + 1):
+                    if Vector(b1.Pole(i)) != Vector(b2.Pole(i)):
+                        return False
+                    if b1.IsRational() and abs(b1.Weight(i) - b2.Weight(i)) >= tol:
+                        return False
+                return True
+
+            case GeomType.BSPLINE:
+                s1, s2 = ga1.BSpline(), ga2.BSpline()
+                if s1.Degree() != s2.Degree():
+                    return False
+                if s1.IsPeriodic() != s2.IsPeriodic():
+                    return False
+                if s1.NbPoles() != s2.NbPoles() or s1.NbKnots() != s2.NbKnots():
+                    return False
+                for i in range(1, s1.NbPoles() + 1):
+                    if Vector(s1.Pole(i)) != Vector(s2.Pole(i)):
+                        return False
+                    if s1.IsRational() and abs(s1.Weight(i) - s2.Weight(i)) >= tol:
+                        return False
+                for i in range(1, s1.NbKnots() + 1):
+                    if abs(s1.Knot(i) - s2.Knot(i)) >= tol:
+                        return False
+                    if s1.Multiplicity(i) != s2.Multiplicity(i):
+                        return False
+                return True
+
+            case GeomType.OFFSET:
+                oc1, oc2 = ga1.OffsetCurve(), ga2.OffsetCurve()
+                # Compare offset values and directions
+                if abs(oc1.Offset() - oc2.Offset()) >= tol:
+                    return False
+                if Vector(oc1.Direction()) != Vector(oc2.Direction()):
+                    return False
+                # Compare basis curves (recursive)
+                basis1 = Edge(BRepBuilderAPI_MakeEdge(oc1.BasisCurve()).Edge())
+                basis2 = Edge(BRepBuilderAPI_MakeEdge(oc2.BasisCurve()).Edge())
+                return basis1.geom_equal(basis2, tol)
+
+            case _:
+                # OTHER/unknown: compare sample points
+                for i in range(1, num_interpolation_points + 1):
+                    t = i / (num_interpolation_points + 1)
+                    if (self @ t) != (other @ t):
+                        return False
+                return True
+
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_Curve, float, bool]:
@@ -3659,6 +3784,40 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 ordered_edges.append(edge.reversed())
 
         return ordered_edges
+
+    def geom_equal(
+        self,
+        other: Wire,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two wires for geometric equality within tolerance.
+
+        This compares the geometric properties of two wires by comparing their
+        constituent edges pairwise. Two independently created wires with the
+        same geometry will return True.
+
+        Args:
+            other: Wire to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if wires are geometrically equal within tolerance
+        """
+        if not isinstance(other, Wire):
+            return False
+
+        # Use order_edges to ensure consistent edge ordering and orientation
+        edges1 = self.order_edges()
+        edges2 = other.order_edges()
+        if len(edges1) != len(edges2):
+            return False
+        return all(
+            e1.geom_equal(e2, tol, num_interpolation_points)
+            for e1, e2 in zip(edges1, edges2)
+        )
 
     def param_at_point(self, point: VectorLike) -> float:
         """
