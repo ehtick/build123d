@@ -16,12 +16,18 @@ docs/_build/
 # User generated debris
 *.swp
 *.log
+*.stp
+*.STP
 *.step
 *.STEP
 *.stl
 *.svg
 *.dxf
 *.3mf
+*.brep
+*.gltf
+*.bin
+*.glb
 
 #mypy cache
 .mypy_cache
