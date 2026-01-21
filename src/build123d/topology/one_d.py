@@ -2756,7 +2756,8 @@ class Edge(Mixin1D[TopoDS_Edge]):
                 basis2 = Edge(BRepBuilderAPI_MakeEdge(oc2.BasisCurve()).Edge())
                 return basis1.geom_equal(basis2, tol)
 
-            case _:
+            case _:  # pragma: no cover
+                # I don't think, GeomAbs_OtherCurve can be created in Python
                 # OTHER/unknown: compare sample points
                 for i in range(1, num_interpolation_points + 1):
                     t = i / (num_interpolation_points + 1)
