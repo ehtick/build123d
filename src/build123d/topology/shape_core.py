@@ -1372,7 +1372,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         # Runtime import to avoid circular imports. Allows type safe actions in helpers
         from build123d.topology.helpers import convert_to_shapes
 
-        shapes = convert_to_shapes(self, to_intersect)
+        shapes = convert_to_shapes(to_intersect)
 
         # Chained iteration for AND semantics: c.intersect(s1, s2) = c ∩ s1 ∩ s2
         common_set = ShapeList([self])

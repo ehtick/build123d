@@ -328,6 +328,11 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         results: ShapeList = ShapeList()
 
+        # Trim infinite edges before OCCT operations
+        if isinstance(other, Edge) and other.is_infinite:
+            bbox = self.bounding_box(optimal=False)
+            other = other.trim_infinite(bbox.diagonal + (other.center() - bbox.center()).length)
+
         # 2D + 2D: Common (coplanar overlap) AND Section (crossing curves)
         if isinstance(other, (Face, Shell)):
             # Common for coplanar overlap

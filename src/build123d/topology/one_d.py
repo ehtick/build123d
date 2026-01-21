@@ -734,6 +734,13 @@ class Mixin1D(Shape[TOPODS]):
 
         results: ShapeList = ShapeList()
 
+        # Trim infinite edges before OCCT operations
+        if isinstance(other, Edge) and other.is_infinite:
+            bbox = self.bounding_box(optimal=False)
+            other = other.trim_infinite(
+                bbox.diagonal + (other.center() - bbox.center()).length
+            )
+
         # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
         if isinstance(other, (Edge, Wire)):
             common = self._bool_op_list(
@@ -3102,6 +3109,36 @@ class Edge(Mixin1D[TopoDS_Edge]):
 
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
+
+    @property
+    def is_infinite(self) -> bool:
+        """Check if edge is infinite (LINE with length > 1e100)."""
+        return self.geom_type == GeomType.LINE and self.length > 1e100
+
+    def trim_infinite(self, half_length: float) -> Edge:
+        """Trim an infinite line edge to a finite length.
+
+        OCCT's boolean operations struggle with very long edges (length > 1e100).
+        This method trims such edges to a reasonable size centered at edge.center().
+
+        For non-infinite edges, returns self unchanged.
+
+        Args:
+            half_length: Half-length of the resulting edge
+
+        Returns:
+            Trimmed edge if infinite, otherwise self
+        """
+        if not self.is_infinite:
+            return self
+
+        origin = self.center()
+        direction = (self.end_point() - self.start_point()).normalized()
+
+        return Edge.make_line(
+            origin - direction * half_length,
+            origin + direction * half_length,
+        )
 
 
 class Wire(Mixin1D[TopoDS_Wire]):

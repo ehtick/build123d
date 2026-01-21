@@ -10,13 +10,11 @@ from build123d.topology.two_d import Face
 
 
 def convert_to_shapes(
-    shape: Shape,
     objects: tuple[Shape | Vector | Location | Axis | Plane, ...],
 ) -> list[Shape]:
     """Convert geometry objects to shapes.
 
     Args:
-        shape: The shape context (used for bounding box when converting Axis)
         objects: Tuple of geometry objects to convert
 
     Returns:
@@ -25,22 +23,11 @@ def convert_to_shapes(
     results = []
     for obj in objects:
         if isinstance(obj, Vector):
-            results.append(Vertex(obj.X, obj.Y, obj.Z))
+            results.append(Vertex(obj))
         elif isinstance(obj, Location):
-            pos = obj.position
-            results.append(Vertex(pos.X, pos.Y, pos.Z))
+            results.append(Vertex(obj.position))
         elif isinstance(obj, Axis):
-            # Convert to finite edge based on bounding box
-            bbox = shape.bounding_box(optimal=False)
-            dist = shape.distance_to(obj.position)
-            # Be sure to avoid zero length edge for vertex on axis intersection
-            half_length = max(bbox.diagonal, 1) * max(dist, 1)
-            results.append(
-                Edge.make_line(
-                    obj.position - obj.direction * half_length,
-                    obj.position + obj.direction * half_length,
-                )
-            )
+            results.append(Edge(obj))
         elif isinstance(obj, Plane):
             results.append(Face(obj))
         elif isinstance(obj, Shape):
