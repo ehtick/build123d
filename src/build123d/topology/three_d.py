@@ -817,7 +817,10 @@ class Solid(Mixin3D[TopoDS_Solid]):
                     if not sf_bb.overlaps(of_bb, tolerance):
                         continue
                     common = self._bool_op_list((sf,), (of,), BRepAlgoAPI_Common())
-                    found_faces.extend(s for s in common if not s.is_null)
+                    # Filter out null and degenerate (zero-area) faces
+                    found_faces.extend(
+                        s for s in common if not s.is_null and s.area > tolerance
+                    )
             results.extend(found_faces)
 
             # Edge-Edge contacts (skip if on any found face)
