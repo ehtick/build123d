@@ -449,7 +449,13 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
             # Use BRepExtrema to find all contact points (vertex-vertex, vertex-edge, vertex-face)
             found_vertices: ShapeList = ShapeList()
-            extrema = BRepExtrema_DistShapeShape(self.wrapped, other.wrapped)
+            extrema = BRepExtrema_DistShapeShape()
+            extrema.SetDeflection(
+                tolerance * 1e-3
+            )  # Higher precision to avoid duplicate solutions
+            extrema.LoadS1(self.wrapped)
+            extrema.LoadS2(other.wrapped)
+            extrema.Perform()
             if extrema.IsDone() and extrema.Value() <= tolerance:
                 for i in range(1, extrema.NbSolution() + 1):
                     pnt1 = extrema.PointOnShape1(i)
