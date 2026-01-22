@@ -401,8 +401,8 @@ class Mixin2D(ABC, Shape[TOPODS]):
         self,
         other: Shape,
         tolerance: float = 1e-6,
-        _found_faces: ShapeList | None = None,
-        _found_edges: ShapeList | None = None,
+        found_faces: ShapeList | None = None,
+        found_edges: ShapeList | None = None,
     ) -> ShapeList:
         """Find boundary contacts between this 2D shape and another shape.
 
@@ -416,12 +416,13 @@ class Mixin2D(ABC, Shape[TOPODS]):
         Args:
             other: Shape to find contacts with
             tolerance: tolerance for contact detection
-            _found_faces: (internal) pre-found faces to filter against
-            _found_edges: (internal) pre-found edges to filter against
+            found_faces: pre-found faces to filter against (from Mixin3D.touch)
+            found_edges: pre-found edges to filter against (from Mixin3D.touch)
 
         Returns:
             ShapeList of contact shapes (Vertex only for 2D+2D)
         """
+
         # Helper functions for common geometric checks
         def vertex_on_edge(v: Vertex, e: Edge) -> bool:
             return v.distance_to(e) <= tolerance
@@ -433,21 +434,18 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         if isinstance(other, (Face, Shell)):
             # Get intersect results to filter against if not provided
-            if _found_faces is None or _found_edges is None:
-                _intersect_results = self._intersect(
+            if found_faces is None or found_edges is None:
+                intersect_results = self._intersect(
                     other, tolerance, include_touched=False
                 )
-                _found_faces = ShapeList()
-                _found_edges = ShapeList()
-                if _intersect_results:
-                    for r in _intersect_results:
+                found_faces = ShapeList()
+                found_edges = ShapeList()
+                if intersect_results:
+                    for r in intersect_results:
                         if isinstance(r, Face):
-                            _found_faces.append(r)
+                            found_faces.append(r)
                         elif isinstance(r, Edge):
-                            _found_edges.append(r)
-
-            found_faces = _found_faces
-            found_edges = _found_edges
+                            found_edges.append(r)
 
             # Use BRepExtrema to find all contact points (vertex-vertex, vertex-edge, vertex-face)
             found_vertices: ShapeList = ShapeList()
