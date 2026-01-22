@@ -853,7 +853,14 @@ class Solid(Mixin3D[TopoDS_Solid]):
                 for of, of_bb in other_faces:
                     if not sf_bb.overlaps(of_bb, tolerance):
                         continue
-                    tangent_vertices = sf.touch(of, tolerance, found_faces, found_edges)
+                    # Include face-face intersection edges for filtering crossing vertices
+                    sf_of_intersect = sf._intersect(of, tolerance, include_touched=False)
+                    sf_of_edges = ShapeList(
+                        e for e in (sf_of_intersect or []) if isinstance(e, Edge)
+                    )
+                    tangent_vertices = sf.touch(
+                        of, tolerance, found_faces, found_edges + sf_of_edges
+                    )
                     for v in tangent_vertices:
                         if not is_duplicate(v, found_vertices):
                             results.append(v)

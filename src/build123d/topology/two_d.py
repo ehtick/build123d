@@ -457,7 +457,6 @@ class Mixin2D(ABC, Shape[TOPODS]):
                     if pnt1.Distance(pnt2) > tolerance:
                         continue
 
-                    contact_pt = Vector(pnt1.X(), pnt1.Y(), pnt1.Z())
                     new_vertex = Vertex(pnt1.X(), pnt1.Y(), pnt1.Z())
 
                     # Check if point is on edge boundary of either face
@@ -472,46 +471,16 @@ class Mixin2D(ABC, Shape[TOPODS]):
                     if on_self_edge and on_other_edge:
                         continue
 
-                    # For tangent contacts (point in interior of both faces),
-                    # verify normals are parallel or anti-parallel (tangent surfaces)
-                    if not on_self_edge and not on_other_edge:
-                        # Find the specific face containing the contact point
-                        self_face: Face | None = None
-                        other_face: Face | None = None
-
-                        if isinstance(self, Face):
-                            self_face = self
-                        else:  # Shell - find face containing point
-                            for f in self.faces():
-                                if f.distance_to(contact_pt) <= tolerance:
-                                    self_face = f
-                                    break
-
-                        if isinstance(other, Face):
-                            other_face = other
-                        else:  # Shell - find face containing point
-                            for f in other.faces():
-                                if f.distance_to(contact_pt) <= tolerance:
-                                    other_face = f
-                                    break
-
-                        if self_face and other_face:
-                            normal1 = self_face.normal_at(contact_pt)
-                            normal2 = other_face.normal_at(contact_pt)
-                            dot = normal1.dot(normal2)
-                            if abs(dot) < 0.99:  # Not parallel or anti-parallel
-                                continue
-
                     # Filter: only keep vertices that are not boundaries of
                     # higher-dimensional contacts (faces or edges) and not duplicates
                     on_face = any(
                         new_vertex.distance_to(f) <= tolerance for f in found_faces
                     )
-                    on_edge = any(
-                        vertex_on_edge(new_vertex, e) for e in found_edges
-                    )
-                    if not on_face and not on_edge and not is_duplicate_vertex(
-                        new_vertex, found_vertices
+                    on_edge = any(vertex_on_edge(new_vertex, e) for e in found_edges)
+                    if (
+                        not on_face
+                        and not on_edge
+                        and not is_duplicate_vertex(new_vertex, found_vertices)
                     ):
                         results.append(new_vertex)
                         found_vertices.append(new_vertex)
