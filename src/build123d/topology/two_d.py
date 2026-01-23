@@ -424,30 +424,37 @@ class Mixin2D(ABC, Shape[TOPODS]):
         """
 
         # Helper functions for common geometric checks
-        def vertex_on_edge(v: Vertex, e: Edge) -> bool:
-            return v.distance_to(e) <= tolerance
+        def vertex_on_edges(v: Vertex, edges: Iterable[Edge]) -> bool:
+            return any(v.distance_to(e) <= tolerance for e in edges)
 
-        def is_duplicate_vertex(v: Vertex, existing: ShapeList) -> bool:
-            return any(v.distance_to(ev) <= tolerance for ev in existing)
+        def vertex_on_faces(v: Vertex, faces: Iterable[Face]) -> bool:
+            return any(v.distance_to(f) <= tolerance for f in faces)
+
+        def is_duplicate(v: Vertex, vertices: Iterable[Vertex]) -> bool:
+            vec = Vector(v)
+            return any(vec == Vector(ov) for ov in vertices)
 
         results: ShapeList = ShapeList()
 
         if isinstance(other, (Face, Shell)):
-            # Get intersect results to filter against if not provided
-            if found_faces is None or found_edges is None:
+            # Get intersect results to filter against if not provided (direct call)
+            if found_faces is None:
+                found_faces = ShapeList()
+                found_edges = ShapeList()
                 intersect_results = self._intersect(
                     other, tolerance, include_touched=False
                 )
-                found_faces = ShapeList()
-                found_edges = ShapeList()
                 if intersect_results:
                     for r in intersect_results:
                         if isinstance(r, Face):
                             found_faces.append(r)
                         elif isinstance(r, Edge):
                             found_edges.append(r)
+            elif found_edges is None:  # for mypy
+                found_edges = ShapeList()
 
-            # Use BRepExtrema to find all contact points (vertex-vertex, vertex-edge, vertex-face)
+            # Use BRepExtrema to find all contact points
+            # (vertex-vertex, vertex-edge, vertex-face)
             found_vertices: ShapeList = ShapeList()
             extrema = BRepExtrema_DistShapeShape()
             extrema.SetDeflection(
@@ -465,29 +472,24 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
                     new_vertex = Vertex(pnt1.X(), pnt1.Y(), pnt1.Z())
 
-                    # Check if point is on edge boundary of either face
-                    on_self_edge = any(
-                        vertex_on_edge(new_vertex, e) for e in self.edges()
-                    )
-                    on_other_edge = any(
-                        vertex_on_edge(new_vertex, e) for e in other.edges()
-                    )
+                    # Skip duplicates early (cheap check)
+                    if is_duplicate(new_vertex, found_vertices):
+                        continue
 
-                    # Skip if point is on edges of both faces (edge-edge intersection)
-                    if on_self_edge and on_other_edge:
+                    # Skip edge-edge intersections, but allow corner touches
+                    if (
+                        vertex_on_edges(new_vertex, self.edges())
+                        and vertex_on_edges(new_vertex, other.edges())
+                        and not is_duplicate(new_vertex, self.vertices())
+                        and not is_duplicate(new_vertex, other.vertices())
+                    ):
                         continue
 
                     # Filter: only keep vertices that are not boundaries of
-                    # higher-dimensional contacts (faces or edges) and not duplicates
-                    on_face = any(
-                        new_vertex.distance_to(f) <= tolerance for f in found_faces
-                    )
-                    on_edge = any(vertex_on_edge(new_vertex, e) for e in found_edges)
-                    if (
-                        not on_face
-                        and not on_edge
-                        and not is_duplicate_vertex(new_vertex, found_vertices)
-                    ):
+                    # higher-dimensional contacts (faces or edges)
+                    if not vertex_on_faces(
+                        new_vertex, found_faces
+                    ) and not vertex_on_edges(new_vertex, found_edges):
                         results.append(new_vertex)
                         found_vertices.append(new_vertex)
 

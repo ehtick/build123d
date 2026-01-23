@@ -96,9 +96,9 @@ from OCP.TopoDS import (
     TopoDS_Shell,
     TopoDS_Solid,
     TopoDS_Wire,
-    TopoDS_Compound,
 )
-from OCP.gp import gp_Ax2, gp_Pnt
+from OCP.gp import gp_Ax2, gp_Pnt, gp_Vec
+from OCP.BRepGProp import BRepGProp_Face
 from build123d.build_enums import CenterOf, GeomType, Keep, Kind, Transition, Until
 from build123d.geometry import (
     DEG2RAD,
@@ -499,8 +499,9 @@ class Mixin3D(Shape[TOPODS]):
                 results.append(other)
 
         # Delegate to higher-order shapes (Compound)
+        # Don't pass include_touched - outer caller handles touches
         else:
-            result = other._intersect(self, tolerance, include_touched)
+            result = other._intersect(self, tolerance, include_touched=False)
             if result:
                 results.extend(result)
 
@@ -757,13 +758,16 @@ class Solid(Mixin3D[TopoDS_Solid]):
     # ---- Instance Methods ----
 
     def touch(
-        self, other: Shape, tolerance: float = 1e-6, check_num_points: int = 5
+        self,
+        other: Shape,
+        tolerance: float = 1e-6,
+        found_solids: ShapeList | None = None,
     ) -> ShapeList[Vertex | Edge | Face]:
         """Find where this Solid's boundary contacts another shape.
 
         Returns geometry where boundaries contact without interior overlap:
         - Solid + Solid → Face + Edge + Vertex (all boundary contacts)
-        - Solid + Face/Shell → Edge + Vertex (face boundary on solid boundary)
+        - Solid + Face/Shell → Face + Edge + Vertex (boundary contacts)
         - Solid + Edge/Wire → Vertex (edge endpoints on solid boundary)
         - Solid + Vertex → Vertex if on boundary
         - Solid + Compound → distributes over compound elements
@@ -771,12 +775,14 @@ class Solid(Mixin3D[TopoDS_Solid]):
         Args:
             other: Shape to check boundary contacts with
             tolerance: tolerance for contact detection
-            check_num_points: number of interpolation points for edge-on-face check
+            found_solids: pre-found intersection solids to filter against
 
         Returns:
             ShapeList of boundary contact geometry (empty if no contact)
         """
-        # Helper functions for common geometric checks
+
+        # Helper functions for common geometric checks (for readability)
+        # Single shape versions for checking against one shapes
         def vertex_on_edge(v: Vertex, e: Edge) -> bool:
             return v.distance_to(e) <= tolerance
 
@@ -784,122 +790,140 @@ class Solid(Mixin3D[TopoDS_Solid]):
             return v.distance_to(f) <= tolerance
 
         def edge_on_face(e: Edge, f: Face) -> bool:
-            # Check start, end, and interpolated points are all on the face
-            for i in range(check_num_points + 2):
-                t = i / (check_num_points + 1)
-                if f.distance_to(e @ t) > tolerance:
-                    return False
+            # Can't use distance_to (e.g. normal vector would match), need Common
+            return bool(self._bool_op_list((e,), (f,), BRepAlgoAPI_Common()))
+
+        # Multi shape versions for checking against multiple shapes
+        def vertex_on_edges(v: Vertex, edges: Iterable[Edge]) -> bool:
+            return any(vertex_on_edge(v, e) for e in edges)
+
+        def vertex_on_faces(v: Vertex, faces: Iterable[Face]) -> bool:
+            return any(vertex_on_face(v, f) for f in faces)
+
+        def edge_on_faces(e: Edge, faces: Iterable[Face]) -> bool:
+            return any(edge_on_face(e, f) for f in faces)
+
+        def face_point_normal(face: Face, u: float, v: float) -> tuple[Vector, Vector]:
+            """Get both position and normal at UV coordinates.
+            Args
+                u (float): the horizontal coordinate in the parameter space of the Face,
+                    between 0.0 and 1.0
+                v (float): the vertical coordinate in the parameter space of the Face,
+                    between 0.0 and 1.0
+            Returns:
+                tuple[Vector, Vector]: [point on Face, normal at point]
+            """
+            u0, u1, v0, v1 = face._uv_bounds()
+            u_val = u0 + u * (u1 - u0)
+            v_val = v0 + v * (v1 - v0)
+            gp_pnt = gp_Pnt()
+            gp_norm = gp_Vec()
+            BRepGProp_Face(face.wrapped).Normal(u_val, v_val, gp_pnt, gp_norm)
+            return Vector(gp_pnt), Vector(gp_norm)
+
+        def faces_equal(f1: Face, f2: Face, grid_size: int = 4) -> bool:
+            """Check if two faces are geometrically equal.
+
+            Face == uses topological equality (same OCC object), but we need
+            geometric equality. For performance reasons apply a heuristic
+            approach: Compare a grid of UV sample points, checking both position and
+            normal direction match within tolerance.
+            """
+            # Early reject: bounding box check
+            bb1 = f1.bounding_box(optimal=False)
+            bb2 = f2.bounding_box(optimal=False)
+            if not bb1.overlaps(bb2, tolerance):
+                return False
+
+            # Compare grid_size x grid_size grid of points in UV space
+            for i in range(grid_size):
+                u = i / (grid_size - 1)
+                for j in range(grid_size):
+                    v = j / (grid_size - 1)
+                    pos1, norm1 = face_point_normal(f1, u, v)
+                    pos2, norm2 = face_point_normal(f2, u, v)
+                    if (pos1 - pos2).length > tolerance:
+                        return False
+                    if abs(norm1.dot(norm2)) < 0.99:
+                        return False
             return True
 
-        def is_duplicate(shape: Vertex | Edge, existing: Iterable[Shape]) -> bool:
+        def is_duplicate(shape: Shape, existing: Iterable[Shape]) -> bool:
             if isinstance(shape, Vertex):
-                return any(shape.distance_to(s) <= tolerance for s in existing)
-            # Edge: use geom_equal for full geometric comparison
-            return any(
-                isinstance(e, Edge) and shape.geom_equal(e, tolerance)
-                for e in existing
-            )
+                return any(
+                    isinstance(v, Vertex) and Vector(shape) == Vector(v)
+                    for v in existing
+                )
+            if isinstance(shape, Edge):
+                return any(
+                    isinstance(e, Edge) and shape.geom_equal(e, tolerance)
+                    for e in existing
+                )
+            if isinstance(shape, Face):
+                # Heuristic approach
+                return any(
+                    isinstance(f, Face) and faces_equal(shape, f) for f in existing
+                )
+            return False
 
         results: ShapeList = ShapeList()
 
-        if isinstance(other, Solid):
-            # Solid + Solid: find all boundary contacts (faces, edges, vertices)
-            # Pre-calculate bounding boxes (optimal=False for speed, used only for filtering)
+        if isinstance(other, (Solid, Face, Shell)):
+            # Unified handling: iterate over face pairs
+            # For Solid+Solid: get intersection solids to filter results that bound them
+            intersect_faces = []
+            if isinstance(other, Solid):
+                if found_solids is None:
+                    found_solids = ShapeList(
+                        self._intersect(other, tolerance, include_touched=False) or []
+                    )
+                intersect_faces = [f for s in found_solids for f in s.faces()]
+
+            # Pre-calculate bounding boxes for early rejection
             self_faces = [(f, f.bounding_box(optimal=False)) for f in self.faces()]
             other_faces = [(f, f.bounding_box(optimal=False)) for f in other.faces()]
-            self_edges = [(e, e.bounding_box(optimal=False)) for e in self.edges()]
-            other_edges = [(e, e.bounding_box(optimal=False)) for e in other.edges()]
 
-            # Face-Face contacts (collect first)
-            found_faces: ShapeList = ShapeList()
+            # First pass: collect touch/intersect results from face pairs,
+            # filtering against intersection solid faces
+            raw_results: ShapeList = ShapeList()
             for sf, sf_bb in self_faces:
                 for of, of_bb in other_faces:
                     if not sf_bb.overlaps(of_bb, tolerance):
                         continue
-                    common = self._bool_op_list((sf,), (of,), BRepAlgoAPI_Common())
-                    # Filter out null and degenerate (zero-area) faces
-                    found_faces.extend(
-                        s for s in common if not s.is_null and s.area > tolerance
+
+                    # Process touch first (cheap), then intersect (expensive)
+                    # Face touch gives tangent vertices
+                    for r in sf.touch(of, tolerance=tolerance):
+                        if not is_duplicate(r, raw_results) and not vertex_on_faces(
+                            r, intersect_faces
+                        ):
+                            raw_results.append(r)
+
+                    # Face intersect gives shared faces/edges (touch handled above)
+                    for r in sf.intersect(of, tolerance=tolerance) or []:
+                        if not is_duplicate(r, raw_results) and not edge_on_faces(
+                            r, intersect_faces
+                        ):
+                            raw_results.append(r)
+
+            # Second pass: filter lower-dimensional results against higher-dimensional
+            all_faces = [f for f in raw_results if isinstance(f, Face)]
+            all_edges = [e for e in raw_results if isinstance(e, Edge)]
+            for r in raw_results:
+                if (
+                    isinstance(r, Face)
+                    or (isinstance(r, Edge) and not edge_on_faces(r, all_faces))
+                    or (
+                        isinstance(r, Vertex)
+                        and not vertex_on_faces(r, all_faces)
+                        and not vertex_on_edges(r, all_edges)
                     )
-            results.extend(found_faces)
-
-            # Edge-Edge contacts (skip if on any found face)
-            found_edges: ShapeList = ShapeList()
-            for se, se_bb in self_edges:
-                for oe, oe_bb in other_edges:
-                    if not se_bb.overlaps(oe_bb, tolerance):
-                        continue
-                    common = self._bool_op_list((se,), (oe,), BRepAlgoAPI_Common())
-                    for s in common:
-                        if s.is_null:
-                            continue
-                        # Skip if edge is on any found face
-                        if not any(edge_on_face(s, f) for f in found_faces):
-                            found_edges.append(s)
-            results.extend(found_edges)
-
-            # Vertex-Vertex contacts (skip if on any found face or edge)
-            found_vertices: ShapeList = ShapeList()
-            for sv in self.vertices():
-                for ov in other.vertices():
-                    if sv.distance_to(ov) <= tolerance:
-                        on_face = any(vertex_on_face(sv, f) for f in found_faces)
-                        on_edge = any(vertex_on_edge(sv, e) for e in found_edges)
-                        if not on_face and not on_edge and not is_duplicate(sv, found_vertices):
-                            results.append(sv)
-                            found_vertices.append(sv)
-                        break
-
-            # Tangent contacts (skip if on any found face or edge)
-            # Use Mixin2D.touch() on face pairs to find tangent contacts (e.g., sphere touching box)
-            for sf, sf_bb in self_faces:
-                for of, of_bb in other_faces:
-                    if not sf_bb.overlaps(of_bb, tolerance):
-                        continue
-                    # Include face-face intersection edges for filtering crossing vertices
-                    sf_of_intersect = sf._intersect(of, tolerance, include_touched=False)
-                    sf_of_edges = ShapeList(
-                        e for e in (sf_of_intersect or []) if isinstance(e, Edge)
-                    )
-                    tangent_vertices = sf.touch(
-                        of, tolerance, found_faces, found_edges + sf_of_edges
-                    )
-                    for v in tangent_vertices:
-                        if not is_duplicate(v, found_vertices):
-                            results.append(v)
-                            found_vertices.append(v)
-
-        elif isinstance(other, (Face, Shell)):
-            # Solid + Face: find where face boundary meets solid boundary
-            # Pre-calculate bounding boxes (optimal=False for speed, used only for filtering)
-            self_faces = [(f, f.bounding_box(optimal=False)) for f in self.faces()]
-            other_edges = [(e, e.bounding_box(optimal=False)) for e in other.edges()]
-
-            # Check face's edges touching solid's faces
-            # Track found edges to avoid duplicates (edge may touch multiple adjacent faces)
-            touching_edges: list[Edge] = []
-            for oe, oe_bb in other_edges:
-                for sf, sf_bb in self_faces:
-                    if not oe_bb.overlaps(sf_bb, tolerance):
-                        continue
-                    common = self._bool_op_list((oe,), (sf,), BRepAlgoAPI_Common())
-                    for s in common:
-                        if s.is_null or not isinstance(s, Edge):
-                            continue
-                        # Check if geometrically same edge already found
-                        if not is_duplicate(s, touching_edges):
-                            results.append(s)
-                            touching_edges.append(s)
-            # Check face's vertices touching solid's edges (corner coincident)
-            for ov in other.vertices():
-                for se in self.edges():
-                    if vertex_on_edge(ov, se):
-                        results.append(ov)
-                        break
+                ):
+                    results.append(r)
 
         elif isinstance(other, (Edge, Wire)):
             # Solid + Edge: find where edge endpoints touch solid boundary
-            # Pre-calculate bounding boxes (optimal=False for speed, used only for filtering)
+            # Pre-calculate bounding boxes (optimal=False for speed, used for filtering)
             self_faces = [(f, f.bounding_box(optimal=False)) for f in self.faces()]
             other_bb = other.bounding_box(optimal=False)
 
@@ -908,24 +932,18 @@ class Solid(Mixin3D[TopoDS_Solid]):
                     if vertex_on_face(ov, sf):
                         results.append(ov)
                         break
-            # Use BRepExtrema to find tangent contacts (edge tangent to surface)
-            # Only valid if edge doesn't penetrate solid (Common returns nothing)
-            # If Common returns something, contact points are entry/exit (intersect, not touches)
-            common_result = self._bool_op_list((self,), (other,), BRepAlgoAPI_Common())
-            if not common_result:  # No penetration - could be tangent
-                for sf, sf_bb in self_faces:
-                    if not sf_bb.overlaps(other_bb, tolerance):
-                        continue
-                    extrema = BRepExtrema_DistShapeShape(sf.wrapped, other.wrapped)
-                    if extrema.IsDone() and extrema.Value() <= tolerance:
-                        for i in range(1, extrema.NbSolution() + 1):
-                            pnt1 = extrema.PointOnShape1(i)
-                            pnt2 = extrema.PointOnShape2(i)
-                            # Verify points are actually close
-                            if pnt1.Distance(pnt2) > tolerance:
-                                continue
+
+            # Use BRepExtrema to find all tangent contacts (edge tangent to surface)
+            for sf, sf_bb in self_faces:
+                if not sf_bb.overlaps(other_bb, tolerance):
+                    continue
+                extrema = BRepExtrema_DistShapeShape(sf.wrapped, other.wrapped)
+                if extrema.IsDone() and extrema.Value() <= tolerance:
+                    for i in range(1, extrema.NbSolution() + 1):
+                        pnt1 = extrema.PointOnShape1(i)
+                        pnt2 = extrema.PointOnShape2(i)
+                        if pnt1.Distance(pnt2) <= tolerance:
                             new_vertex = Vertex(pnt1.X(), pnt1.Y(), pnt1.Z())
-                            # Only add if not already covered by existing results
                             if not is_duplicate(new_vertex, results):
                                 results.append(new_vertex)
 
