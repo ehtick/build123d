@@ -487,7 +487,9 @@ class Mixin3D(Shape[TOPODS]):
         # Trim infinite edges before OCCT operations
         if isinstance(other, Edge) and other.is_infinite:
             bbox = self.bounding_box(optimal=False)
-            other = other.trim_infinite(bbox.diagonal + (other.center() - bbox.center()).length)
+            other = other.trim_infinite(
+                bbox.diagonal + (other.center() - bbox.center()).length
+            )
 
         # Solid + Solid/Face/Shell/Edge/Wire: use Common
         if isinstance(other, (Solid, Face, Shell, Edge, Wire)):

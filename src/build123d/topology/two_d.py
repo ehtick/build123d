@@ -340,22 +340,20 @@ class Mixin2D(ABC, Shape[TOPODS]):
         # Trim infinite edges before OCCT operations
         if isinstance(other, Edge) and other.is_infinite:
             bbox = self.bounding_box(optimal=False)
-            other = other.trim_infinite(bbox.diagonal + (other.center() - bbox.center()).length)
+            other = other.trim_infinite(
+                bbox.diagonal + (other.center() - bbox.center()).length
+            )
 
         # 2D + 2D: Common (coplanar overlap) AND Section (crossing curves)
         if isinstance(other, (Face, Shell)):
             # Common for coplanar overlap
-            common = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Common()
-            )
+            common = self._bool_op_list((self,), (other,), BRepAlgoAPI_Common())
             common_faces = common.expand()
             results.extend(common_faces)
 
             # Section for crossing curves (only edges, not vertices)
             # Vertices from Section are boundary contacts (touch), not intersections
-            section = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Section()
-            )
+            section = self._bool_op_list((self,), (other,), BRepAlgoAPI_Section())
             section_edges = ShapeList(
                 [s for s in section if isinstance(s, Edge)]
             ).expand()
@@ -373,9 +371,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
         # 2D + Edge: Section for intersection
         elif isinstance(other, (Edge, Wire)):
-            section = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Section()
-            )
+            section = self._bool_op_list((self,), (other,), BRepAlgoAPI_Section())
             results.extend(section)
 
         # 2D + Vertex: point containment on surface
