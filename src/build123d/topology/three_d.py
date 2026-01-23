@@ -844,9 +844,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
                     v = j / (grid_size - 1)
                     pos1, norm1 = face_point_normal(f1, u, v)
                     pos2, norm2 = face_point_normal(f2, u, v)
-                    if (pos1 - pos2).length > tolerance:
-                        return False
-                    if abs(norm1.dot(norm2)) < 0.99:
+                    if (pos1 - pos2).length > tolerance or abs(norm1.dot(norm2)) < 0.99:
                         return False
             return True
 

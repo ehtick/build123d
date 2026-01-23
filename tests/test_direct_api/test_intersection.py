@@ -657,6 +657,21 @@ class TestTouchMethod:
         vertices = [r for r in result if isinstance(r, Vertex)]
         assert len(vertices) >= 1
 
+    def test_solid_solid_touch_faces_equal(self):
+        """Solid.touch(Solid) exercises faces_equal for duplicate face detection."""
+        b1 = Box(1, 1, 1, align=Align.MIN)
+        b2 = (
+            Box(2, 2, 0.5, align=Align.MIN)
+            - Box(1, 1.2, 1, align=Align.MIN)
+            + Pos(1, 0, 0) * Box(1, 1, 1, align=Align.MIN)
+            + Box(1, 2, 0.5, align=Align.MIN)
+        )
+        result = b1.touch(b2)
+        # Should find face contact
+        assert len(result) >= 1
+        faces = [r for r in result if isinstance(r, Face)]
+        assert len(faces) >= 1
+
 
 # ShapeList.expand() tests
 class TestShapeListExpand:
