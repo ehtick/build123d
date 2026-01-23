@@ -333,6 +333,14 @@ sl1 = Box(2, 2, 2).solid()
 sl2 = Pos(Z=5) * Box(2, 2, 2).solid()
 sl3 = Cylinder(2, 1).solid() - Cylinder(1.5, 1).solid()
 sl4 = Box(3, 1, 1)
+# T-shaped solid (box + thin plate) for testing coplanar face touches
+sl5 = Pos(0.5, 0, 1) * Box(1, 1, 1) + Pos(0.5, 0, 1) * Box(2, 0.1, 1)
+sl6 = Pos(2, 0, 1.5) * Box(2, 2, 1)
+# Overlapping boxes where coplanar face is part of intersection (not touch)
+sl7 = Pos(0, 0.1, 0) * Box(2, 2, 2)
+sl8 = Pos(1, 0, -1) * Box(4, 2, 1)
+# Extended T-shaped solid for testing coplanar edge touches
+sl9 = Box(2, 2, 2) + sl5
 
 wi7 = Wire([l1 := sl3.faces().sort_by(Axis.Z)[-1].edges()[0].trim(.3, .4),
           l2 := l1.trim(2, 3),
@@ -416,6 +424,18 @@ shape_3d_matrix = [
     Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Face, Face, Solid, Solid], "multi to_intersect, intersecting", None, True),
 
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(Z=.5) * fc1], [Face], "multi to_intersect, intersecting", None),
+
+    # T-shaped solid with coplanar face touches (edges should be filtered)
+    Case(sl5, sl6, [Solid], "coplanar face touch", None),
+    Case(sl5, sl6, [Solid, Face, Face], "coplanar face touch", None, True),
+
+    # Overlapping boxes: coplanar face is part of intersection, not touch
+    Case(sl7, sl8, [Solid], "coplanar face filtered", None),
+    Case(sl7, sl8, [Solid], "coplanar face filtered", None, True),
+
+    # Extended T-shaped solid with coplanar edge touches
+    Case(sl9, sl6, [Solid], "coplanar edge touch", None),
+    Case(sl9, sl6, [Solid, Face, Face, Edge, Edge], "coplanar edge touch", None, True),
 ]
 
 @pytest.mark.parametrize("obj, target, expected, include_touched", make_params(shape_3d_matrix))
