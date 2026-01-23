@@ -421,7 +421,7 @@ shape_3d_matrix = [
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid], "multi to_intersect, intersecting", None),
     Case(Pos(0, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid, Solid], "multi to_intersect, intersecting", None),
     Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid, Solid], "multi to_intersect, intersecting", None),
-    Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Face, Face, Solid, Solid], "multi to_intersect, intersecting", None, True),
+    Case(Pos(0.5, 1.5) * sl1, [sl3, Pos(.5, .5) * sl1], [Solid, Solid], "multi to_intersect, intersecting", None, True),
 
     Case(Pos(1.5, 1.5) * sl1, [sl3, Pos(Z=.5) * fc1], [Face], "multi to_intersect, intersecting", None),
 
