@@ -186,7 +186,7 @@ class Polygon(BaseSketchObject):
             vertices of the polygon
         rotation (float, optional): angle to rotate object. Defaults to 0
         align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of object.
-            Defaults to (Align.CENTER, Align.CENTER)
+            Defaults to (Align.NONE, Align.NONE)
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -196,7 +196,7 @@ class Polygon(BaseSketchObject):
         self,
         *pts: VectorLike | Iterable[VectorLike],
         rotation: float = 0,
-        align: Align | tuple[Align, Align] | None = (Align.CENTER, Align.CENTER),
+        align: Align | tuple[Align, Align] | None = (Align.NONE, Align.NONE),
         mode: Mode = Mode.ADD,
     ):
         context: BuildSketch | None = BuildSketch._get_context(self)
