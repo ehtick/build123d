@@ -217,7 +217,7 @@ class TestBuildSketchObjects(unittest.TestCase):
             p = Polygon((0, 0), (1, 0), (0, 1), (0, 0))
         self.assertEqual(len(p.pts), 4)
         self.assertEqual(p.rotation, 0)
-        self.assertEqual(p.align, (Align.CENTER, Align.CENTER))
+        self.assertEqual(p.align, (Align.NONE, Align.NONE))
         self.assertEqual(p.mode, Mode.ADD)
         self.assertAlmostEqual(test.sketch.area, 0.5, 5)
         self.assertEqual(p.faces()[0].normal_at(), Vector(0, 0, 1))
