@@ -1,5 +1,5 @@
 """
-build123d Helper Utilities tests
+build123d Font and Text Utilities tests
 
 name: test_text.py
 by:   jwagenet
@@ -9,7 +9,7 @@ desc: Unit tests for the build123d font and text module
 """
 
 import unittest
-import os
+from pathlib import Path
 
 from OCP.TCollection import TCollection_AsciiString
 
@@ -24,25 +24,30 @@ class TestFontManager(unittest.TestCase):
         """OCP FontMgr expected to persist db over multiple instances"""
         instance1 = FontManager()
         instance1.manager.ClearFontDataBase()
-        working_path = os.path.dirname(os.path.abspath(__file__))
-        src_path = "src/build123d"
-        font_path = instance1.bundled_fonts[0][1]
-        font_path = os.path.join(working_path, "..", src_path, instance1.bundled_path, font_path)
-        instance1.register_font(font_path)
+
+        working_path = Path(__file__).resolve().parent
+        src_path = Path("src/build123d")
+
+        font_name = instance1.bundled_fonts[0][1]
+        font_path = (working_path.parent / src_path / instance1.bundled_path / font_name)
+
+        instance1.register_font(str(font_path))
 
         instance2 = FontManager()
         self.assertEqual(instance1.available_fonts(), instance2.available_fonts())
-
 
     def test_register_font(self):
         """Expected to return system font with matching name if it exists"""
         manager = FontManager()
         manager.manager.ClearFontDataBase()
-        working_path = os.path.dirname(os.path.abspath(__file__))
-        src_path = "src/build123d"
-        font_path = manager.bundled_fonts[0][1]
-        font_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
-        font_names = manager.register_font(font_path)
+
+        working_path = Path(__file__).resolve().parent
+        src_path = Path("src/build123d")
+
+        font_name = manager.bundled_fonts[0][1]
+        font_path = (working_path.parent / src_path / manager.bundled_path / font_name).resolve()
+
+        font_names = manager.register_font(str(font_path))
 
         result = manager.find_font(font_names[0], FontStyle.REGULAR)
         self.assertEqual(font_names[0], result.FontName().ToCString())
@@ -51,53 +56,63 @@ class TestFontManager(unittest.TestCase):
         """Expected to register fonts in folder"""
         manager = FontManager()
         manager.manager.ClearFontDataBase()
-        working_path = os.path.dirname(os.path.abspath(__file__))
-        src_path = "src/build123d"
+
+        working_path = Path(__file__).resolve().parent
+        src_path = Path("src/build123d")
+
         font_name = manager.bundled_fonts[0][0]
-        font_path = os.path.dirname(manager.bundled_fonts[0][1])
-        folder_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
-        font_names = manager.register_folder(folder_path)
+        font_file = Path(manager.bundled_fonts[0][1])
+        font_folder = font_file.parent
+
+        folder_path = (working_path.parent / src_path / manager.bundled_path / font_folder).resolve()
+
+        font_names = manager.register_folder(str(folder_path))
 
         result = manager.find_font(font_names[0], FontStyle.REGULAR)
         self.assertEqual(font_name, result.FontName().ToCString())
 
     def test_register_system_fonts(self):
-        """Expected to register at least as many fonts from before. 
+        """Expected to register at least as many fonts from before.
         May find more on Windows
         """
         manager = FontManager()
         available_before = manager.available_fonts()
+
         manager.manager.RemoveFontAlias(
-              TCollection_AsciiString("singleline"),
-              TCollection_AsciiString("Relief SingleLine CAD")
-              )
+            TCollection_AsciiString("singleline"),
+            TCollection_AsciiString("Relief SingleLine CAD"),
+        )
         manager.manager.ClearFontDataBase()
         manager.register_system_fonts()
+
         # add bundled fonts back in
         manager.__init__()
+
         available_after = manager.available_fonts()
-        # register_system_fonts may add more fonts than InitFontDataBase() due to
-        # string naming rules
         self.assertGreaterEqual(len(available_after), len(available_before))
 
     def test_check_font(self):
         """Expected to return system font with matching path if it exists or None"""
         manager = FontManager()
-        working_path = os.path.dirname(os.path.abspath(__file__))
-        font_path = manager.bundled_fonts[0][1]
-        src_path = "src/build123d"
 
-        good_path = os.path.normpath(os.path.join(working_path, "..", src_path, manager.bundled_path, font_path))
-        good_font = manager.check_font(good_path)
-        bad_font = manager.check_font(font_path)
+        working_path = Path(__file__).resolve().parent
+        src_path = Path("src/build123d")
+
+        font_name = manager.bundled_fonts[0][1]
+        good_path = (working_path.parent / src_path / manager.bundled_path / font_name).resolve()
+
+        good_font = manager.check_font(str(good_path))
+        bad_font = manager.check_font(font_name)
+
         aspect = FONT_ASPECT[FontStyle.REGULAR]
 
-        self.assertEqual(good_path, good_font.FontPath(aspect).ToCString())
-        self.assertEqual(None, bad_font)
+        self.assertEqual(str(good_path), good_font.FontPath(aspect).ToCString())
+        self.assertIsNone(bad_font)
 
     def test_find_font(self):
         """Expected to return font with matching name if it exists"""
         manager = FontManager()
+
         good_name = manager.bundled_fonts[0][0]
         good_font = manager.find_font(good_name, FontStyle.REGULAR)
         bad_font = manager.find_font("build123d", FontStyle.REGULAR)
@@ -116,13 +131,15 @@ class TestFontHelpers(unittest.TestCase):
         font = FontInfo(name, styles)
 
         self.assertEqual(
-            repr(font), f"Font(name={name!r}, styles={tuple(s.name for s in styles)})"
+            repr(font),
+            f"Font(name={name!r}, styles={tuple(s.name for s in styles)})",
         )
 
     def test_available_fonts(self):
         """Test expected output for available fonts."""
         fonts = available_fonts()
         self.assertIsInstance(fonts, list)
+
         for font in fonts:
             self.assertIsInstance(font, FontInfo)
             self.assertIsInstance(font.name, str)

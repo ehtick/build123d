@@ -85,7 +85,7 @@ class FontManager:
         aliases = [aliases.Value(i).ToCString() for i in range(1, aliases.Length() + 1)]
 
         if "singleline" not in aliases:
-            if platform.system() == "Windows":
+            if platform.system() == "Windows": # pragma: no cover
                 # OCCT doesnt add user fonts on Windows
                 self.register_system_fonts()
 
@@ -135,7 +135,7 @@ class FontManager:
     ) -> list[str]:
         """Register all font faces in a font file and return font face names."""
         _, ext = os.path.splitext(path)
-        if ext.strip(".") == "ttc":
+        if ext.strip(".") == "ttc": # pragma: no cover
             fonts = ttCollection.TTCollection(path)
         else:
             fonts = [TTFont(path)]
@@ -168,18 +168,18 @@ class FontManager:
         """Runner to (re)inititalize the OCCT FontMgr font list since user folder is
         missing on Windows and some fonts may not be imported correctly."""
 
-        if platform.system() == "Windows":
+        if platform.system() == "Windows": # pragma: no cover
             user = os.getlogin()
             paths = [
                 "C:/Windows/Fonts",
                 f"C:/Users/{user}/AppData/Local/Microsoft/Windows/Fonts",
             ]
-        elif platform.system() == "Darwin":
+        elif platform.system() == "Darwin": # pragma: no cover
             # macOS
             paths = ["/System/Library/Fonts", "/Library/Fonts"]
         else:
             paths = [
-                "/system/fonts",  # Android
+                "/system/fonts", # Android
                 "/usr/share/fonts",
                 "/usr/local/share/fonts",
             ]

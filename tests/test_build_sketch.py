@@ -383,12 +383,7 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(len(test.sketch.faces()), 4)
         self.assertEqual(t.faces()[0].normal_at(), Vector(0, 0, 1))
 
-        with self.assertRaises(ValueError):
-            Text("test", 2, text_align=(TextAlign.BOTTOM, TextAlign.BOTTOM))
-
-        with self.assertRaises(ValueError):
-            Text("test", 2, text_align=(TextAlign.LEFT, TextAlign.LEFT))
-
+    def test_text_singleline(self):
         font_size = 10
         singleline = Text("test", font_size, "singleline")
         self.assertTrue(all([isinstance(s, Face) for s in singleline.get_top_level_shapes()]))
@@ -403,6 +398,12 @@ class TestBuildSketchObjects(unittest.TestCase):
         with self.assertRaises(ValueError):
             Text("the quick brown fox", font_size, "singleline", single_line_width=6)
 
+    def test_text_exceptions(self):
+        with self.assertRaises(ValueError):
+            Text("test", 2, text_align=(TextAlign.BOTTOM, TextAlign.BOTTOM))
+
+        with self.assertRaises(ValueError):
+            Text("test", 2, text_align=(TextAlign.LEFT, TextAlign.LEFT))
 
     def test_trapezoid(self):
         with BuildSketch() as test:
