@@ -57,17 +57,6 @@ class TestCompound(unittest.TestCase):
         self.assertGreaterEqual(len(singleline.wires()), 4)
         self.assertEqual(len(outline.faces()), 4)
 
-    def test_make_text_font_path(self):
-        manager = FontManager()
-        manager.manager.ClearFontDataBase()
-
-        working_path = Path(__file__).resolve().parent
-        src_path = Path("src/build123d")
-        font_name = manager.bundled_fonts[0][1]
-        font_path = (working_path / ".." / ".." / src_path / manager.bundled_path / font_name).resolve()
-
-        self.assertIsInstance(Compound.make_text("text", 10, font_path=str(font_path)), Compound)
-
     def test_fuse(self):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))

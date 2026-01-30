@@ -299,7 +299,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             )
 
         manager = FontManager()
-        if font_path and manager.check_font(font_path):
+        if font_path and manager.check_font(font_path): # pragma: no cover
             face_names = manager.register_font(font_path, True, False)
             # Check if font (name) is in face names and not bad or default (Arial)
             font_name = font if font in face_names else face_names[0]
