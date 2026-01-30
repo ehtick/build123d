@@ -68,10 +68,6 @@ class TestCompound(unittest.TestCase):
 
         self.assertIsInstance(Compound.make_text("text", 10, font_path=str(font_path)), Compound)
 
-        # rebuild manager font library for future tests
-        manager.register_system_fonts()
-        manager.__init__()
-
     def test_fuse(self):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))
