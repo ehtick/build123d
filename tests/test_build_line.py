@@ -353,12 +353,17 @@ class BuildLineTests(unittest.TestCase):
         self.assertAlmostEqual(off1.radius, 1)
         self.assertAlmostEqual(off1.length, pi / 2)
 
-        plane_iso = Plane(origin=(0, 0, 0), x_dir=(1, 1, 0), z_dir=(1, -1, 1))
-        with BuildLine(plane_iso) as iso_l:
+        with BuildLine(Plane.isometric) as iso_l:
             iso1 = JernArc((0, 0), (0, 1), 1, 180)
         self.assertTupleAlmostEquals(iso_l.line @ 1, (-sqrt(2), -sqrt(2), 0), 5)
         self.assertAlmostEqual(iso1.radius, 1)
         self.assertAlmostEqual(iso1.length, pi)
+
+        with BuildLine(Plane.YZ) as jern_arc_vector:
+            jv1 = JernArc(start=Vector(0, 5, 4), tangent=Vector(0, 0, 1), radius=1, arc_size=90)
+        self.assertTupleAlmostEquals(jv1 @ 1, (0, 4, 5), 5)
+        self.assertAlmostEqual(jv1.radius, 1)
+        self.assertAlmostEqual(jv1.length, pi / 2)
 
         with BuildLine() as full_l:
             l1 = JernArc(start=(0, 0, 0), tangent=(1, 0, 0), radius=1, arc_size=360)

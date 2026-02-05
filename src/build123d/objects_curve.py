@@ -1102,9 +1102,14 @@ class JernArc(BaseEdgeObject):
                 WorkplaneList._get_context().workplanes[0]
             )
         jern_workplane.origin = start
-        start_tangent = Vector(tangent).transform(
-            jern_workplane.reverse_transform, is_direction=True
-        )
+
+        if isinstance(tangent, tuple) and len(tangent) == 2:
+            # de-localize to global tangent if supplied tangent is a 2-tuple
+            start_tangent = Vector(tangent).transform(
+                jern_workplane.reverse_transform, is_direction=True
+            ).normalized()
+        else:
+            start_tangent = Vector(tangent).normalized()
 
         arc_direction = copysign(1.0, arc_size)
         self.center_point = start + start_tangent.rotate(
