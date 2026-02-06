@@ -273,5 +273,11 @@ def test_stl_import_rescale_units(unit):
     )
 
 
+def test_stl_import_rescale_units_invalid(unit="invalid"):
+    stl_file = Path(__file__).parent / "cyl_w_rect_hole.stl"
+    with pytest.raises(ValueError):
+        importer = import_stl(stl_file, unit)
+
+
 if __name__ == "__main__":
     unittest.main()
