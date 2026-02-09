@@ -43,6 +43,7 @@ from OCP.BRep import BRep_Builder
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepTools import BRepTools
+from OCP.gp import gp_Trsf
 from OCP.GProp import GProp_GProps
 from OCP.Quantity import Quantity_ColorRGBA
 from OCP.RWStl import RWStl
@@ -72,7 +73,8 @@ from OCP.XCAFDoc import (
 from ocpsvg import ColorAndLabel, import_svg_document
 from svgpathtools import svg2paths
 
-from build123d.build_enums import Align
+from build123d.build_common import MC, MM, CM, M, IN, FT
+from build123d.build_enums import Align, Unit
 from build123d.geometry import Color, Location, Vector, to_align_offset
 from build123d.topology import (
     Compound,
@@ -241,7 +243,7 @@ def import_step(filename: PathLike | str | bytes) -> Compound:
     return root
 
 
-def import_stl(file_name: PathLike | str | bytes) -> Face:
+def import_stl(file_name: PathLike | str | bytes, model_unit: Unit = Unit.MM) -> Face:
     """import_stl
 
     Extract shape from an STL file and return it as a Face reference object.
@@ -252,19 +254,48 @@ def import_stl(file_name: PathLike | str | bytes) -> Face:
 
     Args:
         file_name (Union[PathLike, str, bytes]): file path of STL file to import
+        model_unit (Unit, optional): the default unit used when creating the model. For
+            example, Blender defaults to Unit.M. Defaults to Unit.MM.
 
     Raises:
         ValueError: Could not import file
+        ValueError: Invalid model_unit
 
     Returns:
         Face: STL model
     """
-    # Read and return the shape
+    # Read STL file
     reader = RWStl.ReadFile_s(fsdecode(file_name))
+
+    # Check for any required scaling
+    if model_unit == Unit.MM:
+        pass
+    else:
+        conversion_factor = {
+            Unit.MC: MC,  # MICRO
+            Unit.MM: MM,  # MILLIMETER
+            Unit.CM: CM,  # CENTIMETER
+            Unit.M: M,  # METER
+            Unit.IN: IN,  # INCH
+            Unit.FT: FT,  # FOOT
+        }
+        try:
+            scale_factor = conversion_factor[model_unit]
+        except KeyError:
+            raise ValueError(
+                f"model_scale must be one of a valid unit: {Unit._member_names_}"
+            )
+        transformation = gp_Trsf()
+        transformation.SetScaleFactor(scale_factor)
+
+        for i in range(1, reader.NbNodes() + 1):
+            p = reader.Node(i)
+            p.Transform(transformation)
+            reader.SetNode(i, p)
+
     face = TopoDS_Face()
     BRep_Builder().MakeFace(face, reader)
-    stl_obj = Face.cast(face)
-    return stl_obj
+    return Face.cast(face)
 
 
 def import_svg_as_buildline_code(
