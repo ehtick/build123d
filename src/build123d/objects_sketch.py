@@ -88,16 +88,20 @@ class BaseSketchObject(Sketch):
 
         context: BuildSketch | None = BuildSketch._get_context(self, log=False)
         if context is None:
-            new_faces = obj.moved(Rotation(0, 0, rotation)).faces()
+            new_faces = (
+                obj.moved(Rotation(0, 0, rotation)).faces()
+                if rotation != 0
+                else obj.faces()
+            )
 
         else:
             self.rotation = rotation
             self.mode = mode
 
-            obj = obj.moved(Rotation(0, 0, rotation))
+            obj = obj.moved(Rotation(0, 0, rotation)) if rotation != 0 else obj
 
             new_faces = ShapeList(
-                face.moved(location)
+                face.moved(location) if location != Location() else face
                 for face in obj.faces()
                 for location in LocationList._get_context().local_locations
             )
@@ -186,7 +190,7 @@ class Polygon(BaseSketchObject):
             vertices of the polygon
         rotation (float, optional): angle to rotate object. Defaults to 0
         align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of object.
-            Defaults to (Align.CENTER, Align.CENTER)
+            Defaults to (Align.NONE, Align.NONE)
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -196,7 +200,7 @@ class Polygon(BaseSketchObject):
         self,
         *pts: VectorLike | Iterable[VectorLike],
         rotation: float = 0,
-        align: Align | tuple[Align, Align] | None = (Align.CENTER, Align.CENTER),
+        align: Align | tuple[Align, Align] | None = (Align.NONE, Align.NONE),
         mode: Mode = Mode.ADD,
     ):
         context: BuildSketch | None = BuildSketch._get_context(self)
@@ -550,6 +554,8 @@ class Text(BaseSketchObject):
     "Arial Black". Alternatively, a specific font file can be specified with font_path.
 
     Use `available_fonts()` to list available font names for `font` and FontStyles.
+    Note: on Windows, fonts must be installed with "Install for all users" to be found
+    by name.
 
     Not all fonts have every FontStyle available, however ITALIC and BOLDITALIC will
     still italicize the font if the respective font file is not available.

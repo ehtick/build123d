@@ -19,7 +19,8 @@ from build123d.importers import (
 from build123d.geometry import Pos, Vector
 from build123d.exporters import ExportSVG
 from build123d.exporters3d import export_brep, export_step
-from build123d.build_enums import Align, GeomType
+from build123d.build_common import UNITS_PER_METER
+from build123d.build_enums import Align, GeomType, Unit
 
 
 class ImportSVG(unittest.TestCase):
@@ -254,6 +255,28 @@ def test_pathlike_brep(format, tmp_path):
     brep_file = format(tmp_path / "test.brep")
     export_brep(Solid.make_box(1, 1, 1), brep_file)
     import_brep(brep_file)
+
+
+@pytest.mark.parametrize(
+    "unit",
+    (Unit.MM, Unit.MC, Unit.CM, Unit.M, Unit.IN, Unit.FT),
+    ids=["MM", "MC", "CM", "M", "IN", "FT"],
+)
+def test_stl_import_rescale_units(unit):
+    stl_file = Path(__file__).parent / "cyl_w_rect_hole.stl"
+    importer = import_stl(stl_file, unit)
+    mm_bbox_diag_length = 69.28203925644141
+    m_conv_factor = UNITS_PER_METER[unit]
+    expected_diag_length = mm_bbox_diag_length / m_conv_factor * 1000
+    assert importer.bounding_box().size.length == pytest.approx(
+        expected_diag_length, rel=1e-6, abs=1e-6
+    )
+
+
+def test_stl_import_rescale_units_invalid(unit="invalid"):
+    stl_file = Path(__file__).parent / "cyl_w_rect_hole.stl"
+    with pytest.raises(ValueError):
+        importer = import_stl(stl_file, unit)
 
 
 if __name__ == "__main__":
