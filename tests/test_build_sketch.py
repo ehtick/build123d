@@ -383,6 +383,22 @@ class TestBuildSketchObjects(unittest.TestCase):
         self.assertEqual(len(test.sketch.faces()), 4)
         self.assertEqual(t.faces()[0].normal_at(), Vector(0, 0, 1))
 
+    def test_text_singleline(self):
+        font_size = 10
+        singleline = Text("test", font_size, "singleline")
+        self.assertTrue(all([isinstance(s, Face) for s in singleline.get_top_level_shapes()]))
+        self.assertEqual(singleline.single_line_width, font_size * .04)
+
+        singlelinewidth = Text("test", font_size, "singleline", single_line_width=1)
+        self.assertEqual(singlelinewidth.single_line_width, 1)
+
+        with self.assertRaises(ValueError):
+            Text("test", font_size, "singleline", single_line_width=0)
+
+        with self.assertRaises(ValueError):
+            Text("the quick brown fox", font_size, "singleline", single_line_width=6)
+
+    def test_text_exceptions(self):
         with self.assertRaises(ValueError):
             Text("test", 2, text_align=(TextAlign.BOTTOM, TextAlign.BOTTOM))
 

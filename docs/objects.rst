@@ -528,6 +528,13 @@ Reference
 .. autoclass:: Torus
 .. autoclass:: Wedge
 
+
+Text
+----
+
+.. include:: objects/text.rst
+
+
 Custom Objects
 --------------
 

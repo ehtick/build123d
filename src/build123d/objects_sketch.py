@@ -581,6 +581,8 @@ class Text(BaseSketchObject):
         path (Edge | Wire, optional): path for text to follow. Defaults to None
         position_on_path (float, optional): the relative location on path to position
             the text, values must be between 0.0 and 1.0. Defaults to 0.0
+        single_line_width (float, optional): width of outlined single line font.
+            Defaults to 4% of font_size
         rotation (float, optional): angle to rotate object. Defaults to 0
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
@@ -599,11 +601,21 @@ class Text(BaseSketchObject):
         align: Align | tuple[Align, Align] | None = None,
         path: Edge | Wire | None = None,
         position_on_path: float = 0.0,
+        single_line_width: float | None = None,
         rotation: float = 0.0,
         mode: Mode = Mode.ADD,
     ):
         context: BuildSketch | None = BuildSketch._get_context(self)
         validate_inputs(context, self)
+
+        if single_line_width is None:
+            # Ensure line width is passed for single line fonts to convert to faces
+            # Default is 4% of font_size
+            single_line_width = 0.04 * font_size
+        elif single_line_width <= 0.0:
+            raise ValueError(
+                f"single_line_width ({single_line_width}) must be greater than 0"
+            )
 
         self.txt = txt
         self.font_size = font_size
@@ -614,6 +626,7 @@ class Text(BaseSketchObject):
         self.align = align
         self.text_path = path
         self.position_on_path = position_on_path
+        self.single_line_width = single_line_width
         self.rotation = rotation
         self.mode = mode
 
@@ -627,6 +640,7 @@ class Text(BaseSketchObject):
             align=align,
             position_on_path=position_on_path,
             text_path=path,
+            single_line_width=single_line_width,
         )
         super().__init__(text_string, rotation, None, mode)
 
