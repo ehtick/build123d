@@ -235,7 +235,7 @@ Overview
 +----------------------+------------------------------------------------------------------+-------------------------------------------------------+
 | |group_by|           | ``Axis``, ``Edge``, ``Wire``, ``SortBy``, callable, property     | Group ``ShapeList`` by criteria                       |
 +----------------------+------------------------------------------------------------------+-------------------------------------------------------+
-| |filter_by|          | ``Axis``, ``Plane``, ``GeomType``, ``ShapePredicate``, property  | Filter ``ShapeList`` by criteria                      |
+| |filter_by|          | ``Axis``, ``Plane``, ``GeomType``, callable, property            | Filter ``ShapeList`` by criteria                      |
 +----------------------+------------------------------------------------------------------+-------------------------------------------------------+
 | |filter_by_position| | ``Axis``                                                         | Filter ``ShapeList`` by ``Axis`` & mix / max values   |
 +----------------------+------------------------------------------------------------------+-------------------------------------------------------+
@@ -247,8 +247,8 @@ fall into the following categories, though not all operators take all criteria:
 - Topological objects: ``Edge``, ``Wire``
 - Enums: :class:`~build_enums.SortBy`, :class:`~build_enums.GeomType`
 - Properties, eg: ``Face.area``, ``Edge.length``
-- ``ShapePredicate``, eg: ``lambda e: e.is_interior == 1``, ``lambda f: lf.edges() >= 3``
-- Callable eg: ``Vertex().distance``
+- Callable, eg: ``lambda e: e.is_interior == 1``, ``lambda f: f.edges() >= 3``,
+  ``Vertex().distance``
 
 Sort
 =======

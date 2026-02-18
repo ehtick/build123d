@@ -1607,7 +1607,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             path_position = path.position_at(relative_position_on_wire)
             path_tangent = path.tangent_at(relative_position_on_wire)
             projection_axis = Axis(path_position, shape_center - path_position)
-            (surface_point, surface_normal) = self.find_intersection_points(
+            surface_point, surface_normal = self.find_intersection_points(
                 projection_axis
             )[0]
             surface_normal_plane = Plane(
@@ -2430,14 +2430,6 @@ T = TypeVar("T", bound=Union[Shape, Vector])
 K = TypeVar("K", bound=SupportsLessThan)
 
 
-class ShapePredicate(Protocol):
-    """Predicate for shape filters"""
-
-    # ---- Instance Methods ----
-
-    def __call__(self, shape: Shape) -> bool: ...
-
-
 class GroupBy(Generic[T, K]):
     """Result of a Shape.groupby operation. Groups can be accessed by index or key"""
 
@@ -2656,11 +2648,11 @@ class ShapeList(list[T]):
 
     def filter_by(
         self,
-        filter_by: ShapePredicate | Axis | Plane | GeomType | property,
+        filter_by: Callable[[T], bool] | Axis | Plane | GeomType | property,
         reverse: bool = False,
         tolerance: float = 1e-5,
     ) -> ShapeList[T]:
-        """filter by Axis, Plane, or GeomType
+        """filter by
 
         Either:
         - filter objects of type planar Face or linear Edge by their normal or tangent
@@ -2669,9 +2661,9 @@ class ShapeList(list[T]):
         objects.
 
         Args:
-            filter_by (Union[Axis,Plane,GeomType]): axis, plane, or geom type to filter
-                and possibly sort by. Filtering by a plane returns faces/edges parallel
-                to that plane.
+            filter_by (Callable[[T], bool] | Axis | Plane | GeomType): function, axis,
+                plane, or geom type to filter and possibly sort by. Filtering by a plane
+                returns faces/edges parallel to that plane.
             reverse (bool, optional): invert the geom type filter. Defaults to False.
             tolerance (float, optional): maximum deviation from axis. Defaults to 1e-5.
 
