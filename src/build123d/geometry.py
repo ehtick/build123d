@@ -1182,6 +1182,20 @@ class BoundBox:
             and second_box.max.Z < self.max.Z
         )
 
+    def overlaps(self, other: BoundBox, tolerance: float = TOLERANCE) -> bool:
+        """Check if this bounding box overlaps with another.
+
+        Args:
+            other: BoundBox to check overlap with
+            tolerance: Distance tolerance for overlap detection
+
+        Returns:
+            True if bounding boxes overlap (share any volume), False otherwise
+        """
+        if self.wrapped is None or other.wrapped is None:
+            return False
+        return self.wrapped.Distance(other.wrapped) <= tolerance
+
     def to_align_offset(self, align: Align2DType | Align3DType) -> Vector:
         """Amount to move object to achieve the desired alignment"""
         return to_align_offset(self.min, self.max, align)

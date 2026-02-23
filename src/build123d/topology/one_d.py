@@ -713,126 +713,73 @@ class Mixin1D(Shape[TOPODS]):
 
         return Vector(curve.Value(umax))
 
-    def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge]:
-        """Intersect Edge with Shape or geometry object
+    def _intersect(
+        self,
+        other: Shape | Vector | Location | Axis | Plane,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection for Edge/Wire.
+
+        Returns same-dimension overlap or crossing geometry:
+        - 1D + 1D → Edge (collinear overlap) + Vertex (crossing)
+        - 1D + Face/Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
-
-        Returns:
-            ShapeList[Vertex | Edge] | None: ShapeList of vertices and/or edges
+            other: Shape or geometry object to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+                (only relevant when Solids are involved)
         """
+        # Convert geometry objects to shapes
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
 
-        def to_vector(objs: Iterable) -> ShapeList:
-            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+        results: ShapeList = ShapeList()
 
-        def to_vertex(objs: Iterable) -> ShapeList:
-            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+        # Trim infinite edges before OCCT operations
+        if isinstance(other, Edge) and other.is_infinite:
+            bbox = self.bounding_box(optimal=False)
+            other = other.trim_infinite(
+                bbox.diagonal + (other.center() - bbox.center()).length
+            )
 
-        def bool_op(
-            args: Sequence,
-            tools: Sequence,
-            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
-        ) -> ShapeList:
-            # Wrap Shape._bool_op for corrected output
-            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
-            if isinstance(intersections, ShapeList):
-                return intersections or ShapeList()
-            if isinstance(intersections, Shape) and not intersections.is_null:
-                return ShapeList([intersections])
-            return ShapeList()
+        # 1D + Plane: run Section directly with OCP Face
+        if isinstance(other, Plane):
+            face: Shape = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
+            section = self._bool_op_list((self,), (face,), BRepAlgoAPI_Section())
+            results.extend(section.expand())
 
-        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
-            # Remove lower order shapes from list which *appear* to be part of
-            # a higher order shape using a lazy distance check
-            # (sufficient for vertices, may be an issue for higher orders)
-            order_groups = []
-            for order in orders:
-                order_groups.append(
-                    ShapeList([s for s in shapes if isinstance(s, order)])
-                )
+        # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
+        elif isinstance(other, (Edge, Wire)):
+            common = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Common()
+            )
+            results.extend(common.expand())
+            section = self._bool_op_list(
+                (self,), (other,), BRepAlgoAPI_Section()
+            )
+            # Extract vertices from section (edges already in Common for wires)
+            for shape in section:
+                if isinstance(shape, Vertex) and not shape.is_null:
+                    results.append(shape)
 
-            filtered_shapes = order_groups[-1]
-            for i in range(len(order_groups) - 1):
-                los = order_groups[i]
-                his: list = sum(order_groups[i + 1 :], [])
-                filtered_shapes.extend(
-                    ShapeList(
-                        lo
-                        for lo in los
-                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
-                    )
-                )
+        # 1D + Vertex: point containment on edge
+        elif isinstance(other, Vertex):
+            if other.distance_to(self) <= tolerance:
+                results.append(other)
 
-            return filtered_shapes
+        # Delegate to higher-order shapes (Face, Solid, etc.)
+        else:
+            result = other._intersect(self, tolerance, include_touched)
+            if result:
+                results.extend(result)
 
-        common_set: ShapeList[Vertex | Edge | Wire] = ShapeList([self])
-        target: Shape | Plane
-        for other in to_intersect:
-            # Conform target type
-            match other:
-                case Axis():
-                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
-                    bbox = self.bounding_box()
-                    dist = self.distance_to(other.position)
-                    dist = dist if dist >= 1 else 1
-                    target = Edge.make_line(
-                        other.position - other.direction * bbox.diagonal * dist,
-                        other.position + other.direction * bbox.diagonal * dist,
-                    )
-                case Plane():
-                    target = other
-                case Vector():
-                    target = Vertex(other)
-                case Location():
-                    target = Vertex(other.position)
-                case _ if issubclass(type(other), Shape):
-                    target = other
-                case _:
-                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
-
-            # Find common matches
-            common: list[Vertex | Edge | Wire] = []
-            result: ShapeList | None
-            for obj in common_set:
-                match (obj, target):
-                    case (_, Plane()):
-                        assert isinstance(other.wrapped, gp_Pln)
-                        target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
-                        operation1 = BRepAlgoAPI_Section()
-                        result = bool_op((obj,), (target,), operation1)
-                        operation2 = BRepAlgoAPI_Common()
-                        result.extend(bool_op((obj,), (target,), operation2))
-
-                    case (_, Vertex() | Edge() | Wire()):
-                        operation1 = BRepAlgoAPI_Section()
-                        section = bool_op((obj,), (target,), operation1)
-                        result = section
-                        if not section:
-                            operation2 = BRepAlgoAPI_Common()
-                            result.extend(bool_op((obj,), (target,), operation2))
-
-                    case _ if issubclass(type(target), Shape):
-                        result = target.intersect(obj)
-
-                if result:
-                    common.extend(result)
-
-            if common:
-                common_set = ShapeList()
-                for shape in common:
-                    if isinstance(shape, Wire):
-                        common_set.extend(shape.edges())
-                    else:
-                        common_set.append(shape)
-                common_set = to_vertex(set(to_vector(common_set)))
-                common_set = filter_shapes_by_order(common_set, [Vertex, Edge])
-            else:
-                return None
-
-        return ShapeList(common_set)
+        return results if results else None
 
     def location_at(
         self,
@@ -2692,6 +2639,132 @@ class Edge(Mixin1D[TopoDS_Edge]):
             raise ValueError("Can't find adaptor for empty edge")
         return BRepAdaptor_Curve(self.wrapped)
 
+    def geom_equal(
+        self,
+        other: Edge,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two edges for geometric equality within tolerance.
+
+        This compares the geometric properties of two edges, not their topological
+        identity. Two independently created edges with the same geometry will
+        return True.
+
+        Args:
+            other: Edge to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if edges are geometrically equal within tolerance
+        """
+        if not isinstance(other, Edge):
+            return False
+
+        # geom_type must match
+        if self.geom_type != other.geom_type:
+            return False
+
+        # Common: start and end points
+        if (self @ 0) != (other @ 0) or (self @ 1) != (other @ 1):
+            return False
+
+        ga1 = self.geom_adaptor()
+        ga2 = other.geom_adaptor()
+
+        match self.geom_type:
+            case GeomType.LINE:
+                # Line: fully defined by endpoints (already checked)
+                return True
+
+            case GeomType.CIRCLE:
+                c1, c2 = ga1.Circle(), ga2.Circle()
+                return (
+                    abs(c1.Radius() - c2.Radius()) < tol
+                    and Vector(c1.Location()) == Vector(c2.Location())
+                    and Vector(c1.Axis().Direction()) == Vector(c2.Axis().Direction())
+                )
+
+            case GeomType.ELLIPSE:
+                e1, e2 = ga1.Ellipse(), ga2.Ellipse()
+                return (
+                    abs(e1.MajorRadius() - e2.MajorRadius()) < tol
+                    and abs(e1.MinorRadius() - e2.MinorRadius()) < tol
+                    and Vector(e1.Location()) == Vector(e2.Location())
+                    and Vector(e1.Axis().Direction()) == Vector(e2.Axis().Direction())
+                )
+
+            case GeomType.HYPERBOLA:
+                h1, h2 = ga1.Hyperbola(), ga2.Hyperbola()
+                return (
+                    abs(h1.MajorRadius() - h2.MajorRadius()) < tol
+                    and abs(h1.MinorRadius() - h2.MinorRadius()) < tol
+                    and Vector(h1.Location()) == Vector(h2.Location())
+                    and Vector(h1.Axis().Direction()) == Vector(h2.Axis().Direction())
+                )
+
+            case GeomType.PARABOLA:
+                p1, p2 = ga1.Parabola(), ga2.Parabola()
+                return (
+                    abs(p1.Focal() - p2.Focal()) < tol
+                    and Vector(p1.Location()) == Vector(p2.Location())
+                    and Vector(p1.Axis().Direction()) == Vector(p2.Axis().Direction())
+                )
+
+            case GeomType.BEZIER:
+                b1, b2 = ga1.Bezier(), ga2.Bezier()
+                if b1.Degree() != b2.Degree() or b1.NbPoles() != b2.NbPoles():
+                    return False
+                for i in range(1, b1.NbPoles() + 1):
+                    if Vector(b1.Pole(i)) != Vector(b2.Pole(i)):
+                        return False
+                    if b1.IsRational() and abs(b1.Weight(i) - b2.Weight(i)) >= tol:
+                        return False
+                return True
+
+            case GeomType.BSPLINE:
+                s1, s2 = ga1.BSpline(), ga2.BSpline()
+                if s1.Degree() != s2.Degree():
+                    return False
+                if s1.IsPeriodic() != s2.IsPeriodic():
+                    return False
+                if s1.NbPoles() != s2.NbPoles() or s1.NbKnots() != s2.NbKnots():
+                    return False
+                for i in range(1, s1.NbPoles() + 1):
+                    if Vector(s1.Pole(i)) != Vector(s2.Pole(i)):
+                        return False
+                    if s1.IsRational() and abs(s1.Weight(i) - s2.Weight(i)) >= tol:
+                        return False
+                for i in range(1, s1.NbKnots() + 1):
+                    if abs(s1.Knot(i) - s2.Knot(i)) >= tol:
+                        return False
+                    if s1.Multiplicity(i) != s2.Multiplicity(i):
+                        return False
+                return True
+
+            case GeomType.OFFSET:
+                oc1, oc2 = ga1.OffsetCurve(), ga2.OffsetCurve()
+                # Compare offset values and directions
+                if abs(oc1.Offset() - oc2.Offset()) >= tol:
+                    return False
+                if Vector(oc1.Direction()) != Vector(oc2.Direction()):
+                    return False
+                # Compare basis curves (recursive)
+                basis1 = Edge(BRepBuilderAPI_MakeEdge(oc1.BasisCurve()).Edge())
+                basis2 = Edge(BRepBuilderAPI_MakeEdge(oc2.BasisCurve()).Edge())
+                return basis1.geom_equal(basis2, tol)
+
+            case _:  # pragma: no cover
+                # I don't think, GeomAbs_OtherCurve can be created in Python
+                # OTHER/unknown: compare sample points
+                for i in range(1, num_interpolation_points + 1):
+                    t = i / (num_interpolation_points + 1)
+                    if (self @ t) != (other @ t):
+                        return False
+                return True
+
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_Curve, float, bool]:
@@ -3050,6 +3123,36 @@ class Edge(Mixin1D[TopoDS_Edge]):
 
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
+
+    @property
+    def is_infinite(self) -> bool:
+        """Check if edge is infinite (LINE with length > 1e100)."""
+        return self.geom_type == GeomType.LINE and self.length > 1e100
+
+    def trim_infinite(self, half_length: float) -> Edge:
+        """Trim an infinite line edge to a finite length.
+
+        OCCT's boolean operations struggle with very long edges (length > 1e100).
+        This method trims such edges to a reasonable size centered at edge.center().
+
+        For non-infinite edges, returns self unchanged.
+
+        Args:
+            half_length: Half-length of the resulting edge
+
+        Returns:
+            Trimmed edge if infinite, otherwise self
+        """
+        if not self.is_infinite:
+            return self
+
+        origin = self.center()
+        direction = (self.end_point() - self.start_point()).normalized()
+
+        return Edge.make_line(
+            origin - direction * half_length,
+            origin + direction * half_length,
+        )
 
 
 class Wire(Mixin1D[TopoDS_Wire]):
@@ -3732,6 +3835,40 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 ordered_edges.append(edge.reversed())
 
         return ordered_edges
+
+    def geom_equal(
+        self,
+        other: Wire,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two wires for geometric equality within tolerance.
+
+        This compares the geometric properties of two wires by comparing their
+        constituent edges pairwise. Two independently created wires with the
+        same geometry will return True.
+
+        Args:
+            other: Wire to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if wires are geometrically equal within tolerance
+        """
+        if not isinstance(other, Wire):
+            return False
+
+        # Use order_edges to ensure consistent edge ordering and orientation
+        edges1 = self.order_edges()
+        edges2 = other.order_edges()
+        if len(edges1) != len(edges2):
+            return False
+        return all(
+            e1.geom_equal(e2, tol, num_interpolation_points)
+            for e1, e2 in zip(edges1, edges2)
+        )
 
     def param_at_point(self, point: VectorLike) -> float:
         """
