@@ -104,6 +104,22 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Arc defined by center, radius, & angles
 
+
+    .. grid-item-card:: :class:`~objects_curve.ConstrainedArcs`
+
+        .. image:: assets/constrained_arcs_example.svg
+
+        +++
+        Arc(s) constrained by other geometric objects
+
+
+    .. grid-item-card:: :class:`~objects_curve.ConstrainedLines`
+
+        .. image:: assets/constrained_lines_example.svg
+
+        +++
+        Line(s) constrained by other geometric objects
+
     .. grid-item-card:: :class:`~objects_curve.DoubleTangentArc`
 
         .. image:: assets/double_tangent_line_example.svg
@@ -253,6 +269,8 @@ Reference
 .. autoclass:: Bezier
 .. autoclass:: BlendCurve
 .. autoclass:: CenterArc
+.. autoclass:: ConstrainedArcs
+.. autoclass:: ConstrainedLines
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
 .. autoclass:: ParabolicCenterArc

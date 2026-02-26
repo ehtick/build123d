@@ -21,6 +21,8 @@ Cheat Sheet
             | :class:`~objects_curve.Bezier`
             | :class:`~objects_curve.BlendCurve`
             | :class:`~objects_curve.CenterArc`
+            | :class:`~objects_curve.ConstrainedArcs`
+            | :class:`~objects_curve.ConstrainedLines`
             | :class:`~objects_curve.DoubleTangentArc`
             | :class:`~objects_curve.EllipticalCenterArc`
             | :class:`~objects_curve.ParabolicCenterArc`

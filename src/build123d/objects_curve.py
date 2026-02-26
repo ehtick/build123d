@@ -32,7 +32,7 @@ import copy as copy_module
 import warnings
 import numpy as np
 import sympy  # type: ignore
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from itertools import product
 from math import copysign, cos, radians, sin, sqrt
 from scipy.optimize import minimize
@@ -46,6 +46,8 @@ from build123d.build_enums import (
     LengthMode,
     Keep,
     Mode,
+    Sagitta,
+    Tangency,
     Side,
 )
 from build123d.build_line import BuildLine
@@ -54,20 +56,37 @@ from build123d.topology import Curve, Edge, Face, Vertex, Wire
 from build123d.topology.shape_core import ShapeList
 
 
-def _add_curve_to_context(curve, mode: Mode):
+def _add_curve_to_context(curve: Edge | Wire | Curve, mode: Mode):
     """Helper function to add a curve to the context.
 
     Args:
-        curve (Wire | Edge): curve to add to the context (either a Wire or an Edge)
+        curve (Edge | Wire | Curve): curve to add to the context (either a Wire or an Edge)
         mode (Mode): combination mode
     """
     context: BuildLine | None = BuildLine._get_context(log=False)
 
     if context is not None and isinstance(context, BuildLine):
-        if isinstance(curve, Wire):
-            context._add_to_context(*curve.edges(), mode=mode)
-        elif isinstance(curve, Edge):
+        if isinstance(curve, Edge):
             context._add_to_context(curve, mode=mode)
+        elif isinstance(curve, (Curve, Wire)):
+            context._add_to_context(*curve.edges(), mode=mode)
+
+
+class BaseCurveObject(Curve):
+    """BaseCurveObject specialized for Curve.
+
+    Args:
+        curve (Wire): wire to create
+        mode (Mode, optional): combination mode. Defaults to Mode.ADD
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    def __init__(self, curve: Curve, mode: Mode = Mode.ADD):
+        # Use the helper function to handle adding the curve to the context
+        _add_curve_to_context(curve, mode)
+        if curve.wrapped is not None:
+            super().__init__(curve.wrapped)
 
 
 class BaseLineObject(Wire):
@@ -473,6 +492,418 @@ class CenterArc(BaseEdgeObject):
         super().__init__(arc, mode=mode)
 
 
+class ConstrainedArcs(BaseCurveObject):
+    """Line Object: Arc(s) constrained by other geometric objects.
+
+    The result is always a Curve containing one or more Edges. If you need
+    to access Edge-specific properties or methods (such as ``arc_center``),
+    extract the edge or edges first::
+
+        result = ConstrainedArcs(...)
+        arc = result.edge()           # extract the Edge
+        center = arc.arc_center       # now Edge methods are available
+
+    Note that in Builder mode the ``selector`` parameter must be provided or
+    all results will be combined into the BuildLine context. In Algebra mode
+    the selector can be applied as a parameter or in the normal way to the
+    ConstrainedArcs object. The content of the selector is the same in both cases.
+
+    Examples:
+        An arc built from three edge constraints.
+
+        Algebra::
+
+            l4 = PolarLine((0, 0), 4, 60)
+            l5 = PolarLine((0, 0), 4, 40)
+            a3 = CenterArc((0, 0), 4, 0, 90)
+            ex_a3 = (
+                ConstrainedArcs(l4, l5, a3, sagitta=Sagitta.BOTH).edges().sort_by(Edge.length)[0]
+            )
+
+        Builder::
+
+            with BuildLine() as arc_ex3:
+                l4 = PolarLine((0, 0), 4, 60)
+                l5 = PolarLine((0, 0), 4, 40)
+                a3 = CenterArc((0, 0), 4, 0, 90)
+                ex_a3 = ConstrainedArcs(
+                    l4,
+                    l5,
+                    a3,
+                    sagitta=Sagitta.BOTH,
+                    selector=lambda arcs: arcs.sort_by(Edge.length)[0],
+                )
+
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    @overload
+    def __init__(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        sagitta: Sagitta = Sagitta.SHORT,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda arcs: arcs,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create all planar circular arcs of a given radius that are tangent/contacting
+        the two provided objects on the XY plane.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda arcs: arcs.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Accept all results (default behaviour)::
+
+                a1 = CenterArc((-5, 0), 4, 0, 360)
+                a2 = CenterArc((5, 0), 3, 0, 360)
+                arcs = ConstrainedArcs(a1, a2, radius=10, selector=lambda arcs: arcs)
+        """
+
+    @overload
+    def __init__(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center_on: Axis | Edge,
+        sagitta: Sagitta = Sagitta.SHORT,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda arcs: arcs,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create all planar circular arcs whose circle is tangent to two objects and whose
+        CENTER lies on a given locus (line/circle/curve) on the XY plane.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            center_on (Axis | Edge): center must lie on this object
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda arcs: arcs.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Pick just the first result::
+
+                l2 = PolarLine((0, 0), 4, -20, length_mode=LengthMode.HORIZONTAL)
+                l3 = Line((4, -2), (4, 2))
+                arcs = ConstrainedArcs(
+                    l2, l3, center_on=Axis((3, 0), (0, 1)), selector=lambda arcs: arcs[0]
+                )
+        """
+
+    @overload
+    def __init__(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_two: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        tangency_three: (
+            tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
+        ),
+        *,
+        sagitta: Sagitta = Sagitta.SHORT,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda arcs: arcs,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create planar circular arc(s) on XY tangent to three provided objects.
+
+        Args:
+            tangency_one, tangency_two, tangency_three
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entities to be contacted/touched by the circle(s)
+            sagitta (LengthConstraint, optional): returned arc selector
+                (i.e. either the short, long or both arcs). Defaults to
+                LengthConstraint.SHORT.
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda arcs: arcs.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Pick the shortest one::
+
+                l4 = PolarLine((0, 0), 4, 60)
+                l5 = PolarLine((0, 0), 4, 40)
+                a3 = CenterArc((0, 0), 4, 0, 90)
+                arcs = ConstrainedArcs(
+                    l4, l5, a3, sagitta=Sagitta.BOTH,
+                    selector=lambda arcs: arcs.sort_by(Edge.length)[0]
+                )
+
+        """
+
+    @overload
+    def __init__(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        center: VectorLike,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda arcs: arcs,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create planar circle(s) on XY whose center is fixed and that are tangent/contacting
+        a single object.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            center (VectorLike): center position
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda arcs: arcs.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+
+        Example:
+            Pick the only result::
+
+                arcs = ConstrainedArcs(Axis.Y, center=(-2, 1), selector=lambda arcs: arcs[0])
+
+        """
+
+    @overload
+    def __init__(
+        cls,
+        tangency_one: tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike,
+        *,
+        radius: float,
+        center_on: Edge,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda arcs: arcs,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+
+        Create planar circle(s) on XY that:
+        - are tangent/contacting a single object, and
+        - have a fixed radius, and
+        - have their CENTER constrained to lie on a given locus curve.
+
+        Args:
+            tangency_one
+                (tuple[Axis | Edge, PositionConstraint] | Axis | Edge | Vertex | VectorLike):
+                Geometric entity to be contacted/touched by the circle(s)
+            radius (float): arc radius
+            center_on (Axis | Edge): center must lie on this object
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda arcs: arcs.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            There is only one result so a selector isn't helpful::
+
+                l6 = PolarLine((0, 0), 5, -20)
+                l7 = Line((3, -2), (3, 2))
+                arcs = ConstrainedArcs(l6, radius=1, center_on=l7)
+
+        """
+
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        selector = kwargs.pop("selector", lambda arcs: arcs)
+        mode = kwargs.pop("mode", Mode.ADD)
+
+        arcs = Edge.make_constrained_arcs(*args, **kwargs)
+
+        # Apply the user's selector (or the default)
+        selected_arcs = selector(arcs)
+        if selected_arcs is None or not selected_arcs:
+            raise ValueError("selector must return an Edge or list of Edges, not None")
+
+        selected_arcs = (
+            [selected_arcs] if isinstance(selected_arcs, Edge) else selected_arcs
+        )
+        curve = Curve(selected_arcs)
+        super().__init__(curve, mode=mode)
+
+
+class ConstrainedLines(BaseCurveObject):
+    """Line Object: Lines(s) constrained by other geometric objects.
+
+    The result is always a Curve containing one or more Edges. If you need
+    to access Edge-specific properties or methods (such as ``length``),
+    extract the edge or edges first::
+
+        result = ConstrainedLines(...)
+        lines = result.edges()      # extract the Edges
+        length = lines[1].length    # now Edge methods are available
+
+    Note that in Builder mode the ``selector`` parameter must be provided or
+    all results will be combined into the BuildLine context. In Algebra mode
+    the selector can be applied as a parameter or in the normal way to the
+    ConstrainedArcs object. The content of the selector is the same in both cases.
+    """
+
+    _applies_to = [BuildLine._tag]
+
+    @overload
+    def __init__(
+        self,
+        tangency_one: tuple[Edge, Tangency] | Axis | Edge,
+        tangency_two: tuple[Edge, Tangency] | Axis | Edge,
+        *,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda lines: lines,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create all planar line(s) on the XY plane tangent to two provided curves.
+
+        Args:
+            tangency_one, tangency_two
+                (tuple[Edge, Tangency] | Axis | Edge):
+                Geometric entities to be contacted/touched by the line(s).
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda lines: lines.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Accept all results (default behaviour)::
+
+                a1 = CenterArc((-5, 0), 4, 0, 360)
+                a2 = CenterArc((5, 0), 3, 0, 360)
+                lines = ConstrainedLines(a1, a2, selector=lambda lines: lines)
+        """
+
+    @overload
+    def __init__(
+        self,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: VectorLike,
+        *,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda lines: lines,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create all planar line(s) on the XY plane tangent to one curve and passing
+        through a fixed point.
+
+        Args:
+            tangency_one
+                (tuple[Edge, Tangency] | Edge):
+                Geometric entity to be contacted/touched by the line(s).
+            tangency_two (VectorLike):
+                Fixed point through which the line(s) must pass.
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda lines: lines.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Pick just the first result::
+
+                a1 = CenterArc((-5, 0), 4, 0, 360)
+                lines = ConstrainedLines(a1, (0, 6), selector=lambda lines: lines[0])
+        """
+
+    @overload
+    def __init__(
+        self,
+        tangency_one: tuple[Edge, Tangency] | Edge,
+        tangency_two: Axis,
+        *,
+        angle: float | None = None,
+        direction: VectorLike | None = None,
+        selector: Callable[
+            [ShapeList[Edge]], Edge | ShapeList[Edge]
+        ] = lambda lines: lines,
+        mode: Mode = Mode.ADD,
+    ):
+        """
+        Create all planar line(s) on the XY plane tangent to one curve with a
+        fixed orientation, defined either by an angle measured from a reference
+        axis or by a direction vector.
+
+        Args:
+            tangency_one (Edge): edge that line will be tangent to
+            tangency_two (Axis): reference axis from which the angle is measured
+            angle : float, optional
+                Line orientation in degrees (measured CCW from the X-axis).
+            direction : VectorLike, optional
+                Direction vector for the line (only X and Y components are used).
+            Note: one of angle or direction must be provided
+            selector (Callable, optional): typically a lambda which chooses one or more of the
+                results. Defaults to lambda lines: lines.
+            mode (Mode, optional): combination mode. Defaults to Mode.ADD.
+
+        Example:
+            Pick the arc whose midpoint is closest to a given point::
+
+                a1 = CenterArc((-5, 0), 4, 0, 360)
+                lines = ConstrainedLines(
+                    a1,
+                    Axis.Y,
+                    angle=30,
+                    selector=lambda lines: lines.sort_by_distance((0, 0))[0],
+                )
+        """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create planar line(s) on XY subject to tangency/contact constraints.
+
+        Supported cases
+        ---------------
+        1. Tangent to two curves
+        2. Tangent to one curve and passing through a given point
+        """
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
+
+        selector = kwargs.pop("selector", lambda lines: lines)
+        mode = kwargs.pop("mode", Mode.ADD)
+
+        lines = Edge.make_constrained_lines(*args, **kwargs)
+
+        # Apply the user's selector (or the default)
+        selected_lines = selector(lines)
+        if selected_lines is None or not selected_lines:
+            raise ValueError("selector must return an Edge or list of Edges, not None")
+
+        selected_lines = (
+            [selected_lines] if isinstance(selected_lines, Edge) else selected_lines
+        )
+        curve = Curve(selected_lines)
+        super().__init__(curve, mode=mode)
+
+
 class DoubleTangentArc(BaseEdgeObject):
     """Line Object: Double Tangent Arc
 
@@ -846,7 +1277,8 @@ class HyperbolicCenterArc(BaseEdgeObject):
             end_angle=end_angle,
             angular_direction=angular_direction,
         ).rotate(
-            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()), rotation
+            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()),
+            rotation,
         )
 
         super().__init__(curve, mode=mode)
@@ -1105,9 +1537,11 @@ class JernArc(BaseEdgeObject):
 
         if isinstance(tangent, tuple) and len(tangent) == 2:
             # de-localize to global tangent if supplied tangent is a 2-tuple
-            start_tangent = Vector(tangent).transform(
-                jern_workplane.reverse_transform, is_direction=True
-            ).normalized()
+            start_tangent = (
+                Vector(tangent)
+                .transform(jern_workplane.reverse_transform, is_direction=True)
+                .normalized()
+            )
         else:
             start_tangent = Vector(tangent).normalized()
 

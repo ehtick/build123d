@@ -85,6 +85,8 @@ __all__ = [
     "Bezier",
     "BlendCurve",
     "CenterArc",
+    "ConstrainedArcs",
+    "ConstrainedLines",
     "DoubleTangentArc",
     "EllipticalCenterArc",
     "EllipticalStartArc",

@@ -27,12 +27,17 @@ license:
 """
 
 import pytest
+from OCP.BRep import BRep_Tool
+from OCP.gp import gp_Ax2d, gp_Circ2d, gp_Dir2d, gp_Pnt2d
+
+from build123d.build_enums import GeomType, LengthMode, Sagitta, Tangency
+from build123d.build_line import BuildLine
+from build123d.geometry import TOLERANCE, Axis, Plane, Vector
 from build123d.objects_curve import (
     CenterArc,
+    ConstrainedArcs,
     Line,
     PolarLine,
-    JernArc,
-    IntersectingLine,
     ThreePointArc,
 )
 from build123d.operations_generic import mirror
@@ -44,16 +49,12 @@ from build123d.topology import (
     Wire,
     topo_explore_common_vertex,
 )
-from build123d.geometry import Axis, Plane, Vector, TOLERANCE
-from build123d.build_enums import Tangency, Sagitta, LengthMode
 from build123d.topology.constrained_lines import (
     _as_gcc_arg,
-    _param_in_trim,
     _edge_to_qualified_2d,
+    _param_in_trim,
     _two_arc_edges_from_params,
 )
-from OCP.gp import gp_Ax2d, gp_Dir2d, gp_Circ2d, gp_Pnt2d
-from OCP.BRep import BRep_Tool
 
 
 def test_edge_to_qualified_2d():
@@ -546,3 +547,24 @@ def test_eggplant():
         BRep_Tool.Curve_s(e.wrapped, float(), float())
         for e in [egg_bottom, egg_top, egg_right, egg_left]
     )
+
+
+def test_higher_level_constrained_arcs():
+    unit_circle = Edge.make_circle(1.0, Plane.XY)
+    lines = ConstrainedArcs(unit_circle, Axis.Y, radius=1)
+    assert len(lines.edges()) == 4
+
+    with BuildLine() as drawing:
+        ConstrainedArcs(
+            unit_circle, Axis.Y, radius=1, selector=lambda a: a.group_by(Axis.Y)[-1]
+        )
+
+    assert len(drawing.edges()) == 2
+
+    with pytest.raises(ValueError) as excinfo:
+        ConstrainedArcs(
+            unit_circle,
+            Axis.Y,
+            radius=1,
+            selector=lambda l: l.filter_by(GeomType.LINE),
+        )
