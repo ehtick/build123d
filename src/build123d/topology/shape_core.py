@@ -2983,10 +2983,17 @@ class ShapeList(list[T]):
                     return round(obj.volume, tol_digits)
 
         elif callable(group_by):
-            key_f = group_by
+            raw_key_f = group_by
+
+            def key_f(obj):
+                val = raw_key_f(obj)
+                return round(val, tol_digits) if isinstance(val, (int, float)) else val
 
         elif isinstance(group_by, property):
-            key_f = group_by.__get__
+
+            def key_f(obj):
+                val = group_by.__get__(obj)
+                return round(val, tol_digits) if isinstance(val, (int, float)) else val
 
         else:
             raise ValueError(f"Unsupported group_by function: {group_by}")
