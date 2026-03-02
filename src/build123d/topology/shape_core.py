@@ -1711,7 +1711,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             self.wrapped = tcast(TOPODS, downcast(builder.Shape()))
             self.wrapped.Location(loc.wrapped)
 
-    def rotate(self, axis: Axis, angle: float) -> Self:
+    def rotate(self, axis: Axis, angle: float, transform: bool = False) -> Self:
         """rotate a copy
 
         Rotates a shape around an axis.
@@ -1719,14 +1719,23 @@ class Shape(NodeMixin, Generic[TOPODS]):
         Args:
             axis (Axis): rotation Axis
             angle (float): angle to rotate, in degrees
+            transform (bool): regenerate the shape instead of just changing its location.
+                Defaults to False.
 
         Returns:
             a copy of the shape, rotated
         """
+        if self._wrapped is None:  # For backwards compatibility
+            return self
+
         transformation = gp_Trsf()
         transformation.SetRotation(axis.wrapped, angle * DEG2RAD)
 
-        return self._apply_transform(transformation)
+        if transform:
+            rotated_self = self._apply_transform(transformation)
+        else:
+            rotated_self = self.moved(Location(TopLoc_Location(transformation)))
+        return rotated_self
 
     def scale(self, factor: float) -> Self:
         """Scales this shape through a transformation.
@@ -2239,20 +2248,28 @@ class Shape(NodeMixin, Generic[TOPODS]):
         t_o.SetTranslation(Vector(offset).wrapped)
         return self._apply_transform(t_o * t_rx * t_ry * t_rz)
 
-    def translate(self, vector: VectorLike) -> Self:
+    def translate(self, vector: VectorLike, transform: bool = False) -> Self:
         """Translates this shape through a transformation.
 
         Args:
-          vector: VectorLike:
+            vector (VectorLike): relative movement vector
+            transform (bool): regenerate the shape instead of just changing its location
+                Defaults to False.
 
         Returns:
-
+            object with a relative move applied
         """
+        if self._wrapped is None:  # For backwards compatibility
+            return self
 
         transformation = gp_Trsf()
         transformation.SetTranslation(Vector(vector).wrapped)
 
-        return self._apply_transform(transformation)
+        if transform:
+            self_translated = self._apply_transform(transformation)
+        else:
+            self_translated = self.moved(Location(TopLoc_Location(transformation)))
+        return self_translated
 
     def wire(self) -> Wire | None:
         """Return the Wire"""
