@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import copy
 import warnings
+from bisect import bisect_right
 from collections.abc import Iterable, Sequence
 from itertools import combinations
 from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
@@ -88,6 +89,7 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
+from OCP.Extrema import Extrema_ExtPC
 from OCP.GC import (
     GC_MakeArcOfCircle,
     GC_MakeArcOfEllipse,
@@ -97,6 +99,7 @@ from OCP.GC import (
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
+    GCPnts_TangentialDeflection,
     GCPnts_UniformDeflection,
 )
 from OCP.GProp import GProp_GProps
@@ -756,13 +759,9 @@ class Mixin1D(Shape[TOPODS]):
 
         # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
         elif isinstance(other, (Edge, Wire)):
-            common = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Common()
-            )
+            common = self._bool_op_list((self,), (other,), BRepAlgoAPI_Common())
             results.extend(common.expand())
-            section = self._bool_op_list(
-                (self,), (other,), BRepAlgoAPI_Section()
-            )
+            section = self._bool_op_list((self,), (other,), BRepAlgoAPI_Section())
             # Extract vertices from section (edges already in Common for wires)
             for shape in section:
                 if isinstance(shape, Vertex) and not shape.is_null:
@@ -786,7 +785,6 @@ class Mixin1D(Shape[TOPODS]):
         distance: float,
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool | None = None,
         x_dir: VectorLike | None = None,
     ) -> Location:
         """Locations along curve
@@ -802,14 +800,9 @@ class Mixin1D(Shape[TOPODS]):
                 spots. The CORRECTED frame behaves more like a “camera dolly” or
                 sweep profile would — it's smoother and more stable.
                 Defaults to FrameMethod.FRENET.
-            planar (bool, optional): planar mode. Defaults to None.
             x_dir (VectorLike, optional): override the x_dir to help with plane
-                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                creation along a 1D shape. Must be perpendicular to shapes tangent.
                 Defaults to None.
-
-        .. deprecated::
-            The `planar` parameter is deprecated and will be removed in a future release.
-            Use `x_dir` to specify orientation instead.
 
         Returns:
             Location: A Location object representing local coordinate system
@@ -823,10 +816,25 @@ class Mixin1D(Shape[TOPODS]):
             else:
                 distance = self.length - distance
 
-        if position_mode == PositionMode.PARAMETER:
-            param = self.param_at(distance)
-        else:
-            param = self.param_at(distance / self.length)
+        if isinstance(self, Wire):
+            if frame_method == FrameMethod.CORRECTED:
+                # BRep_CompCurve parameter
+                param = self.param_at(distance / self.length)
+            else:
+                # A BRep_Curve parameter taken from a Edge based curve
+                if position_mode == PositionMode.PARAMETER:
+                    curve, param, _ = self._occt_param_at(
+                        distance * self.length, PositionMode.LENGTH
+                    )
+                else:
+                    curve, param, _ = self._occt_param_at(distance, PositionMode.LENGTH)
+
+        else:  # Edge
+            if position_mode == PositionMode.PARAMETER:
+                param = self.param_at(distance)
+            else:
+                param = self.param_at(distance / self.length)
+            curve = self.geom_adaptor()
 
         law: GeomFill_TrihedronLaw
         if frame_method == FrameMethod.FRENET:
@@ -842,18 +850,7 @@ class Mixin1D(Shape[TOPODS]):
         pnt = curve.Value(param)
 
         transformation = gp_Trsf()
-        if planar is not None:
-            warnings.warn(
-                "The 'planar' parameter is deprecated and will be removed in a future version. "
-                "Use 'x_dir' to control orientation instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if planar is not None and planar:
-            transformation.SetTransformation(
-                gp_Ax3(pnt, gp_Dir(0, 0, 1), gp_Dir(normal.XYZ())), gp_Ax3()
-            )
-        elif x_dir is not None:
+        if x_dir is not None:
             try:
 
                 transformation.SetTransformation(
@@ -881,7 +878,6 @@ class Mixin1D(Shape[TOPODS]):
         distances: Iterable[float],
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool | None = None,
         x_dir: VectorLike | None = None,
     ) -> list[Location]:
         """Locations along curve
@@ -894,22 +890,16 @@ class Mixin1D(Shape[TOPODS]):
                 Defaults to PositionMode.PARAMETER.
             frame_method (FrameMethod, optional): moving frame calculation method.
                 Defaults to FrameMethod.FRENET.
-            planar (bool, optional): planar mode. Defaults to False.
             x_dir (VectorLike, optional): override the x_dir to help with plane
-                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                creation along a 1D shape. Must be perpendicular to shapes tangent.
                 Defaults to None.
-
-        .. deprecated::
-            The `planar` parameter is deprecated and will be removed in a future release.
-            Use `x_dir` to specify orientation instead.
 
         Returns:
             list[Location]: A list of Location objects representing local coordinate
                 systems at the specified distances.
         """
         return [
-            self.location_at(d, position_mode, frame_method, planar, x_dir)
-            for d in distances
+            self.location_at(d, position_mode, frame_method, x_dir) for d in distances
         ]
 
     def normal(self) -> Vector:
@@ -1040,42 +1030,6 @@ class Mixin1D(Shape[TOPODS]):
 
         offset_edges = offset_wire.edges()
         return offset_edges[0] if len(offset_edges) == 1 else offset_wire
-
-    def param_at(self, position: float) -> float:
-        """
-        Map a normalized arc-length position to the underlying OCCT parameter.
-
-        The meaning of the returned parameter depends on the type of self:
-
-        - **Edge**: Returns the native OCCT curve parameter corresponding to the
-          given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
-          edges, OCCT may return a value **outside** the edge's nominal parameter
-          range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
-          the period). If you require a value folded into the edge's range, apply a
-          modulo with the parameter span.
-
-        - **Wire**: Returns a *composite* parameter encoding both the edge index
-          and the position within that edge: the **integer part** is the zero-based
-          count of fully traversed edges, and the **fractional part** is the
-          normalized position in `[0.0, 1.0]` along the current edge.
-
-        Args:
-            position (float): Normalized arc-length position along the shape,
-                where `0.0` is the start and `1.0` is the end. Values outside
-                `[0.0, 1.0]` are not validated and yield OCCT-dependent results.
-
-        Returns:
-            float: OCCT parameter (for edges) **or** composite “edgeIndex + fraction”
-            parameter (for wires), as described above.
-
-        """
-
-        curve = self.geom_adaptor()
-
-        length = GCPnts_AbscissaPoint.Length_s(curve)
-        return GCPnts_AbscissaPoint(
-            curve, length * position, curve.FirstParameter()
-        ).Parameter()
 
     def perpendicular_line(
         self, length: float, u_value: float, plane: Plane = Plane.XY
@@ -1371,22 +1325,6 @@ class Mixin1D(Shape[TOPODS]):
             Vector: tangent value
         """
         return self.derivative_at(position, 1, position_mode).normalized()
-
-    # def vertex(self) -> Vertex | None:
-    #     """Return the Vertex"""
-    #     return Shape.get_single_shape(self, "Vertex")
-
-    # def vertices(self) -> ShapeList[Vertex]:
-    #     """vertices - all the vertices in this Shape"""
-    #     return Shape.get_shape_list(self, "Vertex")
-
-    # def wire(self) -> Wire | None:
-    #     """Return the Wire"""
-    #     return Shape.get_single_shape(self, "Wire")
-
-    # def wires(self) -> ShapeList[Wire]:
-    #     """wires - all the wires in this Shape"""
-    #     return Shape.get_shape_list(self, "Wire")
 
 
 class Edge(Mixin1D[TopoDS_Edge]):
@@ -1855,12 +1793,13 @@ class Edge(Mixin1D[TopoDS_Edge]):
         direction: VectorLike | None = None,
     ) -> ShapeList[Edge]:
         """
-        Create all planar line(s) on the XY plane tangent to one curve and passing
-        through a fixed point.
+        Create all planar line(s) on the XY plane tangent to one curve with a
+        fixed orientation, defined either by an angle measured from a reference
+        axis or by a direction vector.
 
         Args:
             tangency_one (Edge): edge that line will be tangent to
-            tangency_two (Axis): axis that angle will be measured against
+            tangency_two (Axis): reference axis from which the angle is measured
             angle : float, optional
                 Line orientation in degrees (measured CCW from the X-axis).
             direction : VectorLike, optional
@@ -2807,6 +2746,35 @@ class Edge(Mixin1D[TopoDS_Edge]):
             comp_curve, length * value, comp_curve.FirstParameter()
         ).Parameter()
         return comp_curve, occt_param, self.is_forward
+
+    def param_at(self, position: float) -> float:
+        """
+        Map a normalized arc-length position to the underlying OCCT parameter.
+
+        Returns the native OCCT curve parameter corresponding to the
+        given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
+        edges, OCCT may return a value **outside** the edge's nominal parameter
+        range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
+        the period). If you require a value folded into the edge's range, apply a
+        modulo with the parameter span.
+
+        Args:
+            position (float): Normalized arc-length position along the shape,
+                where `0.0` is the start and `1.0` is the end. Values outside
+                `[0.0, 1.0]` are not validated and yield OCCT-dependent results.
+
+        Returns:
+            float: OCCT parameter (for edges) **or** composite “edgeIndex + fraction”
+            parameter (for wires), as described above.
+
+        """
+
+        curve = self.geom_adaptor()
+
+        length = GCPnts_AbscissaPoint.Length_s(curve)
+        return GCPnts_AbscissaPoint(
+            curve, length * position, curve.FirstParameter()
+        ).Parameter()
 
     def param_at_point(self, point: VectorLike) -> float:
         """
@@ -3870,6 +3838,40 @@ class Wire(Mixin1D[TopoDS_Wire]):
             for e1, e2 in zip(edges1, edges2)
         )
 
+    def param_at(self, position: float) -> float:
+        """
+        Return the OCCT comp-curve parameter corresponding to the given wire position.
+        This is *not* the edge composite parameter; it is the parameter of the wire’s
+        BRepAdaptor_CompCurve.
+        """
+        curve = self.geom_adaptor()
+
+        # Compute the correct target point along the wire
+        target_pnt = self.position_at(position)
+
+        # Project to comp-curve parameter
+        extrema = Extrema_ExtPC(target_pnt.to_pnt(), curve)
+        if not extrema.IsDone() or extrema.NbExt() == 0:
+            raise RuntimeError("Failed to find point on curve")
+
+        min_dist = float("inf")
+        closest_pnt = None
+        closest_param = None
+        for i in range(1, extrema.NbExt() + 1):
+            dist = extrema.SquareDistance(i)
+            if dist < min_dist:
+                min_dist = dist
+                closest_pnt = extrema.Point(i).Value()
+                closest_param = extrema.Point(i).Parameter()
+
+        if (
+            closest_pnt is None
+            or (Vector(tcast(gp_Pnt, closest_pnt)) - target_pnt).length > TOLERANCE
+        ):
+            raise RuntimeError("Failed to find point on curve")
+
+        return tcast(float, closest_param)
+
     def param_at_point(self, point: VectorLike) -> float:
         """
         Return the normalized wire parameter for the point closest to this wire.
@@ -3992,28 +3994,51 @@ class Wire(Mixin1D[TopoDS_Wire]):
             at the given position, the corresponding OCCT parameter on that edge and
             if edge is_forward.
         """
-        wire_curve_adaptor = self.geom_adaptor()
-
+        # Normalize to absolute distance along the wire
         if position_mode == PositionMode.PARAMETER:
             if not self.is_forward:
-                position = 1 - position
-            occt_wire_param = self.param_at(position)
+                position = 1.0 - position
+            distance = position * self.length
         else:
             if not self.is_forward:
                 position = self.length - position
-            occt_wire_param = self.param_at(position / self.length)
+            distance = position
 
-        topods_edge_at_position = TopoDS_Edge()
-        occt_edge_params = wire_curve_adaptor.Edge(
-            occt_wire_param, topods_edge_at_position
-        )
-        edge_curve_adaptor = BRepAdaptor_Curve(topods_edge_at_position)
+        # Build ordered edges and cumulative lengths
+        self_edges = self.edges()
+        edge_lengths = [e.length for e in self_edges]
+        cumulative_lengths = []
+        total = 0.0
+        for edge_length in edge_lengths:
+            total += edge_length
+            cumulative_lengths.append(total)
 
-        return (
-            edge_curve_adaptor,
-            occt_edge_params[0],
-            topods_edge_at_position.Orientation() == TopAbs_Orientation.TopAbs_FORWARD,
+        # Clamp distance
+        if distance <= 0.0:
+            edge_idx = 0
+            local_dist = 0.0
+        elif distance >= total:
+            edge_idx = len(self_edges) - 1
+            local_dist = edge_lengths[edge_idx]
+        else:
+            edge_idx = bisect_right(cumulative_lengths, distance)
+            prev_cum = cumulative_lengths[edge_idx - 1] if edge_idx > 0 else 0.0
+            local_dist = distance - prev_cum
+
+        target_edge = self_edges[edge_idx]
+
+        # Convert local distance to edge fraction
+        local_frac = (
+            0.0 if target_edge.length == 0 else (local_dist / target_edge.length)
         )
+        if not target_edge.is_forward:
+            local_frac = 1 - local_frac
+
+        # Use edge param_at to get native OCCT parameter
+        occt_edge_param = target_edge.param_at(local_frac)
+
+        edge_curve_adaptor = target_edge.geom_adaptor()
+        return edge_curve_adaptor, occt_edge_param, target_edge.is_forward
 
     def project_to_shape(
         self,
