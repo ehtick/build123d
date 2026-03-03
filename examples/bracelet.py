@@ -33,7 +33,8 @@ from ocp_vscode import show
 # - opening_angle: the missing angle that creates the wrist opening
 # - label_str: optional text to emboss on the outside surface
 # - Define input parameters
-radii, width, thickness, opening_angle, label_str = (45, 30), 25, 5, 80, "build123d"
+# radii, width, thickness, opening_angle, label_str = (45, 30), 25, 5, 80, "build123d"
+radii, width, thickness, opening_angle, label_str = (45, 30), 25, 5, 80, ""
 
 # Step 1: Create an elliptical arc defining the *centerline* of the bracelet.
 # The arc is truncated to leave an opening (the "gap" where the bracelet goes on).
