@@ -153,9 +153,20 @@ class BuildLineTests(unittest.TestCase):
             DoubleTangentArc((0, 0, 0), (1, 0, 0), l11)
 
     def test_elliptical_start_arc(self):
-        with self.assertRaises(RuntimeError):
-            with BuildLine():
-                EllipticalStartArc((1, 0), (0, 0.5), 1, 0.5, 0)
+        with BuildLine(Plane.XZ) as bl:
+            a = EllipticalStartArc((1, 1), (0, 1), 3, 1, 90, major_axis_dir=(1, 1))
+        self.assertAlmostEqual(bl.edge().arc_center, (-2, 0, 1), 5)
+
+        a = EllipticalStartArc((1, 1), Vector(0, 1), 3, 1, 90, major_axis_dir=(1, 1))
+        self.assertAlmostEqual(a.arc_center, (-1.2360679775, -0.7888543819998, 0), 5)
+        self.assertTrue(isinstance(a, Edge))
+
+        b = EllipticalStartArc((0, 1), (-1, 0), 5, 1, 180, start_angle=90)
+        self.assertAlmostEqual(b.arc_center, (0, 0), 5)
+        self.assertAlmostEqual(b @ 1, (0, -1), 5)
+
+        c = EllipticalStartArc((1, 1), (0, 1), 3, 1, -45, start_angle=45)
+        self.assertGreater(5, c.length)
 
     def test_elliptical_center_arc(self):
         with BuildLine() as el:
@@ -182,14 +193,24 @@ class BuildLineTests(unittest.TestCase):
         R = 1 / C
         focal_length = R / 2
         with BuildLine() as el:
-            ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+            ParabolicCenterArc(
+                center,
+                focal_length,
+                0,
+                90,
+                0,
+                AngularDirection.COUNTER_CLOCKWISE,
+                Mode.ADD,
+            )
         bbox = el.line.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
         self.assertLessEqual(bbox.max.X, 10)
         self.assertLessEqual(bbox.max.Y, 5)
 
-        e1 = ParabolicCenterArc(center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        e1 = ParabolicCenterArc(
+            center, focal_length, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD
+        )
         bbox = e1.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
@@ -203,17 +224,21 @@ class BuildLineTests(unittest.TestCase):
         center = (0, 0)
         C = 1
         R = 1 / C
-        K = -2 # => -(x^2)-2Rx+y^2=0
+        K = -2  # => -(x^2)-2Rx+y^2=0
         a, b = R / (-K - 1), R / sqrt(-K - 1)
         with BuildLine() as el:
-            HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+            HyperbolicCenterArc(
+                center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD
+            )
         bbox = el.line.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
         self.assertLessEqual(bbox.max.X, 10)
         self.assertLessEqual(bbox.max.Y, 5)
 
-        e1 = HyperbolicCenterArc(center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD)
+        e1 = HyperbolicCenterArc(
+            center, b, a, 0, 90, 0, AngularDirection.COUNTER_CLOCKWISE, Mode.ADD
+        )
         bbox = e1.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
@@ -360,7 +385,9 @@ class BuildLineTests(unittest.TestCase):
         self.assertAlmostEqual(iso1.length, pi)
 
         with BuildLine(Plane.YZ) as jern_arc_vector:
-            jv1 = JernArc(start=Vector(0, 5, 4), tangent=Vector(0, 0, 1), radius=1, arc_size=90)
+            jv1 = JernArc(
+                start=Vector(0, 5, 4), tangent=Vector(0, 0, 1), radius=1, arc_size=90
+            )
         self.assertTupleAlmostEquals(jv1 @ 1, (0, 4, 5), 5)
         self.assertAlmostEqual(jv1.radius, 1)
         self.assertAlmostEqual(jv1.length, pi / 2)

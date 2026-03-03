@@ -134,6 +134,13 @@ The following objects all can be used in BuildLine contexts. Note that
         +++
         Elliptical arc defined by center,  radii & angles
 
+    .. grid-item-card:: :class:`~objects_curve.EllipticalStartArc`
+
+        .. image:: assets/elliptical_start_arc_example.svg
+
+        +++
+        Elliptical arc defined by start, tangent, radii & angles
+
     .. grid-item-card:: :class:`~objects_curve.ParabolicCenterArc`
 
         .. image:: assets/parabolic_center_arc_example.svg
@@ -273,6 +280,7 @@ Reference
 .. autoclass:: ConstrainedLines
 .. autoclass:: DoubleTangentArc
 .. autoclass:: EllipticalCenterArc
+.. autoclass:: EllipticalStartArc
 .. autoclass:: ParabolicCenterArc
 .. autoclass:: HyperbolicCenterArc
 .. autoclass:: FilletPolyline

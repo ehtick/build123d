@@ -34,7 +34,7 @@ import numpy as np
 import sympy  # type: ignore
 from collections.abc import Callable, Iterable
 from itertools import product
-from math import copysign, cos, radians, sin, sqrt
+from math import atan2, copysign, cos, degrees, radians, sin, sqrt
 from scipy.optimize import minimize
 from typing import overload, Literal
 
@@ -1009,109 +1009,116 @@ class DoubleTangentArc(BaseEdgeObject):
 
 
 class EllipticalStartArc(BaseEdgeObject):
-    """Line Object: Elliptical Start Arc
+    """Line Object: EllipticalStartArc
 
-    Create an elliptical arc defined by a start point, end point, x- and y- radii.
+    Create a circular arc defined by a start point/tangent pair, radius and arc size.
 
     Args:
-        start (VectorLike): start point
-        end (VectorLike): end point
+        start_pnt (VectorLike): start point
+        start_tangent (VectorLike): tangent at start point
         x_radius (float): x radius of the ellipse (along the x-axis of plane)
         y_radius (float): y radius of the ellipse (along the y-axis of plane)
-        rotation (float, optional): the angle from the x-axis of the plane to the x-axis
-            of the ellipse. Defaults to 0.0
-        large_arc (bool, optional): True if the arc spans greater than 180 degrees.
-            Defaults to True
-        sweep_flag (bool, optional): False if the line joining center to arc sweeps through
-            decreasing angles, or True if it sweeps through increasing angles. Defaults to True
-        plane (Plane, optional): base plane. Defaults to Plane.XY
+        arc_size (float): angular size of arc (negative to change direction)
+        start_angle (float): angular position of the start point
+        major_axis_dir (VectorLike): direction of ellipse x-axis
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
+
+    Note:
+        One of start_angle or major_axis_dir must be provided.
     """
 
     _applies_to = [BuildLine._tag]
 
     def __init__(
         self,
-        start: VectorLike,
-        end: VectorLike,
+        start_pnt: VectorLike,
+        start_tangent: VectorLike,
         x_radius: float,
         y_radius: float,
-        rotation: float = 0.0,
-        large_arc: bool = False,
-        sweep_flag: bool = True,
-        plane: Plane = Plane.XY,
+        arc_size: float,
+        *,
+        start_angle: float | None = None,
+        major_axis_dir: VectorLike | None = None,
         mode: Mode = Mode.ADD,
     ):
-        # Debugging incomplete
-        raise RuntimeError("Implementation incomplete")
+        def proj_to_plane(v: Vector, n: Vector) -> Vector:
+            n = n.normalized()
+            return v - n * v.dot(n)
 
-        # context: BuildLine | None = BuildLine._get_context(self)
-        # context.validate_inputs(self)
+        context: BuildLine | None = BuildLine._get_context(self)
+        validate_inputs(context, self)
 
-        # # Calculate the ellipse parameters based on the SVG implementation here:
-        # #   https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes
+        start_pnt = WorkplaneList.localize(start_pnt)
 
-        # self.start_pnt = Vector(start)
-        # self.end_pnt = Vector(end)
-        # # Eq. 5.1
-        # self.mid_prime: Vector = ((self.start_pnt - self.end_pnt) * 0.5).rotate(
-        #     Axis.Z, -rotation
-        # )
+        # Use current workplane (or XY) as the plane basis
+        if context is None:
+            workplane = Plane.XY
+        else:
+            workplane = copy_module.copy(WorkplaneList._get_context().workplanes[0])
+        workplane.origin = start_pnt
 
-        # # Eq. 5.2
-        # self.center_scalar = (-1 if large_arc == sweep_flag else 1) * sqrt(
-        #     (
-        #         x_radius**2 * y_radius**2
-        #         - x_radius**2 * (self.mid_prime.Y**2)
-        #         - y_radius**2 * (self.mid_prime.X**2)
-        #     )
-        #     / (
-        #         x_radius**2 * (self.mid_prime.Y**2)
-        #         + y_radius**2 * (self.mid_prime.X**2)
-        #     )
-        # )
-        # self.center_prime = (
-        #     Vector(
-        #         x_radius * self.mid_prime.Y / y_radius,
-        #         -y_radius * self.mid_prime.X / x_radius,
-        #     )
-        #     * self.center_scalar
-        # )
+        # Tangent: if 2D, treat as local and de-localize to global
+        if isinstance(start_tangent, tuple) and len(start_tangent) == 2:
+            start_tangent = (
+                Vector(start_tangent)
+                .transform(workplane.reverse_transform, is_direction=True)
+                .normalized()
+            )
+        else:
+            start_tangent = Vector(start_tangent).normalized()
 
-        # # Eq. 5.3
-        # self.center_pnt: Vector = self.center_prime.rotate(Axis.Z, rotation) + (
-        #     ((self.start_pnt + self.end_pnt) * 0.5)
-        # )
+        pln_normal = workplane.z_dir
+        if start_angle is not None:
+            start_angle_rad = radians(start_angle)
+            pln_tangent = proj_to_plane(start_tangent, pln_normal).normalized()
 
-        # plane.set_origin2d(self.center_pnt.X, self.center_pnt.Y)
-        # plane = plane.rotated((0, 0, rotation))
-        # self.start_angle = (
-        #     plane.x_dir.get_signed_angle(self.start_pnt - self.center_pnt, plane.z_dir)
-        #     + 360
-        # ) % 360
-        # self.end_angle = (
-        #     plane.x_dir.get_signed_angle(self.end_pnt - self.center_pnt, plane.z_dir)
-        #     + 360
-        # ) % 360
-        # self.angular_direction = (
-        #     AngularDirection.COUNTER_CLOCKWISE
-        #     if self.start_angle > self.end_angle
-        #     else AngularDirection.CLOCKWISE
-        # )
+            a_radius = -x_radius * sin(start_angle_rad)
+            b_radius = y_radius * cos(start_angle_rad)
 
-        # curve = Edge.make_ellipse(
-        #     x_radius=x_radius,
-        #     y_radius=y_radius,
-        #     plane=plane,
-        #     start_angle=self.start_angle,
-        #     end_angle=self.end_angle,
-        #     angular_direction=self.angular_direction,
-        # )
+            x_dir = (
+                a_radius * pln_tangent - b_radius * (pln_normal.cross(pln_tangent))
+            ) / (a_radius * a_radius + b_radius * b_radius)
+            pln_x_dir = x_dir.normalized()
+            pln_y_dir = pln_normal.cross(pln_x_dir)
 
-        # context._add_to_context(curve, mode=mode)
-        # super().__init__(curve.wrapped)
+            pln_origin = (
+                start_pnt
+                - pln_x_dir * (x_radius * cos(start_angle_rad))
+                - pln_y_dir * (y_radius * sin(start_angle_rad))
+            )
+        elif major_axis_dir is not None:
+            # Work in the workplane's normal
+            pln_x_dir = proj_to_plane(Vector(major_axis_dir), pln_normal).normalized()
+            pln_y_dir = pln_normal.cross(pln_x_dir)
 
-        # context: BuildLine | None = BuildLine._get_context(self)
+            pln_tangent = proj_to_plane(start_tangent, pln_normal)
+            pln_x_radius = pln_tangent.dot(pln_x_dir)
+            pln_y_radius = pln_tangent.dot(pln_y_dir)
+
+            start_angle_rad = atan2(
+                -(pln_x_radius / x_radius), (pln_y_radius / y_radius)
+            )
+            pln_origin = (
+                start_pnt
+                - pln_x_dir * (x_radius * cos(start_angle_rad))
+                - pln_y_dir * (y_radius * sin(start_angle_rad))
+            )
+            start_angle = degrees(start_angle_rad)
+        else:
+            raise ValueError("Either start_angle or major_axis_dir must be provided")
+
+        pln = Plane(pln_origin, x_dir=pln_x_dir, z_dir=pln_normal)
+        end_angle = start_angle + arc_size
+
+        direction = (
+            AngularDirection.COUNTER_CLOCKWISE
+            if arc_size >= 0
+            else AngularDirection.CLOCKWISE
+        )
+        arc = Edge.make_ellipse(
+            x_radius, y_radius, pln, start_angle, end_angle, direction
+        )
+        super().__init__(arc, mode=mode)
 
 
 class EllipticalCenterArc(BaseEdgeObject):
@@ -1130,7 +1137,6 @@ class EllipticalCenterArc(BaseEdgeObject):
         rotation (float, optional): angle to rotate arc. Defaults to 0.0
         angular_direction (AngularDirection, optional): arc direction.
             Defaults to AngularDirection.COUNTER_CLOCKWISE
-        plane (Plane, optional): base plane. Defaults to Plane.XY
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 

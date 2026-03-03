@@ -1935,12 +1935,26 @@ class Edge(Mixin1D[TopoDS_Edge]):
         if start_angle == end_angle:  # full ellipse case
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_gp).Edge())
         else:  # arc case
-            # take correction_angle into account
+            # radians, apply correction
+            a1 = (start_angle * DEG2RAD) - correction_angle
+            a2 = (end_angle * DEG2RAD) - correction_angle
+
+            if angular_direction == AngularDirection.COUNTER_CLOCKWISE:
+                # ensure a2 > a1
+                if a2 <= a1:
+                    a2 += 2 * pi
+                sense = True
+                alpha1, alpha2 = a1, a2
+            else:
+                # CLOCKWISE: want decreasing angle
+                if a2 >= a1:
+                    a2 -= 2 * pi
+                # make alpha1 < alpha2 by swapping and reversing sense
+                sense = False
+                alpha1, alpha2 = a2, a1
+
             ellipse_geom = GC_MakeArcOfEllipse(
-                ellipse_gp,
-                start_angle * DEG2RAD - correction_angle,
-                end_angle * DEG2RAD - correction_angle,
-                angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+                ellipse_gp, alpha1, alpha2, sense
             ).Value()
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_geom).Edge())
 
