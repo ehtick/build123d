@@ -136,12 +136,6 @@ class TestExportStep(DirectApiTestCase):
         self.assertNotEqual(step_data.find("PRODUCT('curve',"), -1)
 
     def test_export_step_unknown(self):
-        double_compound = Compound(Sphere(1).wrapped)
-        double_compound.color = Color("blue")
-        with self.assertWarns(UserWarning):
-            export_step(double_compound, "double_compound.step")
-        os.remove("double_compound.step")
-
         box = Box(1, 1, 1)
         self.assertTrue(export_step(box, "box_read_only.step"))
         os.chmod("box_read_only.step", 0o444)  # Make the file read only
@@ -192,11 +186,10 @@ class TestExportStep(DirectApiTestCase):
         assy = Compound(children=[root, sub])
         assy.label = "assy"
 
-        print(assy.show_topology())
         self.assertTrue(export_step(assy, "nested.step"))
         with open("nested.step", "r") as file:
             step_data = file.read()
-        # os.remove("nested.step")
+        os.remove("nested.step")
 
         self.assertNotEqual(step_data.find("PRODUCT('assy',"), -1)
         self.assertNotEqual(step_data.find("PRODUCT('level1',"), -1)
@@ -208,7 +201,6 @@ class TestExportStep(DirectApiTestCase):
             step_data.find("DRAUGHTING_PRE_DEFINED_COLOUR('green')"), -1
         )
         self.assertNotEqual(step_data.find("DRAUGHTING_PRE_DEFINED_COLOUR('blue')"), -1)
-        # self.assertRegex(step_data, r"COLOUR_RGB\('',0\.,0\.501960")
 
     def test_export_step_component_override_parent_color(self):
         c1 = Sphere(1).solid()
