@@ -59,7 +59,7 @@ from OCP.TDF import TDF_Label
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopExp import TopExp_Explorer
 from OCP.XCAFApp import XCAFApp_Application
-from OCP.XCAFDoc import XCAFDoc_ColorType, XCAFDoc_DocumentTool
+from OCP.XCAFDoc import XCAFDoc_ColorType, XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 from OCP.XSControl import XSControl_WorkSession
 
 from build123d.build_common import UNITS_PER_METER
@@ -117,49 +117,120 @@ def _create_xde(
 
     # Add all the shapes in the b3d object either as a single object or assembly
     is_assembly = isinstance(to_export, Compound) and len(to_export.children) > 0
-    _root_label = shape_tool.AddShape(to_export.wrapped, is_assembly)
+
+    # Build an XDE label tree and keep a label map for nodes
+    label_map: dict[Shape, TDF_Label] = {}
+
+    def _assembly_label(label: TDF_Label) -> TDF_Label:
+        if XCAFDoc_ShapeTool.IsReference_s(label):
+            referred = TDF_Label()
+            if (
+                XCAFDoc_ShapeTool.GetReferredShape_s(label, referred)
+                and not referred.IsNull()
+            ):
+                return referred
+        return label
+
+    def add_node(node: Shape, parent_label: TDF_Label | None) -> TDF_Label:
+        if node.wrapped is None:
+            return TDF_Label()  # null label
+
+        if parent_label is None:
+            # Do NOT auto-expand: we build the tree ourselves.
+            lbl = shape_tool.AddShape(node.wrapped, False)
+            # lbl = shape_tool.AddShape(node.wrapped, is_assembly)
+        else:
+            parent_for_component = _assembly_label(parent_label)
+            lbl = shape_tool.AddComponent(parent_for_component, node.wrapped)
+
+        if not lbl.IsNull():
+            label_map[node] = lbl
+
+        # Recurse on children if any
+        for child in getattr(node, "children", []):
+            add_node(child, lbl if not lbl.IsNull() else None)
+
+        return lbl
+
+    _root_label = add_node(to_export, None)
 
     # Add names and color info
     node: Shape
     for node in PreOrderIter(to_export):
+        if node.wrapped is None:
+            continue
         if not node.label and node.color is None:
-            continue  # skip if there is nothing to set
+            continue
 
-        node_label: TDF_Label = shape_tool.FindShape(node.wrapped, findInstance=False)
+        node_label = label_map.get(node, TDF_Label())
+        if node_label.IsNull():
+            warnings.warn(
+                f"Skipping metadata for unlabeled node {type(node).__name__}",
+                stacklevel=2,
+            )
+            continue
 
         # For Part, Sketch and Curve objects color needs to be applied to the wrapped
         # object not just the Compound wrapper
-        sub_node_labels = []
+        node_color_type = XCAFDoc_ColorType.XCAFDoc_ColorGen
+        sub_node_labels: list[tuple[TDF_Label, XCAFDoc_ColorType]] = []
+
         if isinstance(node, Compound) and not node.children:
-            sub_nodes = []
             if isinstance(node, Part):
                 explorer = TopExp_Explorer(node.wrapped, ta.TopAbs_SOLID)
+                sub_color_type = XCAFDoc_ColorType.XCAFDoc_ColorSurf
             elif isinstance(node, Sketch):
                 explorer = TopExp_Explorer(node.wrapped, ta.TopAbs_FACE)
+                sub_color_type = XCAFDoc_ColorType.XCAFDoc_ColorSurf
             elif isinstance(node, Curve):
                 explorer = TopExp_Explorer(node.wrapped, ta.TopAbs_EDGE)
+                sub_color_type = XCAFDoc_ColorType.XCAFDoc_ColorCurv
             else:
                 warnings.warn("Unknown Compound type, color not set", stacklevel=2)
-                explorer = TopExp_Explorer()  # don't know what to look for
+                explorer = TopExp_Explorer()
+                sub_color_type = XCAFDoc_ColorType.XCAFDoc_ColorGen
 
             while explorer.More():
-                sub_nodes.append(explorer.Current())
+                sub_node = explorer.Current()
+                sub_label = shape_tool.AddSubShape(node_label, sub_node)
+                sub_node_labels.append((sub_label, sub_color_type))
                 explorer.Next()
 
-            sub_node_labels = [
-                shape_tool.FindShape(sub_node, findInstance=False)
-                for sub_node in sub_nodes
-            ]
         if node.label and not node_label.IsNull():
+            # Name instance/component label
             TDataStd_Name.Set_s(node_label, TCollection_ExtendedString(node.label))
 
+            # Name referred shape label so STEP PRODUCT name is preserved
+            if XCAFDoc_ShapeTool.IsReference_s(node_label):
+                referred = TDF_Label()
+                if (
+                    XCAFDoc_ShapeTool.GetReferredShape_s(node_label, referred)
+                    and not referred.IsNull()
+                ):
+                    TDataStd_Name.Set_s(
+                        referred, TCollection_ExtendedString(node.label)
+                    )
+
         if node.color is not None:
-            for label in [node_label] + sub_node_labels:
-                if label.IsNull():
-                    continue  # Only valid labels can be set
-                color_tool.SetColor(
-                    label, node.color.wrapped, XCAFDoc_ColorType.XCAFDoc_ColorSurf
-                )
+            # if not node_label.IsNull():
+            #     color_tool.SetColor(node_label, node.color.wrapped, node_color_type)
+            if not node_label.IsNull():
+                color_tool.SetColor(node_label, node.color.wrapped, node_color_type)
+
+                if XCAFDoc_ShapeTool.IsReference_s(node_label):
+                    referred = TDF_Label()
+                    if (
+                        XCAFDoc_ShapeTool.GetReferredShape_s(node_label, referred)
+                        and not referred.IsNull()
+                    ):
+                        color_tool.SetColor(
+                            referred, node.color.wrapped, node_color_type
+                        )
+
+            for sub_label, sub_type in sub_node_labels:
+                if sub_label.IsNull():
+                    continue
+                color_tool.SetColor(sub_label, node.color.wrapped, sub_type)
 
     shape_tool.UpdateAssemblies()
 
@@ -320,8 +391,8 @@ def export_step(
     if not header.IsDone():  # As in OCCT 7.9.x
         # Create an empty consistent header, i.e. IsDone() return True
         header = APIHeaderSection_MakeHeader(0)
-        header.Apply(writer.Writer().Model())    
-        
+        header.Apply(writer.Writer().Model())
+
     if to_export.label:
         header.SetName(TCollection_HAsciiString(to_export.label))
     if timestamp is not None:
