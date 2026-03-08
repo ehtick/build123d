@@ -1213,7 +1213,7 @@ class TestFace(unittest.TestCase):
 
                 wrapped_face: Face = surface.wrap(star, target)
                 self.assertTrue(isinstance(wrapped_face, Face))
-                self.assertFalse(wrapped_face.is_planar_face)
+                self.assertFalse(wrapped_face.is_planar)
                 self.assertTrue(wrapped_face.inner_wires())
 
                 wrapped_edge = surface.wrap(planar_edge, target)
@@ -1266,7 +1266,7 @@ class TestFace(unittest.TestCase):
         text = Text(txt="ei", font_size=15, align=(Align.MIN, Align.CENTER))
         wrapped_faces = surface.wrap_faces(text.faces(), path, 0.2)
         self.assertEqual(len(wrapped_faces), 3)
-        self.assertTrue(all(not f.is_planar_face for f in wrapped_faces))
+        self.assertTrue(all(not f.is_planar for f in wrapped_faces))
 
     def test_revolve(self):
         l1 = Edge.make_line((3, 0), (3, 2))

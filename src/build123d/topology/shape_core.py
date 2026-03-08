@@ -448,6 +448,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
     @property
     def is_planar_face(self) -> bool:
         """Is the shape a planar face even though its geom_type may not be PLANE"""
+        warnings.warn(
+            "The ``is_planar_face`` property is deprecated and will be removed in a future version."
+            "Use ``Face.is_planar`` instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if self._wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
             return False
         surface = BRep_Tool.Surface_s(self.wrapped)
@@ -2773,10 +2779,12 @@ class ShapeList(list[T]):
         # could be moved out maybe?
         def axis_parallel_predicate(axis: Axis, tolerance: float):
             def pred(shape: Shape):
-                if shape.is_planar_face:
-                    assert shape.wrapped is not None and isinstance(
-                        shape.wrapped, TopoDS_Face
-                    )
+                if (
+                    isinstance(shape.wrapped, TopoDS_Face)
+                    and GeomLib_IsPlanarSurface(
+                        BRep_Tool.Surface_s(shape.wrapped), TOLERANCE
+                    ).IsPlanar()
+                ):
                     gp_pnt = gp_Pnt()
                     surface_normal = gp_Vec()
                     u_val, _, v_val, _ = BRepTools.UVBounds_s(shape.wrapped)
@@ -2810,10 +2818,12 @@ class ShapeList(list[T]):
 
             def pred(shape: Shape):
 
-                if shape.is_planar_face:
-                    assert shape.wrapped is not None and isinstance(
-                        shape.wrapped, TopoDS_Face
-                    )
+                if (
+                    isinstance(shape.wrapped, TopoDS_Face)
+                    and GeomLib_IsPlanarSurface(
+                        BRep_Tool.Surface_s(shape.wrapped), TOLERANCE
+                    ).IsPlanar()
+                ):
                     gp_pnt: gp_Pnt = gp_Pnt()
                     surface_normal: gp_Vec = gp_Vec()
                     u_val, _, v_val, _ = BRepTools.UVBounds_s(shape.wrapped)
