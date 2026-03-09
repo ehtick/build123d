@@ -2738,6 +2738,8 @@ class Plane(metaclass=PlaneMeta):
         origin (tuple[float, float, float] | Vector): the origin in global coordinates
         x_dir (tuple[float, float, float] | Vector | None): an optional vector
             representing the X Direction. Defaults to None.
+        y_dir (tuple[float, float, float] | Vector | None): optional Y direction.
+            Mutually exclusive with z_dir. Requires x_dir.
         z_dir (tuple[float, float, float] | Vector | None): the normal direction
             for the plane. Defaults to (0, 0, 1).
 
@@ -2753,7 +2755,10 @@ class Plane(metaclass=PlaneMeta):
 
     Raises:
         ValueError: z_dir must be non null
+        ValueError: y_dir must be non null
         ValueError: x_dir must be non null
+        ValueError: the specified x_dir is not orthogonal to the provided normal
+        ValueError: x_dir and y_dir must not be parallel
         ValueError: the specified x_dir is not orthogonal to the provided normal
 
     Returns:
@@ -2786,6 +2791,16 @@ class Plane(metaclass=PlaneMeta):
         """Return a new plane at origin with x_dir and z_dir"""
 
     @overload
+    def __init__(
+        self,
+        origin: VectorLike,
+        x_dir: VectorLike,
+        *,
+        y_dir: VectorLike,
+    ):
+        """Return a new plane at origin with x_dir and y_dir"""
+
+    @overload
     def __init__(self, face: Face, x_dir: VectorLike | None = None):
         """Return a plane extending the face.
         Note: for non planar face this will return the underlying work plane"""
@@ -2804,12 +2819,16 @@ class Plane(metaclass=PlaneMeta):
 
         type_error_message = "Expected gp_Pln, Face, Location, or VectorLike"
 
+        passed_z_dir = "z_dir" in kwargs
+        passed_y_dir = "y_dir" in kwargs
+
         arg_plane = kwargs.pop("gp_pln", None)
         arg_face = kwargs.pop("face", None)
         arg_location = kwargs.pop("location", None)
         arg_axis = kwargs.pop("axis", None)
         arg_origin = kwargs.pop("origin", None)
         arg_x_dir = kwargs.pop("x_dir", None)
+        arg_y_dir = kwargs.pop("y_dir", None)
         arg_z_dir = kwargs.pop("z_dir", (0, 0, 1))
 
         if kwargs:
@@ -2895,19 +2914,41 @@ class Plane(metaclass=PlaneMeta):
             self.y_dir = Vector(self.wrapped.YAxis().Direction())
             self.z_dir = Vector(self.wrapped.Axis().Direction())
         else:
-            if self.z_dir.length == 0.0:
-                raise ValueError("z_dir must be non null")
-            self.z_dir = self.z_dir.normalized()
+            if passed_y_dir and passed_z_dir:
+                raise TypeError("Specify either y_dir or z_dir, not both")
 
-            if self.x_dir is None:
-                ax3 = gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir())
-                self.x_dir = Vector(ax3.XDirection()).normalized()
-            else:
+            if arg_y_dir is not None:
+                if self.x_dir is None:
+                    raise ValueError("x_dir must be provided when y_dir is specified")
                 if Vector(self.x_dir).length == 0.0:
                     raise ValueError("x_dir must be non null")
-                self.x_dir = Vector(self.x_dir).normalized()
+                if Vector(arg_y_dir).length == 0.0:
+                    raise ValueError("y_dir must be non null")
 
-            self.y_dir = self.z_dir.cross(self.x_dir).normalized()
+                self.x_dir = Vector(self.x_dir).normalized()
+                y_input = Vector(arg_y_dir).normalized()
+
+                z_from_xy = self.x_dir.cross(y_input)
+                if z_from_xy.length == 0.0:
+                    raise ValueError("x_dir and y_dir must not be parallel")
+
+                self.z_dir = z_from_xy.normalized()
+                self.y_dir = self.z_dir.cross(self.x_dir).normalized()
+            else:
+                if self.z_dir.length == 0.0:
+                    raise ValueError("z_dir must be non null")
+                self.z_dir = self.z_dir.normalized()
+
+                if self.x_dir is None:
+                    ax3 = gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir())
+                    self.x_dir = Vector(ax3.XDirection()).normalized()
+                else:
+                    if Vector(self.x_dir).length == 0.0:
+                        raise ValueError("x_dir must be non null")
+                    self.x_dir = Vector(self.x_dir).normalized()
+
+                self.y_dir = self.z_dir.cross(self.x_dir).normalized()
+
             self.wrapped = gp_Pln(
                 gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
             )
