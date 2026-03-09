@@ -219,13 +219,13 @@ class Builder(ABC, Generic[ShapeT]):
         self.mode = mode
         planes = WorkplaneList._convert_to_planes(workplanes)
         self.workplanes = planes if planes else [Plane.XY]
-        self._reset_tok : contextvars.Token[Builder] | None = None
+        self._reset_tok: contextvars.Token[Builder] | None = None
         current_frame = inspect.currentframe()
         assert current_frame is not None
         assert current_frame.f_back is not None
         self._python_frame = current_frame.f_back.f_back
         self.parent_frame = None
-        self.builder_parent : Builder | None = None
+        self.builder_parent: Builder | None = None
         self.lasts: dict = {Vertex: [], Edge: [], Face: [], Solid: []}
         self.workplanes_context = None
         self.exit_workplanes: list[Plane] = []
@@ -263,7 +263,7 @@ class Builder(ABC, Generic[ShapeT]):
         # by CPython in Linux, Window & MacOS but may not be supported in other python
         # implementations.  Support outside of these OS's is outside the scope of this
         # project.
-        builder_context : Builder | None = Builder._get_context()
+        builder_context: Builder | None = Builder._get_context()
         current_frame = inspect.currentframe()
         same_scope = (
             builder_context._python_frame == current_frame.f_back
