@@ -32,6 +32,7 @@ import trianglesolver
 
 from math import cos, degrees, pi, radians, sin, tan
 from typing import cast
+from os import PathLike
 
 from collections.abc import Iterable
 
@@ -570,7 +571,7 @@ class Text(BaseSketchObject):
         txt (str): text to render
         font_size (float): size of the font in model units
         font (str, optional): font name. Defaults to "Arial"
-        font_path (str, optional): system path to font file. Defaults to None
+        font_path (PathLike | str, optional): system path to font file. Defaults to None
         font_style (Font_Style, optional): font style, REGULAR, BOLD, BOLDITALIC, or
             ITALIC. Defaults to Font_Style.REGULAR
         text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
@@ -595,7 +596,7 @@ class Text(BaseSketchObject):
         txt: str,
         font_size: float,
         font: str = "Arial",
-        font_path: str | None = None,
+        font_path: PathLike[str] | str | None = None,
         font_style: FontStyle = FontStyle.REGULAR,
         text_align: tuple[TextAlign, TextAlign] = (TextAlign.CENTER, TextAlign.CENTER),
         align: Align | tuple[Align, Align] | None = None,
