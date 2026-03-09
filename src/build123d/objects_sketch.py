@@ -138,6 +138,7 @@ class Circle(BaseSketchObject):
         validate_inputs(context, self)
 
         self.radius = radius
+        self.arc_size = arc_size
         self.align = tuplify(align, 2)
 
         face = (
