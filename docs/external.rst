@@ -168,13 +168,15 @@ The ``makerrepo`` Python package (imported as ``mr``) is a lightweight library t
 provides decorators such as ``@artifact``, ``@customizable``, and ``@cached`` to
 annotate functions that build your models. The decorators have no effect on your
 existing build123d code until it is discovered and run by tools such as the
-`MakerRepo CLI <https://docs.makerrepo.com/makerrepo-cli/>`_ or
+`makerrepo-cli <https://docs.makerrepo.com/makerrepo-cli/>`_ or
 `MakerRepo.com <https://makerrepo.com/>`_ CI. The goal is to enable a code-driven
 workflow locally (e.g. command-line tools) or in CI. The library does not assume
-how it will be consumed, so the same build123d script works standalone or with
-MakerRepo.
+how it will be consumed, so annotated functions can be used with other tools and
+frameworks as well.
 
-See `MakerRepo Docs <https://docs.makerrepo.com>`_ for more information.
+See `MakerRepo Library Docs <https://docs.makerrepo.com/makerrepo-library/>`_ for
+more information and `LaunchPlatform/makerrepo <https://github.com/LaunchPlatform/makerrepo>`_
+for source code.
 
 makerrepo-cli
 =============
