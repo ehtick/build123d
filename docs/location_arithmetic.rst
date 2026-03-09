@@ -22,12 +22,12 @@ For the following use the helper function:
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1, 2)
+        face = loc * Rectangle(1, 2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
 
 .. image:: assets/location-example-01.png
 
@@ -35,12 +35,12 @@ For the following use the helper function:
 
     .. code-block:: build123d
 
-    plane = Plane.XZ
+        plane = Plane.XZ
 
-    face = plane * Rectangle(1, 2)
+        face = plane * Rectangle(1, 2)
 
-    show_object(face, name="face")
-    show_object(plane_symbol(plane), name="plane")
+        show_object(face, name="face")
+        show_object(plane_symbol(plane), name="plane")
 
 .. image:: assets/location-example-07.png
 
@@ -53,17 +53,17 @@ Relative positioning to a plane
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1,2)
+        face = loc * Rectangle(1,2)
 
-    box = Plane(loc) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
-    # box = Plane(face.location) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
-    # box = loc * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
+        box = Plane(loc) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
+        # box = Plane(face.location) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
+        # box = loc * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
-    show_object(box, name="box")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
+        show_object(box, name="box")
 
 .. image:: assets/location-example-02.png
 
@@ -76,15 +76,15 @@ Note: ``Plane(loc) *``, ``Plane(face.location) *`` and ``loc *`` are equivalent 
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1,2)
+        face = loc * Rectangle(1,2)
 
-    box = Plane(loc) * Rot(Z=80) * Box(0.2, 0.2, 0.2)
+        box = Plane(loc) * Rot(Z=80) * Box(0.2, 0.2, 0.2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
-    show_object(box, name="box")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
+        show_object(box, name="box")
 
 .. image:: assets/location-example-03.png
 
@@ -95,15 +95,15 @@ More general:
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1,2)
+        face = loc * Rectangle(1,2)
 
-    box = loc * Rot(20, 40, 80) * Box(0.2, 0.2, 0.2)
+        box = loc * Rot(20, 40, 80) * Box(0.2, 0.2, 0.2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
-    show_object(box, name="box")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
+        show_object(box, name="box")
 
 .. image:: assets/location-example-04.png
 
@@ -113,16 +113,16 @@ The box is rotated via ``Rot(20, 40, 80)`` around all three axes relative to the
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1,2)
+        face = loc * Rectangle(1,2)
 
-    box = loc * Rot(20, 40, 80) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
+        box = loc * Rot(20, 40, 80) * Pos(0.2, 0.4, 0.1) * Box(0.2, 0.2, 0.2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
-    show_object(box, name="box")
-    show_object(location_symbol(loc * Rot(20, 40, 80), 0.5), options={"color":(0, 255, 255)}, name="local_location")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
+        show_object(box, name="box")
+        show_object(location_symbol(loc * Rot(20, 40, 80), 0.5), options={"color":(0, 255, 255)}, name="local_location")
 
 .. image:: assets/location-example-05.png
 
@@ -132,16 +132,16 @@ The box is positioned via ``Pos(0.2, 0.4, 0.1)`` relative to the location ``loc 
 
     .. code-block:: build123d
 
-    loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
+        loc = Location((0.1, 0.2, 0.3), (10, 20, 30))
 
-    face = loc * Rectangle(1,2)
+        face = loc * Rectangle(1,2)
 
-    box = loc * Pos(0.2, 0.4, 0.1) * Rot(20, 40, 80) * Box(0.2, 0.2, 0.2)
+        box = loc * Pos(0.2, 0.4, 0.1) * Rot(20, 40, 80) * Box(0.2, 0.2, 0.2)
 
-    show_object(face, name="face")
-    show_object(location_symbol(loc), name="location")
-    show_object(box, name="box")
-    show_object(location_symbol(loc * Pos(0.2, 0.4, 0.1), 0.5), options={"color":(0, 255, 255)}, name="local_location")
+        show_object(face, name="face")
+        show_object(location_symbol(loc), name="location")
+        show_object(box, name="box")
+        show_object(location_symbol(loc * Pos(0.2, 0.4, 0.1), 0.5), options={"color":(0, 255, 255)}, name="local_location")
 
 .. image:: assets/location-example-06.png
 
