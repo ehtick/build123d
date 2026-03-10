@@ -1163,6 +1163,7 @@ class EllipticalCenterArc(BaseEdgeObject):
         deprecated_parameter = False
         if end_angle is not None:
             deprecated_parameter = True
+            end_a = end_angle
             warnings.warn(
                 "The 'end_angle' parameter is deprecated and will be removed in a future version."
                 " Use 'arc_size' instead.",
@@ -1171,6 +1172,7 @@ class EllipticalCenterArc(BaseEdgeObject):
             )
         if angular_direction is not None:
             deprecated_parameter = True
+            direction = angular_direction
             warnings.warn(
                 "The 'angular_direction' parameter is deprecated and will be removed in a future version."
                 "Use 'arc_size' instead.",
@@ -1188,8 +1190,8 @@ class EllipticalCenterArc(BaseEdgeObject):
         ellipse_workplane.origin = center_pnt
 
         if not deprecated_parameter:
-            end_angle = start_angle + arc_size
-            angular_direction = (
+            end_a = start_angle + arc_size
+            direction = (
                 AngularDirection.COUNTER_CLOCKWISE
                 if arc_size >= 0
                 else AngularDirection.CLOCKWISE
@@ -1200,8 +1202,8 @@ class EllipticalCenterArc(BaseEdgeObject):
             y_radius=y_radius,
             plane=ellipse_workplane,
             start_angle=start_angle,
-            end_angle=end_angle,
-            angular_direction=angular_direction,
+            end_angle=end_a,
+            angular_direction=direction,
         ).rotate(
             Axis(ellipse_workplane.origin, ellipse_workplane.z_dir.to_dir()), rotation
         )
