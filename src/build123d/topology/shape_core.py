@@ -1098,13 +1098,13 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         for attr in common_attrs:
             # Copy the attribute only if the target's attribute not set
-            if not getattr(target, attr):
-                setattr(target, attr, getattr(self, attr))
-            # Attach joints to the new part
             if attr == "joints":
-                joint: Joint
+                if not getattr(target, attr):
+                    target.joints = copy.deepcopy(self.joints)
                 for joint in target.joints.values():
                     joint.parent = target
+            elif not getattr(target, attr):
+                setattr(target, attr, getattr(self, attr))
 
     def cut(self, *to_cut: Shape) -> Self | ShapeList[Self]:
         """Remove the positional arguments from this Shape.

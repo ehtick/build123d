@@ -59,6 +59,7 @@ from build123d.topology import (
     Vertex,
     Wire,
 )
+from build123d.joints import RigidJoint
 
 
 class AlwaysEqual:
@@ -530,6 +531,19 @@ class TestShape(unittest.TestCase):
         self.assertTrue(all(c1 == c2 for c1, c2 in zip(blank.color, Color("Red"))))
         self.assertTrue(all(c1 == c2 for c1, c2 in zip(blank.children, box.children)))
         self.assertEqual(blank.topo_parent, box2)
+
+        RigidJoint("box_joint", to_part=box, joint_location=Location())
+
+        blank_with_joints = Box(2, 2, 2)
+        box.copy_attributes_to(blank_with_joints)
+
+        self.assertIsNot(blank_with_joints.joints, box.joints)
+        self.assertIn("box_joint", blank_with_joints.joints)
+        self.assertIn("box_joint", box.joints)
+        self.assertIsNot(blank_with_joints.joints["box_joint"], box.joints["box_joint"])
+
+        self.assertIs(box.joints["box_joint"].parent, box)
+        self.assertIs(blank_with_joints.joints["box_joint"].parent, blank_with_joints)
 
     def test_empty_shape(self):
         empty = Solid()
