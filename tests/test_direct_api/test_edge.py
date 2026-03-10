@@ -296,7 +296,7 @@ class TestEdge(unittest.TestCase):
             pnt = ca.position_at(u)
             self.assertAlmostEqual(ca.param_at_point(pnt), u, 5)
 
-        ea = EllipticalCenterArc((15, 0), 10, 5, start_angle=90, end_angle=270).edge()
+        ea = EllipticalCenterArc((15, 0), 10, 5, start_angle=90, arc_size=180).edge()
         for u in [0.3, 0.9]:
             pnt = ea.position_at(u)
             self.assertAlmostEqual(ea.param_at_point(pnt), u, 5)

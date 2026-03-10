@@ -71,11 +71,18 @@ from OCP.XCAFDoc import (
     XCAFDoc_DocumentTool,
 )
 from ocpsvg import ColorAndLabel, import_svg_document
-from svgpathtools import svg2paths
+import svgpathtools
 
 from build123d.build_common import MC, MM, CM, M, IN, FT
 from build123d.build_enums import Align, Unit
-from build123d.geometry import Color, Location, Vector, to_align_offset
+from build123d.geometry import (
+    Color,
+    Location,
+    Vector,
+    to_align_offset,
+    TOL_DIGITS,
+    TOLERANCE,
+)
 from build123d.topology import (
     Compound,
     Edge,
@@ -300,36 +307,61 @@ def import_stl(file_name: PathLike | str | bytes, model_unit: Unit = Unit.MM) ->
 
 def import_svg_as_buildline_code(
     file_name: PathLike | str | bytes,
+    precision: int = TOL_DIGITS,
 ) -> tuple[str, str]:
     """translate_to_buildline_code
 
     Translate the contents of the given svg file into executable build123d/BuildLine code.
 
     Args:
-        file_name (Union[PathLike, str, bytes]): svg file name
+        file_name (PathLike | str | bytes]): svg file name
+        precision (int): # digits to round values to. Defaults to # digits in TOLERANCE
 
     Returns:
         tuple[str, str]: code, builder instance name
     """
 
+    def fmt_value(value) -> str:
+        if isinstance(value, complex):
+            return f"({value.real:0.{precision}g}, {value.imag:0.{precision}g})"
+        return f"{value:0.{precision}g}"
+
+    def arc_to_code(curve: svgpathtools.Arc) -> str:
+        center = curve.center
+        start = curve.start
+        end = curve.end
+        x_radius = abs(curve.radius.real)
+        y_radius = abs(curve.radius.imag)
+        start_angle = float(curve.theta)
+        arc_size = float(curve.delta)
+        rotation = float(curve.rotation)
+
+        if abs(x_radius - y_radius) <= TOLERANCE:
+            return (
+                "RadiusArc("
+                f"({start.real:0.{precision}g}, {start.imag:0.{precision}g}), "
+                f"({end.real:0.{precision}g}, {end.imag:0.{precision}g}), "
+                f"{x_radius:0.{precision}g}, "
+                f"{not curve.large_arc})"
+            )
+
+        return (
+            "EllipticalCenterArc("
+            f"({center.real:0.{precision}g}, {center.imag:0.{precision}g}), "
+            f"{x_radius:0.{precision}g}, "
+            f"{y_radius:0.{precision}g}, "
+            f"start_angle={start_angle:0.{precision}g}, "
+            f"arc_size={arc_size:0.{precision}g}, "
+            f"rotation={rotation:0.{precision}g})"
+        )
+
     translator = {
         "Line": ["Line", "start", "end"],
         "CubicBezier": ["Bezier", "start", "control1", "control2", "end"],
         "QuadraticBezier": ["Bezier", "start", "control", "end"],
-        "Arc": [
-            "EllipticalCenterArc",
-            # "EllipticalStartArc",
-            "start",
-            "end",
-            "radius",
-            "rotation",
-            "large_arc",
-            "sweep",
-        ],
     }
     file_name = fsdecode(file_name)
-    paths_info = svg2paths(file_name)
-    paths, _path_attributes = paths_info[0], paths_info[1]
+    paths, _path_attributes = svgpathtools.svg2paths(file_name)
     builder_name = os.path.basename(file_name).split(".")[0]
     builder_name = builder_name if builder_name.isidentifier() else "builder"
     buildline_code = [
@@ -340,36 +372,10 @@ def import_svg_as_buildline_code(
         for curve in path:
             class_name = type(curve).__name__
             if class_name == "Arc":
-                values = [curve.__dict__["center"]]
-                values.append(curve.__dict__["radius"].real)
-                values.append(curve.__dict__["radius"].imag)
-                start, end = sorted(
-                    [
-                        curve.__dict__["theta"],
-                        curve.__dict__["theta"] + curve.__dict__["delta"],
-                    ]
-                )
-                values.append(start)
-                values.append(end)
-                values.append(degrees(curve.__dict__["phi"]))
-                if curve.__dict__["delta"] < 0.0:
-                    values.append("AngularDirection.CLOCKWISE")
-                else:
-                    values.append("AngularDirection.COUNTER_CLOCKWISE")
-
-                # EllipticalStartArc implementation
-                # values = [p.__dict__[parm] for parm in translator[class_name][1:3]]
-                # values.append(p.__dict__["radius"].real)
-                # values.append(p.__dict__["radius"].imag)
-                # values.extend([p.__dict__[parm] for parm in translator[class_name][4:]])
-            else:
-                values = [curve.__dict__[parm] for parm in translator[class_name][1:]]
-            values_str = ",".join(
-                [
-                    f"({v.real}, {v.imag})" if isinstance(v, complex) else str(v)
-                    for v in values
-                ]
-            )
+                buildline_code.append(f"    {arc_to_code(curve)}")
+                continue
+            values = [curve.__dict__[parm] for parm in translator[class_name][1:]]
+            values_str = ",".join(fmt_value(v) for v in values)
             buildline_code.append(f"    {translator[class_name][0]}({values_str})")
 
     return ("\n".join(buildline_code), builder_name)

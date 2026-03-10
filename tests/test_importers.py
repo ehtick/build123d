@@ -8,7 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from build123d import BuildLine, Color, Line, Bezier, RadiusArc, Solid, Compound
+from build123d import (
+    BuildLine,
+    Color,
+    Line,
+    Bezier,
+    EllipticalStartArc,
+    RadiusArc,
+    Solid,
+    Compound,
+)
 from build123d.importers import (
     import_svg_as_buildline_code,
     import_brep,
@@ -30,27 +39,27 @@ class ImportSVG(unittest.TestCase):
             l1 = Bezier((0, 0), (0.25, -0.1), (0.5, -0.15), (1, 0))
             l2 = Line(l1 @ 1, (1, 1))
             l3 = RadiusArc(l2 @ 1, (0, 1), 2)
-            l4 = Line(l3 @ 1, l1 @ 0)
+            l4 = EllipticalStartArc(l3 @ 1, (-1, 0), 0.5, 1, 180, start_angle=0)
         svg = ExportSVG()
         svg.add_shape(test_obj.wires()[0], "")
         svg.write("test.svg")
 
         # Read the svg as code
         buildline_code, builder_name = import_svg_as_buildline_code("test.svg")
-
         # Execute it and convert to Edges
         ex_locals = {}
         exec(buildline_code, None, ex_locals)
         test_obj: BuildLine = ex_locals[builder_name]
-        found = 0
-        for edge in test_obj.edges():
-            if edge.geom_type == GeomType.BEZIER:
-                found += 1
-            elif edge.geom_type == GeomType.LINE:
-                found += 1
-            elif edge.geom_type == GeomType.ELLIPSE:
-                found += 1
-        self.assertEqual(found, 4)
+        self.assertEqual(
+            sum(e.geom_type == GeomType.BEZIER for e in test_obj.edges()), 1
+        )
+        self.assertEqual(sum(e.geom_type == GeomType.LINE for e in test_obj.edges()), 1)
+        self.assertEqual(
+            sum(e.geom_type == GeomType.CIRCLE for e in test_obj.edges()), 1
+        )
+        self.assertEqual(
+            sum(e.geom_type == GeomType.ELLIPSE for e in test_obj.edges()), 1
+        )
         os.remove("test.svg")
 
     def test_import_svg_as_buildline_code_invalid_name(self):

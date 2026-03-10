@@ -1132,11 +1132,13 @@ class EllipticalCenterArc(BaseEdgeObject):
         y_radius (float): y radius of the ellipse (along the y-axis of plane)
         start_angle (float, optional): arc start angle from x-axis.
             Defaults to 0.0
-        end_angle (float, optional): arc end angle from x-axis.
-            Defaults to 90.0
+        end_angle (float | None): arc end angle from x-axis.
+            Defaults to None
+        *,
+        arc_size (float): angular size of arc (negative to change direction)
         rotation (float, optional): angle to rotate arc. Defaults to 0.0
-        angular_direction (AngularDirection, optional): arc direction.
-            Defaults to AngularDirection.COUNTER_CLOCKWISE
+        angular_direction (AngularDirection | None): arc direction.
+            Defaults to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -1148,13 +1150,33 @@ class EllipticalCenterArc(BaseEdgeObject):
         x_radius: float,
         y_radius: float,
         start_angle: float = 0.0,
-        end_angle: float = 90.0,
+        end_angle: float | None = None,
+        *,
+        arc_size: float = 90.0,
         rotation: float = 0.0,
-        angular_direction: AngularDirection = AngularDirection.COUNTER_CLOCKWISE,
+        angular_direction: AngularDirection | None = None,
         mode: Mode = Mode.ADD,
     ):
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
+
+        deprecated_parameter = False
+        if end_angle is not None:
+            deprecated_parameter = True
+            warnings.warn(
+                "The 'end_angle' parameter is deprecated and will be removed in a future version."
+                " Use 'arc_size' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if angular_direction is not None:
+            deprecated_parameter = True
+            warnings.warn(
+                "The 'angular_direction' parameter is deprecated and will be removed in a future version."
+                "Use 'arc_size' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         center_pnt = WorkplaneList.localize(center)
         if context is None:
@@ -1164,6 +1186,15 @@ class EllipticalCenterArc(BaseEdgeObject):
                 WorkplaneList._get_context().workplanes[0]
             )
         ellipse_workplane.origin = center_pnt
+
+        if not deprecated_parameter:
+            end_angle = start_angle + arc_size
+            angular_direction = (
+                AngularDirection.COUNTER_CLOCKWISE
+                if arc_size >= 0
+                else AngularDirection.CLOCKWISE
+            )
+
         curve = Edge.make_ellipse(
             x_radius=x_radius,
             y_radius=y_radius,
@@ -1989,12 +2020,6 @@ class PointArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
-    warnings.warn(
-        "The 'PointArcTangentLine' object is deprecated and will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -2004,6 +2029,12 @@ class PointArcTangentLine(BaseEdgeObject):
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
     ):
+        warnings.warn(
+            "The 'PointArcTangentLine' object is deprecated and will be removed in a future version."
+            " Use ConstrainedLines instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         side_sign = {
             Side.LEFT: -1,
@@ -2074,12 +2105,6 @@ class PointArcTangentArc(BaseEdgeObject):
         RuntimeError: No tangent arc found
     """
 
-    warnings.warn(
-        "The 'PointArcTangentArc' object is deprecated and will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -2090,6 +2115,13 @@ class PointArcTangentArc(BaseEdgeObject):
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
     ):
+        warnings.warn(
+            "The 'PointArcTangentArc' object is deprecated and will be removed in a future version."
+            " Use ConstrainedArcs instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
 
@@ -2224,12 +2256,6 @@ class ArcArcTangentLine(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
-    warnings.warn(
-        "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -2240,6 +2266,12 @@ class ArcArcTangentLine(BaseEdgeObject):
         keep: Keep = Keep.INSIDE,
         mode: Mode = Mode.ADD,
     ):
+        warnings.warn(
+            "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version."
+            " Use ConstrainedLines instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
@@ -2330,12 +2362,6 @@ class ArcArcTangentArc(BaseEdgeObject):
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
-    warnings.warn(
-        "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
     _applies_to = [BuildLine._tag]
 
     def __init__(
@@ -2348,6 +2374,12 @@ class ArcArcTangentArc(BaseEdgeObject):
         short_sagitta: bool = True,
         mode: Mode = Mode.ADD,
     ):
+        warnings.warn(
+            "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version."
+            " Use ConstrainedArcs instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         keep_placement, keep_type = (keep, keep) if isinstance(keep, Keep) else keep
 
         context: BuildLine | None = BuildLine._get_context(self)

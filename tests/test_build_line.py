@@ -138,7 +138,7 @@ class BuildLineTests(unittest.TestCase):
         # l8 = DoubleTangentArc((0, 0, 0), (1, 0, 0), l7, keep=Keep.BOTH)
         # self.assertEqual(len(l8.edges()), 2)
 
-        l9 = EllipticalCenterArc((15, 0), 10, 5, start_angle=90, end_angle=270)
+        l9 = EllipticalCenterArc((15, 0), 10, 5, start_angle=90, arc_size=180)
         # l10 = DoubleTangentArc((0, 0, 0), (1, 0, 0), l9, keep=Keep.BOTH)
         # self.assertEqual(len(l10.edges()), 2)
         # self.assertTrue(isinstance(l10, Edge))
@@ -170,14 +170,14 @@ class BuildLineTests(unittest.TestCase):
 
     def test_elliptical_center_arc(self):
         with BuildLine() as el:
-            EllipticalCenterArc((0, 0), 10, 5, 0, 180)
+            EllipticalCenterArc((0, 0), 10, 5, 0, arc_size=180)
         bbox = el.line.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
         self.assertLessEqual(bbox.max.X, 10)
         self.assertLessEqual(bbox.max.Y, 5)
 
-        e1 = EllipticalCenterArc((0, 0), 10, 5, 0, 180)
+        e1 = EllipticalCenterArc((0, 0), 10, 5, 0, arc_size=180)
         bbox = e1.bounding_box()
         self.assertGreaterEqual(bbox.min.X, -10)
         self.assertGreaterEqual(bbox.min.Y, 0)
