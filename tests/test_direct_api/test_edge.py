@@ -30,14 +30,22 @@ import math
 import numpy as np
 import unittest
 
+from itertools import product
 from unittest.mock import patch, PropertyMock
 
-from build123d.build_enums import AngularDirection, GeomType, PositionMode, Transition
-from build123d.geometry import Axis, Plane, Vector
-from build123d.objects_curve import CenterArc, EllipticalCenterArc
+from build123d.build_enums import (
+    Align,
+    AngularDirection,
+    GeomType,
+    PositionMode,
+    Transition,
+)
+from build123d.geometry import Axis, Plane, Location, Vector
+from build123d.objects_curve import CenterArc, EllipticalCenterArc, Line
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
+from build123d.objects_part import Box
 from build123d.operations_generic import sweep
-from build123d.topology import Edge, Face, Wire, Vertex
+from build123d.topology import Curve, Edge, Face, Wire, Vertex
 from OCP.GeomProjLib import GeomProjLib
 
 
@@ -235,6 +243,40 @@ class TestEdge(unittest.TestCase):
         e1.wrapped = None
         with self.assertRaises(ValueError):
             e1.trim_to_length(0.1, 2)
+
+    def test_trim_to_other(self):
+        """Test trimming open and closed edges to all other objects"""
+
+        base_edges = [
+            CenterArc((0, 0), 1, 0, 180),
+            CenterArc((0, 0), 1, 0, 360),
+        ]
+        others = [
+            Line((0, 0), (1, 1)),
+            CenterArc((0, 0), 1, 45, 90),
+            Rectangle(1, 1, align=(Align.MAX, Align.MIN)).rotate(Axis.Z, -45).wire(),
+            Rectangle(1, 1, align=(Align.MAX, Align.MIN)).rotate(Axis.Z, -45),
+            Curve(
+                Rectangle(1, 1, align=(Align.MAX, Align.MIN))
+                .rotate(Axis.Z, -45)
+                .edges()
+            ),
+            Box(1, 1, 1, align=(Align.MAX, Align.MIN, Align.CENTER)).rotate(
+                Axis.Z, -45
+            ),
+            Axis((0, 0, 0), (1, 1, 0)),
+            Location((math.sqrt(2) / 2, math.sqrt(2) / 2), (0, 0, 1)),
+            Plane((0, 0, 0), (1, 1, 0), (-1, 1, 0)),
+            Vector(1, 0).rotate(Axis.Z, 45),
+            (math.sqrt(2) / 2, math.sqrt(2) / 2),
+            (0, 2),
+        ]
+        for base, other in product(base_edges, others):
+            result = base.trim_to_other(other)
+            if other == others[-1]:
+                self.assertIsNone(result)
+            else:
+                self.assertAlmostEqual(result.length, math.pi / 4, 5)
 
     def test_bezier(self):
         with self.assertRaises(ValueError):
