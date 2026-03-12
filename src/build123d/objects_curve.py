@@ -32,7 +32,7 @@ import copy as copy_module
 import warnings
 import numpy as np
 import sympy  # type: ignore
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from itertools import product
 from math import atan2, copysign, cos, degrees, radians, sin, sqrt
 from scipy.optimize import minimize
@@ -51,9 +51,9 @@ from build123d.build_enums import (
     Side,
 )
 from build123d.build_line import BuildLine
-from build123d.geometry import Axis, Plane, Vector, VectorLike, TOLERANCE
+from build123d.geometry import Axis, Location, Plane, Vector, VectorLike, TOLERANCE
 from build123d.topology import Curve, Edge, Face, Vertex, Wire
-from build123d.topology.shape_core import ShapeList
+from build123d.topology.shape_core import Shape, ShapeList
 
 
 def _add_curve_to_context(curve: Edge | Wire | Curve, mode: Mode):
@@ -1681,9 +1681,18 @@ class PolarLine(BaseEdgeObject):
     The length can specify the DIAGONAL, HORIZONTAL, or VERTICAL component of the triangle
     defined by the angle.
 
+    Alternatively, the length parameter can contain a limit to the length of the line
+    in the form of another object. If the PolarLine doesn't contact the limit an error
+    will be generated.
+
+    Example:
+
+        p = PolarLine(start=(2, 0), length=Axis.Y, angle=135)
+
     Args:
         start (VectorLike): start point
-        length (float): line length
+        length (float | Shape | Axis | Location | Plane | VectorLike): line length (float) or
+            limit limit
         angle (float, optional): angle from the local x-axis
         direction (VectorLike, optional): vector direction to determine angle
         length_mode (LengthMode, optional): how length defines the line.
@@ -1692,6 +1701,8 @@ class PolarLine(BaseEdgeObject):
 
     Raises:
         ValueError: Either angle or direction must be provided
+        ValueError: Polar line doesn't intersect length limit
+
     """
 
     _applies_to = [BuildLine._tag]
@@ -1699,7 +1710,7 @@ class PolarLine(BaseEdgeObject):
     def __init__(
         self,
         start: VectorLike,
-        length: float,
+        length: float | Shape | Axis | Location | Plane | VectorLike,
         angle: float | None = None,
         direction: VectorLike | None = None,
         length_mode: LengthMode = LengthMode.DIAGONAL,
@@ -1727,14 +1738,44 @@ class PolarLine(BaseEdgeObject):
         else:
             raise ValueError("Either angle or direction must be provided")
 
-        if length_mode == LengthMode.DIAGONAL:
-            length_vector = direction_localized * length
-        elif length_mode == LengthMode.HORIZONTAL:
-            length_vector = direction_localized * abs(length / cos(radians(angle)))
-        elif length_mode == LengthMode.VERTICAL:
-            length_vector = direction_localized * abs(length / sin(radians(angle)))
-
-        new_edge = Edge.make_line(start, start + length_vector)
+        length_factor = Vector(length) if isinstance(length, Sequence) else length
+        match length_factor:
+            case float() | int():
+                if length_mode == LengthMode.DIAGONAL:
+                    length_vector = direction_localized * length_factor
+                elif length_mode == LengthMode.HORIZONTAL:
+                    length_vector = direction_localized * abs(
+                        length_factor / cos(radians(angle))
+                    )
+                elif length_mode == LengthMode.VERTICAL:
+                    length_vector = direction_localized * abs(
+                        length_factor / sin(radians(angle))
+                    )
+                new_edge = Edge.make_line(start, start + length_vector)
+            case Shape():
+                max_length = length_factor.bounding_box().add(start).diagonal
+                long_edge = Edge.make_line(
+                    start, start + direction_localized * max_length
+                )
+                trimmed_edge = long_edge.trim_to_other(length_factor)
+                if trimmed_edge is None:
+                    raise ValueError(
+                        f"Polar line doesn't intersect length limit {length}"
+                    )
+                new_edge = trimmed_edge
+            case Axis() | Plane() | Location() | Vector():
+                polar_axis = Axis(start, direction_localized)
+                contact = polar_axis.intersect(length_factor)
+                # Check for a contact point and ensure it isn't behind the start point
+                if (
+                    isinstance(contact, Vector)
+                    and (contact - start).dot(direction_localized) > TOLERANCE
+                ):
+                    new_edge = Edge.make_line(start, contact)
+                else:
+                    raise ValueError(
+                        f"Polar line doesn't intersect length limit {length}"
+                    )
 
         super().__init__(new_edge, mode=mode)
 

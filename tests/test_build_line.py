@@ -447,6 +447,42 @@ class BuildLineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             PolarLine((0, 0), 1)
 
+    def test_polar_line_limits(self):
+        limits = [
+            Line((0, 0), (1, 1)),
+            CenterArc((0, 0), 1, 45, 90),
+            Rectangle(1, 1, align=(Align.MAX, Align.MIN)).rotate(Axis.Z, -45).wire(),
+            Rectangle(1, 1, align=(Align.MAX, Align.MIN)).rotate(Axis.Z, -45),
+            Curve(
+                Rectangle(1, 1, align=(Align.MAX, Align.MIN))
+                .rotate(Axis.Z, -45)
+                .edges()
+            ),
+            Box(1, 1, 1, align=(Align.MAX, Align.MIN, Align.CENTER)).rotate(
+                Axis.Z, -45
+            ),
+            Axis((0, 0, 0), (1, 1, 0)),
+            Location((sqrt(2) / 2, sqrt(2) / 2), (0, 0, 1)),
+            Plane((0, 0, 0), (1, 1, 0), (-1, 1, 0)),
+            Vector(1, 0).rotate(Axis.Z, 45),
+            (sqrt(2) / 2, sqrt(2) / 2),
+        ]
+
+        for limit in limits:
+            with self.subTest(f"Limit type: {type(limit)}"):
+                polar_line = PolarLine((sqrt(2), 0), length=limit, angle=135)
+                self.assertAlmostEqual(polar_line.length, 1, 5)
+
+        with self.assertRaises(ValueError):
+            PolarLine((sqrt(2), 0), length=(0, 2), angle=135)
+
+        with self.assertRaises(ValueError):
+            PolarLine((sqrt(2), 0), length=Line((3, 0), (3, 1)), angle=135)
+
+        # Check for the "behind" case
+        with self.assertRaises(ValueError):
+            PolarLine((1, 0), length=Plane.YZ, angle=45)
+
     def test_spline(self):
         """Test spline with no tangents"""
         with BuildLine() as test:
