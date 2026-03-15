@@ -119,6 +119,7 @@ class Circle(BaseSketchObject):
 
     Args:
         radius (float): circle radius
+        arc_size (float, optional): angular size of sector. Defaults to 360.
         align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of object.
             Defaults to (Align.CENTER, Align.CENTER)
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -129,6 +130,7 @@ class Circle(BaseSketchObject):
     def __init__(
         self,
         radius: float,
+        arc_size: float = 360.0,
         align: Align | tuple[Align, Align] | None = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
@@ -136,9 +138,14 @@ class Circle(BaseSketchObject):
         validate_inputs(context, self)
 
         self.radius = radius
+        self.arc_size = arc_size
         self.align = tuplify(align, 2)
 
-        face = Face(Wire.make_circle(radius))
+        face = (
+            Face(Wire.make_circle(radius))
+            if arc_size == 360.0
+            else Face.revolve(Edge.make_line((radius, 0), (0, 0)), arc_size, Axis.Z)
+        )
         super().__init__(face, 0, self.align, mode)
 
 
