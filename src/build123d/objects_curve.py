@@ -875,7 +875,7 @@ class ConstrainedLines(BaseCurveObject):
                 )
         """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         """
         Create planar line(s) on XY subject to tangency/contact constraints.
 
@@ -1536,13 +1536,20 @@ class FilletPolyline(BaseLineObject):
 class JernArc(BaseEdgeObject):
     """Line Object: Jern Arc
 
-    Create a circular arc defined by a start point/tangent pair, radius and arc size.
+    Create a circular arc defined by a start point/tangent pair, radius and arc size or arc limit.
 
     Args:
         start (VectorLike): start point
         tangent (VectorLike): tangent at start point
         radius (float): arc radius
-        arc_size (float): angular size of arc (negative to change direction)
+        arc_size (float | Shape | Axis | Location | Plane | VectorLike): angular size
+            of arc (negative to change direction) or an arc limit.
+
+            When a limit object is provided instead of a numeric angular size, JernArc
+            constructs the valid tangent arc(s) from the given start point and tangent,
+            trims them at their first intersection with the limit, and returns the one
+            requiring the shortest travel from the start. If neither valid arc intersects
+            the limit, a ValueError is raised.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
 
     Attributes:
@@ -1558,7 +1565,7 @@ class JernArc(BaseEdgeObject):
         start: VectorLike,
         tangent: VectorLike,
         radius: float,
-        arc_size: float,
+        arc_size: float | Shape | Axis | Location | Plane | VectorLike,
         mode: Mode = Mode.ADD,
     ):
         context: BuildLine | None = BuildLine._get_context(self)
@@ -1584,20 +1591,51 @@ class JernArc(BaseEdgeObject):
         else:
             start_tangent = Vector(tangent).normalized()
 
-        arc_direction = copysign(1.0, arc_size)
-        self.center_point = start + start_tangent.rotate(
+        arc_factor = Vector(arc_size) if isinstance(arc_size, Sequence) else arc_size
+        if isinstance(arc_factor, (int, float)):
+            arc_direction = copysign(1.0, arc_factor)
+            arc_untrimed_size = arc_factor
+        else:
+            arc_direction = 1
+            arc_untrimed_size = 360
+
+        center_point = start + start_tangent.rotate(
             Axis(start, jern_workplane.z_dir), arc_direction * 90
         ) * abs(radius)
-        self.end_of_arc = self.center_point + (start - self.center_point).rotate(
-            Axis(start, jern_workplane.z_dir), arc_size
+        end_of_arc = center_point + (start - center_point).rotate(
+            Axis(start, jern_workplane.z_dir), arc_untrimed_size
         )
-        if abs(arc_size) >= 360:
+        if abs(arc_untrimed_size) >= 360:
             circle_plane = copy_module.copy(jern_workplane)
-            circle_plane.origin = self.center_point
+            circle_plane.origin = center_point
             circle_plane.x_dir = self.start - circle_plane.origin
             arc = Edge.make_circle(radius, circle_plane)
+            center_point2 = start + start_tangent.rotate(
+                Axis(start, jern_workplane.z_dir), -arc_direction * 90
+            ) * abs(radius)
+            circle_plane2 = copy_module.copy(jern_workplane)
+            circle_plane2.origin = center_point2
+            circle_plane2.x_dir = self.start - circle_plane2.origin
+            arc2 = Edge.make_circle(radius, circle_plane2)
+            if arc2.tangent_at(0).dot(start_tangent) < 0:
+                arc2 = arc2.reversed(reconstruct=True)
+
         else:
-            arc = Edge.make_tangent_arc(start, start_tangent, self.end_of_arc)
+            arc = Edge.make_tangent_arc(start, start_tangent, end_of_arc)
+
+        if not isinstance(arc_factor, (int, float)):
+            trimmed_arc = arc.trim_to_other(arc_factor)
+            trimmed_arc2 = arc2.trim_to_other(arc_factor)
+
+            if trimmed_arc is None and trimmed_arc2 is None:
+                raise ValueError(f"JernArc doesn't intersect arc limit {arc_size}")
+
+            arc = ShapeList(
+                [a for a in [trimmed_arc, trimmed_arc2] if a is not None]
+            ).sort_by(Edge.length)[0]
+
+        self.center_point = arc.arc_center
+        self.end_of_arc = arc.position_at(1)
 
         super().__init__(arc, mode=mode)
 
