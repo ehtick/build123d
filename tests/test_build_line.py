@@ -170,6 +170,18 @@ class BuildLineTests(unittest.TestCase):
         self.assertLessEqual(bbox.max.Y, 5)
         self.assertTrue(isinstance(e1, Edge))
 
+    def test_elliptical_center_arc_limits(self):
+        l1 = Line((0, 0), (0, 2))
+        e1 = EllipticalCenterArc((0, 0), 2, 1, 0, arc_size=l1)
+        self.assertAlmostEqual(e1 @ 1, (0, 1, 0), 5)
+
+        l2 = Line((0, 0), (0, -2))
+        e2 = EllipticalCenterArc((0, 0), 2, 1, 0, arc_size=l2)
+        self.assertAlmostEqual(e2 @ 1, (0, -1, 0), 5)
+
+        with self.assertRaises(ValueError):
+            EllipticalCenterArc((0, 0), 2, 1, 0, arc_size=(0, 5))
+
     def test_parabolic_center_arc(self):
         # General conic section equation: (1+K)x^2-2Rx+y^2=0
         # parabola (K = -1) => -2Rx+y^2=0
