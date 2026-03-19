@@ -448,7 +448,14 @@ class CenterArc(BaseEdgeObject):
         center (VectorLike): center point of arc
         radius (float): arc radius
         start_angle (float): arc starting angle from x-axis
-        arc_size (float): angular size of arc
+        arc_size (float | Shape | Axis | Location | Plane | VectorLike): angular size
+            of arc or an arc limit.
+
+            When a limit object is provided instead of a numeric angular size, CenterArc
+            constructs the valid arc(s) from the given start point, trims them at their
+            first intersection with the limit, and returns the one requiring the shortest
+            travel from the start. Therefore, one can only generate arcs < 180° using a limit.
+            If neither valid arc intersects the limit, a ValueError is raised.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
     """
 
@@ -459,9 +466,9 @@ class CenterArc(BaseEdgeObject):
         center: VectorLike,
         radius: float,
         start_angle: float,
-        arc_size: float,
+        arc_size: float | Shape | Axis | Location | Plane | VectorLike,
         mode: Mode = Mode.ADD,
-    ):
+    ) -> None:
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
 
@@ -473,21 +480,50 @@ class CenterArc(BaseEdgeObject):
                 WorkplaneList._get_context().workplanes[0]
             )
         circle_workplane.origin = center_point
-        arc_direction = (
-            AngularDirection.COUNTER_CLOCKWISE
-            if arc_size > 0
-            else AngularDirection.CLOCKWISE
-        )
-        arc_size = (arc_size + 360.0) % 360.0
-        end_angle = start_angle + arc_size
-        start_angle = end_angle if arc_size == 360.0 else start_angle
-        arc = Edge.make_circle(
-            radius,
-            circle_workplane,
-            start_angle=start_angle,
-            end_angle=end_angle,
-            angular_direction=arc_direction,
-        )
+
+        arc_factor = Vector(arc_size) if isinstance(arc_size, Sequence) else arc_size
+
+        if isinstance(arc_factor, (int, float)):
+            arc_direction = (
+                AngularDirection.COUNTER_CLOCKWISE
+                if arc_factor > 0
+                else AngularDirection.CLOCKWISE
+            )
+            normalized_arc_size = (arc_factor + 360.0) % 360.0
+            end_angle = start_angle + normalized_arc_size
+            start_angle = end_angle if normalized_arc_size == 360.0 else start_angle
+
+            arc = Edge.make_circle(
+                radius,
+                circle_workplane,
+                start_angle=start_angle,
+                end_angle=end_angle,
+                angular_direction=arc_direction,
+            )
+        else:
+            start_radius_vector = (
+                circle_workplane.x_dir.rotate(
+                    Axis((0, 0, 0), circle_workplane.z_dir), start_angle
+                )
+                * radius
+            )
+
+            circle_plane = copy_module.copy(circle_workplane)
+            circle_plane.origin = center_point
+            circle_plane.x_dir = start_radius_vector
+
+            arc = Edge.make_circle(radius, circle_plane)
+            arc2 = arc.reversed(reconstruct=True)
+
+            trimmed_arc = arc.trim_to_other(arc_factor)
+            trimmed_arc2 = arc2.trim_to_other(arc_factor)
+
+            if trimmed_arc is None and trimmed_arc2 is None:
+                raise ValueError(f"CenterArc doesn't intersect arc limit {arc_size}")
+
+            arc = ShapeList(
+                [a for a in [trimmed_arc, trimmed_arc2] if a is not None]
+            ).sort_by(Edge.length)[0]
 
         super().__init__(arc, mode=mode)
 
@@ -1134,12 +1170,12 @@ class EllipticalCenterArc(BaseEdgeObject):
             Defaults to 0.0
         end_angle (float | None): arc end angle from x-axis.
             Defaults to None
-        *,
         arc_size (float): angular size of arc (negative to change direction)
         rotation (float, optional): angle to rotate arc. Defaults to 0.0
         angular_direction (AngularDirection | None): arc direction.
             Defaults to None.
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
+
     """
 
     _applies_to = [BuildLine._tag]

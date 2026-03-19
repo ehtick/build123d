@@ -542,6 +542,20 @@ class BuildLineTests(unittest.TestCase):
         self.assertAlmostEqual(arc.bounding_box().max, (0, 100, 0), 5)
         self.assertTrue(isinstance(arc, Edge))
 
+    def test_center_arc_limits(self):
+        l1 = Line((1, 0), (2, 1))
+        c1 = CenterArc((1, 0), 1, 0, l1)
+        self.assertAlmostEqual(c1.length, pi / 4, 5)
+        self.assertAlmostEqual(c1 % 0, (0, 1, 0), 5)
+
+        l2 = Line((1, 0), (2, -1))
+        c2 = CenterArc((1, 0), 1, 0, l2)
+        self.assertAlmostEqual(c2.length, pi / 4, 5)
+        self.assertAlmostEqual(c2 % 0, (0, -1, 0), 5)
+
+        with self.assertRaises(ValueError):
+            CenterArc((1, 0), 1, 0, (5, 0))
+
     def test_polyline(self):
         """Test edge generation and close"""
         with BuildLine() as test:
