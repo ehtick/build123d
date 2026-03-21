@@ -58,7 +58,7 @@ import copy
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
-
+from os import PathLike, fspath
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -233,7 +233,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         txt: str,
         font_size: float,
         font: str = "Arial",
-        font_path: str | None = None,
+        font_path: PathLike[str] | str | None = None,
         font_style: FontStyle = FontStyle.REGULAR,
         text_align: tuple[TextAlign, TextAlign] = (TextAlign.CENTER, TextAlign.CENTER),
         align: Align | tuple[Align, Align] | None = None,
@@ -252,7 +252,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             txt (str): text to render
             font_size (float): size of the font in model units
             font (str, optional): font name. Defaults to "Arial"
-            font_path (str, optional): system path to font file. Defaults to None
+            font_path (PathLike | str, optional): system path to font file. Defaults to None
             font_style (Font_Style, optional): font style, REGULAR, BOLD, BOLDITALIC, or
                 ITALIC. Defaults to Font_Style.REGULAR
             text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
@@ -298,9 +298,11 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 -wire_angle,
             )
 
+        font_path_str = fspath(font_path) if font_path is not None else None
+
         manager = FontManager()
-        if font_path and manager.check_font(font_path): # pragma: no cover
-            face_names = manager.register_font(font_path, True, False)
+        if font_path_str and manager.check_font(font_path_str):  # pragma: no cover
+            face_names = manager.register_font(font_path_str, True, False)
             # Check if font (name) is in face names and not bad or default (Arial)
             font_name = font if font in face_names else face_names[0]
             system_font = manager.find_font(font_name, font_style)

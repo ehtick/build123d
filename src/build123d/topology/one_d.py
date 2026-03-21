@@ -3106,6 +3106,31 @@ class Edge(Mixin1D[TopoDS_Edge]):
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
 
+    def trim_to_other(
+        self: Edge,
+        other: Shape | Axis | Location | Plane | VectorLike,
+    ) -> Edge | None:
+        """Return the shortest Edge of self trimmed by other or None if they don't intersect"""
+
+        other_obj = Vector(other) if isinstance(other, Sequence) else other
+
+        # Find all of the possible intersections: vertices and edges
+        intersections = self.intersect(other_obj)
+
+        if not intersections:
+            return None
+
+        # Get the vertices from any edges and all of the other vertices
+        intersection_pnts = intersections.vertices()
+
+        # Trim to all of the intersection points
+        self_trims = ShapeList([self.trim(0, pnt) for pnt in intersection_pnts])
+
+        # Take the closest one
+        shortest_trimmed_self = self_trims.sort_by(Edge.length)[0]
+
+        return shortest_trimmed_self
+
     @property
     def is_infinite(self) -> bool:
         """Check if edge is infinite (LINE with length > 1e100)."""

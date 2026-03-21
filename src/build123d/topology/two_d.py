@@ -100,6 +100,7 @@ from OCP.GeomAPI import (
     GeomAPI_PointsToBSplineSurface,
     GeomAPI_ProjectPointOnSurf,
 )
+from OCP.GeomLib import GeomLib_IsPlanarSurface
 from OCP.GeomProjLib import GeomProjLib
 from OCP.gp import gp_Ax1, gp_Pnt, gp_Vec
 from OCP.GProp import GProp_GProps
@@ -872,7 +873,7 @@ class Face(Mixin2D[TopoDS_Face]):
         if self._wrapped is None:
             raise ValueError("Can't determine axes_of_symmetry of empty face")
 
-        if not self.is_planar_face:
+        if not self.is_planar:
             raise ValueError("axes_of_symmetry only supports for planar faces")
 
         cog = self.center()
@@ -1062,9 +1063,11 @@ class Face(Mixin2D[TopoDS_Face]):
         return self._curvature_sign < -TOLERANCE
 
     @property
-    def is_planar(self) -> bool:
-        """Is the face planar even though its geom_type may not be PLANE"""
-        return self.is_planar_face
+    def is_planar(self) -> Plane | None:
+        """Is the face planar even though its geom_type may not be PLANE - if so return Plane"""
+        surface = BRep_Tool.Surface_s(self.wrapped)
+        planar_searcher = GeomLib_IsPlanarSurface(surface, TOLERANCE)
+        return Plane(planar_searcher.Plan()) if planar_searcher.IsPlanar() else None
 
     @property
     def length(self) -> None | float:
