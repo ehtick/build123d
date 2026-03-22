@@ -764,6 +764,11 @@ class Face(Mixin2D[TopoDS_Face]):
             inner_topods_wires = (
                 [w.wrapped for w in inner_wires] if inner_wires is not None else []
             )
+            if any(
+                not BRep_Tool.IsClosed_s(w)
+                for w in [outer_wire.wrapped] + inner_topods_wires
+            ):
+                raise ValueError("Face can only be created with closed wires")
             obj = _make_topods_face_from_wires(outer_wire.wrapped, inner_topods_wires)
 
         super().__init__(

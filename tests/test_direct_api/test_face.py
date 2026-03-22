@@ -1280,8 +1280,16 @@ class TestFace(unittest.TestCase):
         self.assertTrue(isinstance(revolved, Shell))
         self.assertAlmostEqual(revolved.edges().sort_by(Axis.Y)[-1].radius, 2, 5)
 
+    def test_open_wire(self):
+        perimeter = Polyline((0, 0), (1, 0), (1, 1), (0, 1))
+        with self.assertRaises(ValueError):
+            Face(perimeter)
 
-class TestAxesOfSymmetrySplitNone(unittest.TestCase):
+        with self.assertRaises(ValueError):
+            Face(Wire.make_circle(5), [perimeter])
+
+
+class TestAxesOfSysmmetrySplitNone(unittest.TestCase):
     def test_split_returns_none(self):
         # Create a rectangle face for testing.
         rect = Rectangle(10, 5).face()
