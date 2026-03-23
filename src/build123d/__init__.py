@@ -35,6 +35,7 @@ __all__ = [
     "M",
     "IN",
     "FT",
+    "THOU",
     # Unit Conversions
     "UNITS_PER_METER",
     # Mass Constants
