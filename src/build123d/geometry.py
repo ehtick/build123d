@@ -1032,7 +1032,7 @@ class BoundBox:
         bounding_box = kwargs.pop("bounding_box", None)
         shape = kwargs.pop("shape", None)
         tolerance = kwargs.pop("tolerance", None)
-        optimal = kwargs.pop("optimal")
+        optimal = kwargs.pop("optimal", True)
 
         # If any unexpected kwargs remain
         if kwargs:
