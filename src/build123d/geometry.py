@@ -1025,7 +1025,9 @@ class BoundBox:
         """Construct a bounding box from a Bnd_Box"""
 
     @overload
-    def __init__(self, shape: TopoDS_Shape, tolerance: float | None = None, optimal: bool = True) -> None:
+    def __init__(
+        self, shape: TopoDS_Shape, tolerance: float | None = None, optimal: bool = True
+    ) -> None:
         """Construct a bounding box from a TopoDS_Shape"""
 
     def __init__(self, *args, **kwargs):
@@ -1046,7 +1048,9 @@ class BoundBox:
                 shape = args[0]
                 if len(args) > 1:
                     if not isinstance(args[1], float):
-                        raise TypeError(f"Second parameter must be a float not {args[1]}")
+                        raise TypeError(
+                            f"Second parameter must be a float not {args[1]}"
+                        )
                     tolerance = args[1]
                 if len(args) > 2:
                     if not isinstance(args[2], bool):
@@ -1058,7 +1062,9 @@ class BoundBox:
         if shape:
             BRepTools.Clean_s(shape)  # Remove mesh which may impact bbox
 
-            tolerance = TOL if tolerance is None else tolerance  # tol = TOL (by default)
+            tolerance = (
+                TOL if tolerance is None else tolerance
+            )  # tol = TOL (by default)
             bounding_box = Bnd_Box()
 
             if optimal:
