@@ -1203,17 +1203,7 @@ class BoundBox:
         Returns:
 
         """
-        BRepTools.Clean_s(shape)  # Remove mesh which may impact bbox
-
-        tolerance = TOL if tolerance is None else tolerance  # tol = TOL (by default)
-        bbox = Bnd_Box()
-
-        if optimal:
-            BRepBndLib.AddOptimal_s(shape, bbox)
-        else:
-            BRepBndLib.Add_s(shape, bbox, True)
-
-        return cls(bbox)
+        return cls(shape, tolerance, optimal)
 
     def is_inside(self, second_box: BoundBox) -> bool:
         """Is the provided bounding box inside this one?
