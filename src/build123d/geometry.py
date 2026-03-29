@@ -1047,11 +1047,12 @@ class BoundBox:
             elif isinstance(args[0], TopoDS_Shape):
                 shape = args[0]
                 if len(args) > 1:
-                    if not isinstance(args[1], float):
+                    if isinstance(args[1], float):
+                        tolerance = args[1]
+                    elif args[1]:
                         raise TypeError(
-                            f"Second parameter must be a float not {args[1]}"
+                            f"Second parameter must be a float or None not {args[1]}"
                         )
-                    tolerance = args[1]
                 if len(args) > 2:
                     if not isinstance(args[2], bool):
                         raise TypeError(f"Third parameter must be a bool not {args[2]}")
