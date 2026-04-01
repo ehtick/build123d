@@ -17,6 +17,7 @@ from build123d import (
     Plane,
     Pos,
     Rectangle,
+    ShapeList,
     Shell,
     Sphere,
     Vector,
@@ -1408,11 +1409,9 @@ def detect_spheres(
 
 
 # High-level pipeline
-def detect_primitives(
-    mesh,
-) -> tuple[list[tuple[Face, Shell]], list[Face], list[DetectedPatch]]:
+def detect_primitives(mesh) -> tuple[ShapeList[Face], ShapeList[Face]]:
     mesh_index = MeshIndex.from_shape(mesh)
-    shape_scale = mesh.bounding_box().diagonal
+    # shape_scale = mesh.bounding_box().diagonal
 
     plane_patches = detect_planes(mesh, mesh_index)
     plane_indices = (
@@ -1441,22 +1440,24 @@ def detect_primitives(
 
     patches: list[DetectedPatch] = [*plane_patches, *cylinder_patches, *sphere_patches]
 
-    primitives: list[tuple[Face, Shell]] = []
+    # primitives: list[tuple[Face, Shell]] = []
+    primitives: list[Face] = []
     claimed = set()
     for patch in patches:
         support_faces = mesh_index.face_set(sorted(patch.face_indices))
         claimed.update(patch.face_indices)
-        try:
-            support_shell = Shell(support_faces)
-        except TypeError:
-            support_shell = Shell()
+        # try:
+        #     support_shell = Shell(support_faces)
+        # except TypeError:
+        #     support_shell = Shell()
         if patch.kind == "plane":
             primitive_face = build_plane_face(patch)
         elif patch.kind == "cylinder":
             primitive_face = build_cylinder_face(patch, support_faces)
         else:
             primitive_face = build_sphere_face(patch, support_faces)
-        primitives.append((primitive_face, support_shell))
+        primitives.append(primitive_face)
 
     leftovers = mesh_index.face_set(sorted(set(range(len(mesh_index.faces))) - claimed))
-    return primitives, leftovers, patches
+
+    return ShapeList(primitives), ShapeList(leftovers)
