@@ -42,7 +42,7 @@ import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from math import degrees, isclose, log10, pi, prod, radians
-from typing import TYPE_CHECKING, Any, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, overload
 
 import numpy as np
 import webcolors  # type: ignore
@@ -81,6 +81,8 @@ from build123d.build_enums import Align, Align2DType, Align3DType, Extrinsic, In
 
 if TYPE_CHECKING:  # pragma: no cover
     from .topology import Edge, Face, Shape, Vertex
+
+TShape = TypeVar("TShape", bound="Shape")
 
 # Create a build123d logger to distinguish these logs from application logs.
 # If the user doesn't configure logging, all build123d logs will be discarded.
@@ -1881,7 +1883,7 @@ class Location:
         return Location(self.wrapped.Transformation())
 
     @overload
-    def __mul__(self, other: Shape) -> Shape: ...
+    def __mul__(self, other: TShape) -> TShape: ...
 
     @overload
     def __mul__(self, other: Location) -> Location: ...
@@ -1890,8 +1892,8 @@ class Location:
     def __mul__(self, other: Iterable[Location]) -> list[Location]: ...
 
     def __mul__(
-        self, other: Shape | Location | Iterable[Location]
-    ) -> Shape | Location | list[Location]:
+        self, other: TShape | Location | Iterable[Location]
+    ) -> TShape | Location | list[Location]:
         """Combine locations"""
         if self.wrapped is None:
             raise ValueError("Cannot move a shape at an empty location")

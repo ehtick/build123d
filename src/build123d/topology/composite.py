@@ -59,6 +59,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
 from os import PathLike, fspath
+from typing import overload
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -951,6 +952,9 @@ class Sketch(Compound):
     def _dim(self) -> int:
         return 2
 
+    def __iadd__(self, other: None | Shape | Iterable[Shape]) -> Sketch:
+        return self + other
+
 
 class Part(Compound):
     """A Compound containing 3D objects - aka Solids"""
@@ -960,3 +964,6 @@ class Part(Compound):
     @property
     def _dim(self) -> int:
         return 3
+
+    def __iadd__(self, other: None | Shape | Iterable[Shape]) -> Part:
+        return self + other
