@@ -1,3 +1,44 @@
+"""
+build123d BREP from STL
+
+name: brep_from_stl.py
+by:   gumyr with codex gpt-5.4
+date: April 8th, 2026
+
+desc:
+    This python module reconstructs approximate analytic BREP primitives from a
+    triangulated STL-like surface mesh.
+
+    The user-facing entry point is ``detect_primitives``. The reconstruction
+    pipeline first builds a mesh index of face centers, normals, and adjacency.
+    It then searches for planes, spheres, and cylinders in that order so
+    simpler and more stable primitives claim faces before more ambiguous curved
+    regions are processed.
+
+    Each detector uses a broad classification step to identify candidate faces,
+    sews or connects them into regions, fits a local analytic primitive, and
+    grows the region across adjacent compatible faces while validating the fit.
+    The resulting primitive faces are then converted into build123d code strings
+    aligned with the returned primitives.
+
+license:
+
+    Copyright 2026 gumyr
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+"""
+
 from __future__ import annotations
 
 import copy
@@ -10,7 +51,10 @@ from math import acos, sqrt
 from typing import Any, Literal, TypeAlias, overload
 
 import numpy as np
+from sklearn.cluster import DBSCAN  # type: ignore[import-untyped]
+
 from build123d import (
+    TOL_DIGITS,
     Align,
     Axis,
     Cylinder,
@@ -24,9 +68,7 @@ from build123d import (
     ShapeList,
     Sphere,
     Vector,
-    TOL_DIGITS,
 )
-from sklearn.cluster import DBSCAN  # type: ignore[import-untyped]
 
 EPS = 1e-9
 EdgeKey: TypeAlias = tuple[tuple[float, float, float], tuple[float, float, float]]
@@ -35,6 +77,8 @@ EdgeKey: TypeAlias = tuple[tuple[float, float, float], tuple[float, float, float
 # Data model
 @dataclass(frozen=True)
 class FaceSample:
+    """Cached geometric data for a mesh face."""
+
     index: int
     face: Face
     center: Vector
@@ -43,6 +87,8 @@ class FaceSample:
 
 @dataclass(frozen=True)
 class PlanePatch:
+    """Plane primitive fitted to a set of mesh faces."""
+
     kind: Literal["plane"]
     face_indices: frozenset[int]
     origin: Vector
@@ -56,6 +102,8 @@ class PlanePatch:
 
 @dataclass(frozen=True)
 class CylinderPatch:
+    """Cylinder primitive fitted to a set of mesh faces."""
+
     kind: Literal["cylinder"]
     face_indices: frozenset[int]
     axis_point: Vector
@@ -65,11 +113,14 @@ class CylinderPatch:
 
     @property
     def axis(self) -> Axis:
+        """Axis property"""
         return Axis(self.axis_point, self.axis_direction)
 
 
 @dataclass(frozen=True)
 class SpherePatch:
+    """Sphere primitive fitted to a set of mesh faces."""
+
     kind: Literal["sphere"]
     face_indices: frozenset[int]
     center: Vector
@@ -82,6 +133,8 @@ DetectedPatch = PlanePatch | CylinderPatch | SpherePatch
 
 @dataclass
 class MeshIndex:
+    """Indexed mesh data reused by the primitive detectors."""
+
     faces: list[Face]
     face_samples: list[FaceSample]
     face_key_lookup: dict[tuple[tuple[float, float, float], ...], int]
@@ -89,6 +142,8 @@ class MeshIndex:
 
     @classmethod
     def from_shape(cls, shape) -> "MeshIndex":
+        """Create a mesh index from all faces of a shape."""
+
         faces = list(shape.faces())
         return cls(
             faces=faces,
@@ -107,6 +162,8 @@ class MeshIndex:
         )
 
     def ensure_adjacency(self) -> None:
+        """Build the face adjacency map on first use."""
+
         if self.adjacent_face_indices is not None:
             return
         edge_to_face_indices: defaultdict[object, set[int]] = defaultdict(set)
@@ -121,23 +178,33 @@ class MeshIndex:
         self.adjacent_face_indices = adjacency
 
     def face_set(self, face_indices: Iterable[int]) -> list[Face]:
+        """Return faces by index while preserving the provided order."""
+
         return [self.faces[index] for index in face_indices]
 
 
 # Basic numeric and vector helpers
 def _rounded_vertex_key(vector: Vector, digits: int = 9) -> tuple[float, float, float]:
+    """Convert a vector into a rounded, hashable key."""
+
     return tuple(round(value, digits) for value in vector)
 
 
 def _vector_rows(vectors: Sequence[Vector]) -> np.ndarray:
+    """Convert vectors into a NumPy row matrix."""
+
     return np.asarray([tuple(vector) for vector in vectors], dtype=float)
 
 
 def _mean_scalar(values: Sequence[float]) -> float:
+    """Return the arithmetic mean of scalar values."""
+
     return sum(values) / len(values)
 
 
 def _median_scalar(values: Sequence[float]) -> float:
+    """Return the median of scalar values."""
+
     ordered = sorted(values)
     middle = len(ordered) // 2
     if len(ordered) % 2:
@@ -146,11 +213,15 @@ def _median_scalar(values: Sequence[float]) -> float:
 
 
 def _std_scalar(values: Sequence[float]) -> float:
+    """Return the population standard deviation of scalar values."""
+
     mean = _mean_scalar(values)
     return sqrt(sum((value - mean) ** 2 for value in values) / len(values))
 
 
 def _mean_vector(vectors: Sequence[Vector]) -> Vector:
+    """Return the arithmetic mean of vectors."""
+
     total = Vector()
     for vector in vectors:
         total += vector
@@ -158,6 +229,8 @@ def _mean_vector(vectors: Sequence[Vector]) -> Vector:
 
 
 def _point_rows(points: Sequence[Sequence[float]]) -> np.ndarray:
+    """Convert point coordinates into a NumPy row matrix."""
+
     return np.asarray(points, dtype=float)
 
 
@@ -165,6 +238,8 @@ def _point_rows(points: Sequence[Sequence[float]]) -> np.ndarray:
 def _cluster_points(
     points: Sequence[Sequence[float]], eps: float, min_samples: int
 ) -> list[np.ndarray]:
+    """Cluster points with DBSCAN and return one mask per cluster."""
+
     if len(points) < min_samples:
         return []
     labels = DBSCAN(eps=eps, min_samples=min_samples).fit(_point_rows(points)).labels_
@@ -172,18 +247,24 @@ def _cluster_points(
 
 
 def _edge_key(edge) -> EdgeKey:
+    """Create an order-independent key for an edge."""
+
     vertices = edge.vertices()
     ends = sorted(_rounded_vertex_key(vertex.center()) for vertex in vertices)
     return ends[0], ends[1]
 
 
 def _face_key(face: Face) -> tuple[tuple[float, float, float], ...]:
+    """Create an order-independent key for a face."""
+
     return tuple(
         sorted(_rounded_vertex_key(vertex.center()) for vertex in face.vertices())
     )
 
 
 def _as_face(value: Any, context: str) -> Face:
+    """Extract a Face from a build123d value or raise a descriptive error."""
+
     if isinstance(value, Face):
         return value
     face_method = getattr(value, "face", None)
@@ -195,6 +276,8 @@ def _as_face(value: Any, context: str) -> Face:
 
 
 def _plane_basis(normal: Vector) -> tuple[Vector, Vector]:
+    """Construct an orthonormal basis lying in a plane."""
+
     helper = Vector(1.0, 0.0, 0.0)
     if abs(helper.dot(normal)) > 0.9:
         helper = Vector(0.0, 1.0, 0.0)
@@ -206,12 +289,16 @@ def _plane_basis(normal: Vector) -> tuple[Vector, Vector]:
 def _plane_point_distances(
     points: Sequence[Vector], plane_origin: Vector, plane_normal: Vector
 ) -> list[float]:
+    """Measure point distances from a plane."""
+
     return [abs((point - plane_origin).dot(plane_normal)) for point in points]
 
 
 def _pick_non_collinear_triplet(
     points: Sequence[Vector],
 ) -> tuple[Vector, Vector, Vector] | None:
+    """Return the first non-collinear triplet of points, if any."""
+
     if len(points) < 3:
         return None
     for point_a, point_b, point_c in combinations(points, 3):
@@ -223,6 +310,8 @@ def _pick_non_collinear_triplet(
 def _cluster_unit_vectors(
     vectors: Sequence[Vector], eps: float, min_samples: int
 ) -> list[np.ndarray]:
+    """Cluster unit vectors with cosine-distance DBSCAN."""
+
     if len(vectors) < min_samples:
         return []
     labels = (
@@ -236,6 +325,8 @@ def _cluster_unit_vectors(
 def _circumradius_from_points(
     point_a: Vector, point_b: Vector, point_c: Vector
 ) -> float | None:
+    """Return the circumradius of three non-collinear points."""
+
     side_a = (point_b - point_c).length
     side_b = (point_a - point_c).length
     side_c = (point_a - point_b).length
@@ -246,6 +337,8 @@ def _circumradius_from_points(
 
 
 def _unique_face_vertices(faces: Sequence[Face]) -> list[Vector]:
+    """Collect unique face vertices using rounded coordinates."""
+
     vertices: dict[tuple[float, float, float], Vector] = {}
     for face in faces:
         for vertex in face.vertices():
@@ -255,6 +348,8 @@ def _unique_face_vertices(faces: Sequence[Face]) -> list[Vector]:
 
 
 def _normalized(vector: Vector | Sequence[float]) -> Vector:
+    """Return a normalized vector or raise for near-zero input."""
+
     unit = Vector(vector)
     if unit.length <= EPS:
         raise ValueError("Cannot normalize near-zero vector")
@@ -262,6 +357,8 @@ def _normalized(vector: Vector | Sequence[float]) -> Vector:
 
 
 def _canonicalize_direction(direction: Vector | Sequence[float]) -> Vector:
+    """Flip a direction to a stable canonical orientation."""
+
     unit = _normalized(direction)
     values = tuple(unit)
     max_index = max(range(3), key=lambda i: abs(values[i]))
@@ -269,6 +366,8 @@ def _canonicalize_direction(direction: Vector | Sequence[float]) -> Vector:
 
 
 def _fit_plane_to_points(points: Sequence[Vector]) -> tuple[Vector, Vector]:
+    """Fit a plane to points with singular value decomposition."""
+
     if len(points) < 3:
         raise ValueError("Need at least three points to fit a plane")
     centroid = _mean_vector(points)
@@ -285,6 +384,8 @@ def _bfs_patch(
     allowed_indices: set[int],
     max_depth: int,
 ) -> list[int]:
+    """Collect a local face patch with bounded breadth-first search."""
+
     mesh_index.ensure_adjacency()
     assert mesh_index.adjacent_face_indices is not None
     visited = {seed_index}
@@ -308,6 +409,8 @@ def _group_indices_by_area(
     allowed_indices: set[int],
     tol_digits: int = 5,
 ) -> list[list[int]]:
+    """Group face indices by approximately equal face area."""
+
     by_area: defaultdict[float, list[int]] = defaultdict(list)
     for face_index in allowed_indices:
         by_area[round(mesh_index.faces[face_index].area, tol_digits)].append(face_index)
@@ -315,6 +418,8 @@ def _group_indices_by_area(
 
 
 def _indices_from_sewn_component(mesh_index: MeshIndex, component) -> list[int]:
+    """Map a sewn component back to mesh face indices."""
+
     indices = []
     for face in component.faces():
         face_index = mesh_index.face_key_lookup.get(_face_key(face))
@@ -326,6 +431,8 @@ def _indices_from_sewn_component(mesh_index: MeshIndex, component) -> list[int]:
 def _build_face_edge_midpoint_adjacency(
     mesh_index: MeshIndex,
 ) -> dict[int, list[tuple[int, Vector]]]:
+    """Build face adjacency keyed by shared edge midpoints."""
+
     edge_to_faces: defaultdict[EdgeKey, list[int]] = defaultdict(list)
     edge_midpoints: dict[EdgeKey, Vector] = {}
 
@@ -359,6 +466,8 @@ def _build_face_edge_midpoint_adjacency(
 
 # Primitive face builders
 def build_plane_face(patch: PlanePatch) -> Face:
+    """Create a planar Face from a fitted plane patch."""
+
     u_size = patch.u_max - patch.u_min
     v_size = patch.v_max - patch.v_min
     u_center = (patch.u_min + patch.u_max) / 2.0
@@ -372,6 +481,8 @@ def build_plane_face(patch: PlanePatch) -> Face:
 
 
 def build_cylinder_face(patch: CylinderPatch, support_faces: Sequence[Face]) -> Face:
+    """Create a cylindrical Face from a fitted cylinder patch."""
+
     vertices = _unique_face_vertices(support_faces)
     axis_values = [
         (vertex - patch.axis_point).dot(patch.axis_direction) for vertex in vertices
@@ -402,6 +513,8 @@ def build_cylinder_face(patch: CylinderPatch, support_faces: Sequence[Face]) -> 
 
 
 def build_sphere_face(patch: SpherePatch, support_faces: Sequence[Face]) -> Face:
+    """Create a spherical Face from a fitted sphere patch."""
+
     vertices = _unique_face_vertices(support_faces)
     radius = _median_scalar([(vertex - patch.center).length for vertex in vertices])
     return _as_face(Pos(*tuple(patch.center)) * Sphere(radius), "sphere primitive")
@@ -409,6 +522,8 @@ def build_sphere_face(patch: SpherePatch, support_faces: Sequence[Face]) -> Face
 
 # Local signature and patch-growth helpers
 def _relative_radius_spread(signature: tuple[float, ...]) -> float:
+    """Measure radius spread relative to the midpoint value."""
+
     finite = [value for value in signature if np.isfinite(value)]
     if len(finite) < 3:
         return float("inf")
@@ -426,6 +541,8 @@ def _face_radius_signature(
     face_index: int,
     allowed_indices: set[int],
 ) -> tuple[float, ...]:
+    """Estimate local radii implied by neighboring faces."""
+
     sample = mesh_index.face_samples[face_index]
     estimates: list[float] = []
     for neighbor_index, edge_midpoint in edge_adjacency[face_index]:
@@ -445,6 +562,8 @@ def _connected_face_components(
     mesh_index: MeshIndex,
     face_indices: set[int],
 ) -> list[list[int]]:
+    """Split a face set into connected components."""
+
     mesh_index.ensure_adjacency()
     assert mesh_index.adjacent_face_indices is not None
     remaining = set(face_indices)
@@ -472,6 +591,8 @@ def _sphere_like_face_components(
     allowed_indices: set[int],
     similarity_tolerance: float = 1.0,
 ) -> list[list[int]]:
+    """Return connected components whose signatures look spherical."""
+
     edge_adjacency = _build_face_edge_midpoint_adjacency(mesh_index)
     sphere_like_indices: set[int] = set()
 
@@ -493,6 +614,8 @@ def _sphere_like_face_components(
 def _cylinder_face_error(
     sample: FaceSample, patch: CylinderPatch, shape_scale: float
 ) -> float | None:
+    """Score how well a face sample matches a cylinder patch."""
+
     offset = sample.center - patch.axis_point
     radial = offset - patch.axis_direction * offset.dot(patch.axis_direction)
     if radial.length <= EPS:
@@ -508,6 +631,8 @@ def _cylinder_face_error(
 def _sphere_face_error(
     sample: FaceSample, patch: SpherePatch, shape_scale: float
 ) -> float | None:
+    """Score how well a face sample matches a sphere patch."""
+
     radial = patch.center - sample.center
     if radial.length <= EPS:
         return None
@@ -520,6 +645,8 @@ def _sphere_face_error(
 
 
 def _bounding_boxes_overlap(box1, box2, tolerance: float = 0.0) -> bool:
+    """Return whether two axis-aligned bounding boxes overlap."""
+
     return not (
         box1.max.X < box2.min.X - tolerance
         or box2.max.X < box1.min.X - tolerance
@@ -554,6 +681,8 @@ def grow_curved_patch(
     allowed_indices: set[int],
     shape_scale: float,
 ) -> CylinderPatch | SpherePatch:
+    """Grow a curved patch across adjacent compatible faces."""
+
     mesh_index.ensure_adjacency()
     assert mesh_index.adjacent_face_indices is not None
     claimed = set(patch.face_indices) & allowed_indices
@@ -618,6 +747,8 @@ def _plane_like_face_components(
     allowed_indices: set[int],
     normal_digits: int = 3,
 ) -> list[list[int]]:
+    """Return connected components of approximately coplanar faces."""
+
     normal_groups: defaultdict[tuple[float, float, float], set[int]] = defaultdict(set)
     for face_index in allowed_indices:
         normal = _canonicalize_direction(mesh_index.face_samples[face_index].normal)
@@ -641,6 +772,8 @@ def _detect_planes_from_clean_proxy(
     min_proxy_edges: int = 4,
     min_proxy_area_ratio: float = 0.5,
 ) -> list[PlanePatch]:
+    """Detect dominant planes from cleaned proxy faces."""
+
     shape_scale = shape.bounding_box().diagonal
     plane_tolerance = shape_scale * plane_tolerance_factor
     bbox_tolerance = shape_scale * bbox_tolerance_factor
@@ -712,6 +845,8 @@ def _build_plane_patch(
     plane_tolerance_factor: float = 0.003,
     normal_tolerance: float = 0.01,
 ) -> PlanePatch | None:
+    """Fit and validate a plane patch from candidate faces."""
+
     if len(face_indices) < 2:
         return None
     support_faces = mesh_index.face_set(face_indices)
@@ -748,6 +883,8 @@ def _build_plane_patch(
 
 
 def _direction_angle_delta(direction_a: Vector, direction_b: Vector) -> float:
+    """Return the unsigned angle between two directions."""
+
     dot = abs(
         _canonicalize_direction(direction_a).dot(_canonicalize_direction(direction_b))
     )
@@ -760,6 +897,8 @@ def _perpendicular_axis_shift(
     point_b: Vector,
     direction_b: Vector,
 ) -> float:
+    """Measure the perpendicular separation between two axes."""
+
     average_direction = _canonicalize_direction(
         _mean_vector(
             [_canonicalize_direction(direction_a), _canonicalize_direction(direction_b)]
@@ -778,6 +917,8 @@ def merge_equivalent_cylinders(
     axis_shift_factor: float = 0.015,
     radius_ratio_tolerance: float = 0.12,
 ) -> list[CylinderPatch]:
+    """Merge cylinder patches that describe the same cylinder."""
+
     groups: list[list[CylinderPatch]] = []
     for patch in patches:
         placed = False
@@ -855,6 +996,8 @@ def validate_bounded_cylinder(
     plane_parallel_tolerance: float = 0.02,
     end_radius_ratio_tolerance: float = 0.12,
 ) -> bool:
+    """Validate that support faces form a bounded cylindrical patch."""
+
     vertices = _unique_face_vertices(support_faces)
     if len(vertices) < 6:
         return False
@@ -940,6 +1083,8 @@ def validate_bounded_cylinder(
 def fit_local_cylinder(
     samples: Sequence[FaceSample], shape_scale: float
 ) -> CylinderPatch | None:
+    """Fit a cylinder patch to local face samples."""
+
     records: list[tuple[tuple[int, int], Vector]] = []
     for sample_a, sample_b in combinations(samples, 2):
         cross = sample_a.normal.cross(sample_b.normal)
@@ -1058,6 +1203,8 @@ def _intersect_2d_lines(
     point_b: tuple[float, float],
     direction_b: tuple[float, float],
 ) -> tuple[float, float] | None:
+    """Intersect two 2D lines expressed as point-direction pairs."""
+
     determinant = direction_b[0] * direction_a[1] - direction_a[0] * direction_b[1]
     if abs(determinant) <= EPS:
         return None
@@ -1077,6 +1224,8 @@ def detect_planes(
     plane_tolerance_factor: float = 0.003,
     min_component_size: int = 4,
 ) -> list[PlanePatch]:
+    """Detect planar regions in a mesh."""
+
     shape_scale = mesh.bounding_box().diagonal
     plane_patches = _detect_planes_from_clean_proxy(mesh, mesh_index)
     claimed = (
@@ -1112,6 +1261,8 @@ def _cylinder_like_face_indices(
     pair_similarity_tolerance: float = 0.35,
     anisotropy_ratio_threshold: float = 1.5,
 ) -> set[int]:
+    """Broadly classify which faces are plausible cylinder candidates."""
+
     edge_adjacency = _build_face_edge_midpoint_adjacency(mesh_index)
     cylinder_like_indices: set[int] = set()
 
@@ -1152,6 +1303,8 @@ def fit_local_sphere(
     radius_std_ratio_limit: float = 0.2,
     normal_error_limit: float = 0.08,
 ) -> SpherePatch | None:
+    """Fit a sphere patch to local face samples."""
+
     if len(samples) < 4:
         return None
 
@@ -1217,6 +1370,8 @@ def _cylinder_patch_looks_spherical(
     shape_scale: float,
     residual_factor: float = 0.35,
 ) -> bool:
+    """Reject cylinders that are better explained by a sphere fit."""
+
     sphere_patch = fit_local_sphere(samples, shape_scale)
     if sphere_patch is None:
         return False
@@ -1231,6 +1386,8 @@ def _finalize_cylinder_patch(
     min_component_size: int,
     require_bounded_validation: bool,
 ) -> CylinderPatch | None:
+    """Grow, refit, and validate a cylinder patch candidate."""
+
     grown_patch = grow_curved_patch(
         mesh_index,
         patch,
@@ -1285,6 +1442,8 @@ def detect_cylinders(
     local_seed_depth: int = 2,
     min_component_size: int = 4,
 ) -> list[CylinderPatch]:
+    """Detect cylindrical regions in a mesh."""
+
     remaining = set(range(len(mesh_index.faces))) - blocked_indices
     shape_scale = mesh.bounding_box().diagonal
     patches: list[CylinderPatch] = []
@@ -1368,6 +1527,8 @@ def suppress_duplicate_spheres(
     radius_ratio_tolerance: float = 0.1,
     overlap_ratio_tolerance: float = 0.5,
 ) -> list[SpherePatch]:
+    """Remove overlapping sphere detections that describe the same surface."""
+
     kept: list[SpherePatch] = []
     for patch in sorted(patches, key=lambda p: (p.residual, -len(p.face_indices))):
         duplicate = False
@@ -1399,6 +1560,8 @@ def detect_spheres(
     similarity_tolerance: float = 0.2,
     min_component_size: int = 6,
 ) -> list[SpherePatch]:
+    """Detect spherical regions in a mesh."""
+
     remaining = set(range(len(mesh_index.faces))) - blocked_indices
     shape_scale = mesh.bounding_box().diagonal
     patches: list[SpherePatch] = []
@@ -1449,15 +1612,23 @@ def detect_spheres(
 
 
 # Shape to build123d code conversion
-tol = 1e-4
+TOLERANCE = 1e-4
 
 
 def _offset(base: str, val: float) -> str:
-    return f"{base} * " if abs(val) < tol else f"{base}.offset({val:0.6g}) * "
+    """Format a plane offset expression for generated code."""
+
+    return f"{base} * " if abs(val) < TOLERANCE else f"{base}.offset({val:0.6g}) * "
 
 
 def _pos(a: float, b: float) -> str:
-    return "" if (abs(a) < tol and abs(b) < tol) else f"Pos({a:0.6g}, {b:0.6g}) * "
+    """Format an in-plane translation expression for generated code."""
+
+    return (
+        ""
+        if (abs(a) < TOLERANCE and abs(b) < TOLERANCE)
+        else f"Pos({a:0.6g}, {b:0.6g}) * "
+    )
 
 
 # All axis-aligned plane configs:
@@ -1516,6 +1687,8 @@ _PLANE_CONFIGS = [
 
 
 def plane_sort_key(s: str) -> tuple:
+    """Extract a stable sort key from generated plane-based code."""
+
     # Extract the plane/location name (e.g. "Plane.XY", "Plane.ZX", "Location")
     m = re.match(r"(Plane\.\w+|Location)", s)
     name = m.group(1) if m else "ZZZ"  # unknowns sort last
@@ -1528,6 +1701,8 @@ def plane_sort_key(s: str) -> tuple:
 
 
 def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
+    """Convert detected primitive faces into build123d code strings."""
+
     code_lines: list[str] = []
     for primitive in primitives:
         match primitive.geom_type:
@@ -1538,7 +1713,7 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
 
                 # Find matching config (or fall back to None)
                 cfg = next(
-                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - tol), None
+                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - TOLERANCE), None
                 )
 
                 if cfg is not None:
@@ -1558,15 +1733,15 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
                 pln = shifted_plane
                 bbox = center_oriented_rect.bounding_box()
 
-                w, h = bbox.size.X, bbox.size.Y
+                w, height = bbox.size.X, bbox.size.Y
                 rect = _as_face(
-                    pln * Rectangle(w, h, align=Align.MIN), "planar rectangle"
+                    pln * Rectangle(w, height, align=Align.MIN), "planar rectangle"
                 )
                 common = rect.intersect(primitive)
                 if not common or not isinstance(common[0], Face):
                     raise RuntimeError("Error in generating planar rectangle")
-                elif abs(common[0].area - primitive.area) > tol:
-                    h, w = w, h
+                if abs(common[0].area - primitive.area) > TOLERANCE:
+                    height, w = w, height
 
                 x, y, z = (round(d, TOL_DIGITS) for d in pln.origin)
 
@@ -1580,27 +1755,24 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
                 rect_str = (
                     pln_str
                     + pos_str
-                    + f"Rectangle({w:0.6g}, {h:0.6g}, align=Align.MIN)"
+                    + f"Rectangle({w:0.6g}, {height:0.6g}, align=Align.MIN)"
                 )
                 code_lines.append(rect_str)
 
             case GeomType.CYLINDER:
-                # TODO: Convert this to extrude(Plane(..) * CenterArc(..))
                 pln = Plane(primitive.axis_of_rotation)
                 z_dir = pln.z_dir
                 # Find matching config (or fall back to None)
                 cfg = next(
-                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - tol), None
+                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - TOLERANCE), None
                 )
                 if cfg is not None:
                     z_vec, x_vec, pln_name, sign, offset_fn, pos_fn = cfg
                     pln = Plane(pln.origin, x_dir=x_vec, z_dir=z_vec)
 
-                circle_center = pln.to_local_coords(primitive.axis_of_rotation.position)
                 bbox = primitive.bounding_box()
                 local_cyl = pln.to_local_coords(primitive)
-                h = local_cyl.bounding_box().size.Z
-                # h = bbox.size.dot(primitive.axis_of_rotation.direction)
+                height = local_cyl.bounding_box().size.Z
                 x, y, z = (round(d, TOL_DIGITS) for d in pln.origin)
                 if cfg is not None:
                     pln_str = _offset(pln_name, sign * offset_fn(x, y, z))
@@ -1611,12 +1783,15 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
                 cylinder_str = (
                     pln_str
                     + pos_str
-                    + f"Face.extrude(Circle({primitive.radius:0.6g}).edge(), (0, 0, {h:0.6g}))"
+                    + f"Face.extrude(Circle({primitive.radius:0.6g}).edge(), (0, 0, {height:0.6g}))"
                 )
                 code_lines.append(cylinder_str)
 
             case GeomType.SPHERE:
-                sphere_str = f"Pos({primitive.position:0.6g}) * Sphere({primitive.radius:0.6g}).faces().filter_by(GeomType.SPHERE)[0]"
+                sphere_str = (
+                    f"Pos({primitive.position:0.6g}) * "
+                    f"Sphere({primitive.radius:0.6g}).faces().filter_by(GeomType.SPHERE)[0]"
+                )
                 code_lines.append(sphere_str)
 
     return code_lines
@@ -1626,6 +1801,25 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
 def detect_primitives(
     mesh: Shape,
 ) -> tuple[ShapeList[Face], ShapeList[Face], list[str]]:
+    """Detect analytic primitives in a mesh and return faces, leftovers, and code.
+
+    This is the user-facing entry point for STL-to-BREP reconstruction. The
+    mesh is indexed first so face geometry and adjacency can be reused
+    throughout the pipeline.
+
+    Detection proceeds in stages:
+    1. Planes are found first from cleaned proxy faces and coplanar connected
+       components.
+    2. Spheres are found next from broad radius-signature classification,
+       connected or sewn regions, local sphere fitting, and region growth.
+    3. Cylinders are detected last from area-grouped sewn regions and local
+       cylinder seeds, then grown, refit, and validated.
+
+    Each accepted patch is converted into a build123d Face, unmatched mesh
+    faces are returned as leftovers, and the generated code strings are sorted
+    in the same order as the returned primitives.
+    """
+
     mesh_index = MeshIndex.from_shape(mesh)
     # shape_scale = mesh.bounding_box().diagonal
 
@@ -1648,11 +1842,11 @@ def detect_primitives(
         mesh_index,
         plane_indices | sphere_indices,
     )
-    cylinder_indices = (
-        set().union(*(patch.face_indices for patch in cylinder_patches))
-        if cylinder_patches
-        else set()
-    )
+    # cylinder_indices = (
+    #     set().union(*(patch.face_indices for patch in cylinder_patches))
+    #     if cylinder_patches
+    #     else set()
+    # )
 
     patches: list[DetectedPatch] = [*plane_patches, *cylinder_patches, *sphere_patches]
 
