@@ -149,14 +149,14 @@ def make_mesh_index(
     )
 
 
-def test_cylinder():
+def test_cylinder(tmp_path):
     mesh = mesh_and_reload(
         split(
             Cylinder(1, 2, align=None) + Sphere(1),
             Plane.XY.offset(1).rotated((0, 30, 0)),
             Keep.BOTTOM,
         ),
-        "/tmp/surface_detection_v3_cylinder.stl",
+        tmp_path / "surface_detection_v3_cylinder.stl",
     )
     primitives, leftovers, code_lines = bfs.detect_primitives(mesh)
     assert len(primitives.filter_by(GeomType.PLANE)) >= 1
@@ -167,8 +167,8 @@ def test_cylinder():
         assert geom_equal(primitive, code)
 
 
-def test_sphere():
-    mesh = mesh_and_reload(Sphere(1), "/tmp/surface_detection_v3_sphere.stl")
+def test_sphere(tmp_path):
+    mesh = mesh_and_reload(Sphere(1), tmp_path / "surface_detection_v3_sphere.stl")
     primitives, leftovers, code_lines = bfs.detect_primitives(mesh)
     assert len(primitives.filter_by(GeomType.PLANE)) == 0
     assert len(primitives.filter_by(GeomType.CYLINDER)) == 0
@@ -179,9 +179,9 @@ def test_sphere():
         assert geom_equal(primitive, code)
 
 
-def test_box():
+def test_box(tmp_path):
     mesh = mesh_and_reload(
-        fillet(Box(1, 1, 1).edges(), 0.1), "/tmp/surface_detection_v3_box.stl"
+        fillet(Box(1, 1, 1).edges(), 0.1), tmp_path / "surface_detection_v3_box.stl"
     )
     primitives, leftovers, code_lines = bfs.detect_primitives(mesh)
     assert len(primitives.filter_by(GeomType.PLANE)) == 6
