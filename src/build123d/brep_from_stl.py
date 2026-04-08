@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -10,17 +11,20 @@ from typing import Literal
 
 import numpy as np
 from build123d import (
+    Align,
     Axis,
     Cylinder,
     Face,
     GeomType,
+    Location,
     Plane,
     Pos,
     Rectangle,
+    Shape,
     ShapeList,
-    Shell,
     Sphere,
     Vector,
+    TOL_DIGITS,
 )
 from sklearn.cluster import DBSCAN
 
@@ -1408,8 +1412,179 @@ def detect_spheres(
     )
 
 
+# Shape to build123d code conversion
+tol = 1e-4
+
+
+def _offset(base: str, val: float) -> str:
+    return f"{base} * " if abs(val) < tol else f"{base}.offset({val:0.6g}) * "
+
+
+def _pos(a: float, b: float) -> str:
+    return "" if (abs(a) < tol and abs(b) < tol) else f"Pos({a:0.6g}, {b:0.6g}) * "
+
+
+# All axis-aligned plane configs:
+# (z_dir_vec, x_dir_vec, plane_name, offset_sign, offset_coord, pos_coords)
+# offset_coord and pos_coords are lambdas over (x, y, z)
+_PLANE_CONFIGS = [
+    (
+        Vector(0, 0, 1),
+        Vector(1, 0, 0),
+        "Plane.XY",
+        1,
+        lambda x, y, z: z,
+        lambda x, y, z: (x, y),
+    ),
+    (
+        Vector(0, 0, -1),
+        Vector(0, 1, 0),
+        "Plane.YX",
+        -1,
+        lambda x, y, z: z,
+        lambda x, y, z: (y, x),
+    ),
+    (
+        Vector(0, 1, 0),
+        Vector(0, 0, 1),
+        "Plane.ZX",
+        1,
+        lambda x, y, z: y,
+        lambda x, y, z: (z, x),
+    ),
+    (
+        Vector(0, -1, 0),
+        Vector(1, 0, 0),
+        "Plane.XZ",
+        -1,
+        lambda x, y, z: y,
+        lambda x, y, z: (x, z),
+    ),
+    (
+        Vector(1, 0, 0),
+        Vector(0, 1, 0),
+        "Plane.YZ",
+        1,
+        lambda x, y, z: x,
+        lambda x, y, z: (y, z),
+    ),
+    (
+        Vector(-1, 0, 0),
+        Vector(0, 0, 1),
+        "Plane.ZY",
+        -1,
+        lambda x, y, z: x,
+        lambda x, y, z: (z, y),
+    ),
+]
+
+
+def plane_sort_key(s: str) -> tuple:
+    # Extract the plane/location name (e.g. "Plane.XY", "Plane.ZX", "Location")
+    m = re.match(r"(Plane\.\w+|Location)", s)
+    name = m.group(1) if m else "ZZZ"  # unknowns sort last
+
+    # Extract numeric offset if present, e.g. Plane.XY.offset(-3.5) → -3.5
+    offset_m = re.search(r"\.offset\(([^)]+)\)", s)
+    offset = float(offset_m.group(1)) if offset_m else 0.0
+
+    return (name, offset)
+
+
+def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
+    code_lines: list[str] = []
+    for primitive in primitives:
+        match primitive.geom_type:
+            case GeomType.PLANE:
+
+                pln = Plane(primitive)
+                z_dir = pln.z_dir
+
+                # Find matching config (or fall back to None)
+                cfg = next(
+                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - tol), None
+                )
+
+                if cfg is not None:
+                    z_vec, x_vec, pln_name, sign, offset_fn, pos_fn = cfg
+                    pln = Plane(pln.origin, x_dir=x_vec, z_dir=z_vec)
+
+                center_oriented_rect = pln.to_local_coords(primitive)
+                local_origin = (
+                    center_oriented_rect.vertices()
+                    .group_by(Axis.X)[0]
+                    .sort_by(Axis.Y)[0]
+                )
+                global_origin = pln.from_local_coords(local_origin)
+                pln = pln.shift_origin(global_origin)
+                bbox = center_oriented_rect.bounding_box()
+
+                w, h = bbox.size.X, bbox.size.Y
+                rect = pln * Rectangle(w, h, align=Align.MIN)
+                common = rect.intersect(primitive)
+                if not common or not isinstance(common[0], Face):
+                    raise RuntimeError("Error in generating planar rectangle")
+                elif abs(common[0].area - primitive.area) > tol:
+                    h, w = w, h
+
+                x, y, z = (round(d, TOL_DIGITS) for d in pln.origin)
+
+                if cfg is not None:
+                    pln_str = _offset(pln_name, sign * offset_fn(x, y, z))
+                    pos_str = _pos(*pos_fn(x, y, z))
+                else:
+                    pln_str = ""
+                    pos_str = f"Location{Location(pln):0.6g} * "
+
+                rect_str = (
+                    pln_str
+                    + pos_str
+                    + f"Rectangle({w:0.6g}, {h:0.6g}, align=Align.MIN)"
+                )
+                code_lines.append(rect_str)
+
+            case GeomType.CYLINDER:
+                # TODO: Convert this to extrude(Plane(..) * CenterArc(..))
+                pln = Plane(primitive.axis_of_rotation)
+                z_dir = pln.z_dir
+                # Find matching config (or fall back to None)
+                cfg = next(
+                    (c for c in _PLANE_CONFIGS if z_dir.dot(c[0]) > 1 - tol), None
+                )
+                if cfg is not None:
+                    z_vec, x_vec, pln_name, sign, offset_fn, pos_fn = cfg
+                    pln = Plane(pln.origin, x_dir=x_vec, z_dir=z_vec)
+
+                circle_center = pln.to_local_coords(primitive.axis_of_rotation.position)
+                bbox = primitive.bounding_box()
+                local_cyl = pln.to_local_coords(primitive)
+                h = local_cyl.bounding_box().size.Z
+                # h = bbox.size.dot(primitive.axis_of_rotation.direction)
+                x, y, z = (round(d, TOL_DIGITS) for d in pln.origin)
+                if cfg is not None:
+                    pln_str = _offset(pln_name, sign * offset_fn(x, y, z))
+                    pos_str = _pos(*pos_fn(x, y, z))
+                else:
+                    pln_str = f"Location{primitive.location:0.6g} * "
+                    pos_str = ""
+                cylinder_str = (
+                    pln_str
+                    + pos_str
+                    + f"Face.extrude(Circle({primitive.radius:0.6g}).edge(), (0, 0, {h:0.6g}))"
+                )
+                code_lines.append(cylinder_str)
+
+            case GeomType.SPHERE:
+                sphere_str = f"Pos({primitive.position:0.6g}) * Sphere({primitive.radius:0.6g}).faces().filter_by(GeomType.SPHERE)[0]"
+                code_lines.append(sphere_str)
+
+    return code_lines
+
+
 # High-level pipeline
-def detect_primitives(mesh) -> tuple[ShapeList[Face], ShapeList[Face]]:
+def detect_primitives(
+    mesh: Shape,
+) -> tuple[ShapeList[Face], ShapeList[Face], list[str]]:
     mesh_index = MeshIndex.from_shape(mesh)
     # shape_scale = mesh.bounding_box().diagonal
 
@@ -1460,4 +1635,14 @@ def detect_primitives(mesh) -> tuple[ShapeList[Face], ShapeList[Face]]:
 
     leftovers = mesh_index.face_set(sorted(set(range(len(mesh_index.faces))) - claimed))
 
-    return ShapeList(primitives), ShapeList(leftovers)
+    code_lines = shapes_to_code(primitives)
+    primitive_code_pairs = sorted(
+        zip(primitives, code_lines),
+        key=lambda item: plane_sort_key(item[1]),
+    )
+    if primitive_code_pairs:
+        primitives, code_lines = map(list, zip(*primitive_code_pairs))
+    else:
+        primitives, code_lines = [], []
+
+    return ShapeList(primitives), ShapeList(leftovers), code_lines
