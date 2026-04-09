@@ -109,6 +109,7 @@ class CylinderPatch:
     axis_point: Vector
     axis_direction: Vector
     radius: float
+    normal_sign: Literal[-1, 1]
     residual: float
 
     @property
@@ -509,7 +510,7 @@ def build_cylinder_face(patch: CylinderPatch, support_faces: Sequence[Face]) -> 
         raise RuntimeError(
             "Expected cylindrical face while building cylinder primitive"
         )
-    return filtered_faces[0]
+    return filtered_faces[0] if patch.normal_sign > 0 else -filtered_faces[0]
 
 
 def build_sphere_face(patch: SpherePatch, support_faces: Sequence[Face]) -> Face:
@@ -721,6 +722,7 @@ def grow_curved_patch(
             axis_point=patch.axis_point,
             axis_direction=patch.axis_direction,
             radius=_mean_scalar(radii) if radii else patch.radius,
+            normal_sign=patch.normal_sign,
             residual=_mean_scalar(residuals) if residuals else patch.residual,
         )
 
@@ -975,6 +977,11 @@ def merge_equivalent_cylinders(
                 axis_point=axis_point,
                 axis_direction=axis_direction,
                 radius=_mean_scalar(radii),
+                normal_sign=(
+                    1
+                    if sum(p.normal_sign * len(p.face_indices) for p in group) >= 0
+                    else -1
+                ),
                 residual=(
                     _mean_scalar(residuals)
                     if residuals
@@ -1171,13 +1178,17 @@ def fit_local_cylinder(
 
     radii = []
     residuals = []
+    signed_alignments = []
     for sample in face_group:
         offset = sample.center - axis_point
         radial = offset - axis_direction * offset.dot(axis_direction)
         if radial.length <= EPS:
             continue
+        radial_direction = radial.normalized()
         radii.append(radial.length)
-        residuals.append(1.0 - abs(radial.normalized().dot(sample.normal)))
+        signed_alignment = radial_direction.dot(sample.normal)
+        signed_alignments.append(signed_alignment)
+        residuals.append(1.0 - abs(signed_alignment))
     if not radii:
         return None
     radius = _mean_scalar(radii)
@@ -1193,6 +1204,7 @@ def fit_local_cylinder(
         axis_point=axis_point,
         axis_direction=axis_direction,
         radius=radius,
+        normal_sign=1 if _mean_scalar(signed_alignments) >= 0 else -1,
         residual=residual,
     )
 
@@ -1222,7 +1234,8 @@ def detect_planes(
     mesh_index: MeshIndex,
     normal_digits: int = 3,
     plane_tolerance_factor: float = 0.003,
-    min_component_size: int = 4,
+    min_component_size: int = 2,
+    min_two_face_area_factor: float = 0.05,
 ) -> list[PlanePatch]:
     """Detect planar regions in a mesh."""
 
@@ -1244,6 +1257,11 @@ def detect_planes(
             face_index for face_index in component_indices if face_index in remaining
         ]
         if len(component_indices) < min_component_size:
+            continue
+        if len(component_indices) == 2 and (
+            sum(mesh_index.faces[face_index].area for face_index in component_indices)
+            < (shape_scale**2) * min_two_face_area_factor
+        ):
             continue
         patch = _build_plane_patch(mesh_index, component_indices, shape_scale)
         if patch is None:
@@ -1414,13 +1432,12 @@ def _finalize_cylinder_patch(
             mesh_index.face_samples[index] for index in sorted(grown_patch.face_indices)
         ]
 
-    if _cylinder_patch_looks_spherical(grown_samples, grown_patch, shape_scale):
-        return None
-
     if require_bounded_validation:
         support_faces = mesh_index.face_set(sorted(grown_patch.face_indices))
         if not validate_bounded_cylinder(grown_patch, support_faces, shape_scale):
             return None
+    elif _cylinder_patch_looks_spherical(grown_samples, grown_patch, shape_scale):
+        return None
 
     return CylinderPatch(
         kind="cylinder",
@@ -1428,6 +1445,7 @@ def _finalize_cylinder_patch(
         axis_point=grown_patch.axis_point,
         axis_direction=grown_patch.axis_direction,
         radius=grown_patch.radius,
+        normal_sign=grown_patch.normal_sign,
         residual=grown_patch.residual,
     )
 
