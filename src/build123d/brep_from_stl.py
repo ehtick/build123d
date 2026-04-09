@@ -235,6 +235,22 @@ def _point_rows(points: Sequence[Sequence[float]]) -> np.ndarray:
     return np.asarray(points, dtype=float)
 
 
+def _evenly_spaced_subset[T](values: Sequence[T], max_count: int) -> list[T]:
+    """Return a deterministic evenly spaced subset of a sequence."""
+
+    if max_count <= 0:
+        return []
+    if len(values) <= max_count:
+        return list(values)
+    if max_count == 1:
+        return [values[0]]
+    last_index = len(values) - 1
+    return [
+        values[round(i * last_index / (max_count - 1))]
+        for i in range(max_count)
+    ]
+
+
 # Clustering and low-level geometry helpers
 def _cluster_points(
     points: Sequence[Sequence[float]], eps: float, min_samples: int
@@ -1088,12 +1104,16 @@ def validate_bounded_cylinder(
 
 
 def fit_local_cylinder(
-    samples: Sequence[FaceSample], shape_scale: float
+    samples: Sequence[FaceSample],
+    shape_scale: float,
+    max_pair_face_count: int = 64,
+    max_intersection_face_count: int = 64,
 ) -> CylinderPatch | None:
     """Fit a cylinder patch to local face samples."""
 
+    axis_samples = _evenly_spaced_subset(samples, max_pair_face_count)
     records: list[tuple[tuple[int, int], Vector]] = []
-    for sample_a, sample_b in combinations(samples, 2):
+    for sample_a, sample_b in combinations(axis_samples, 2):
         cross = sample_a.normal.cross(sample_b.normal)
         if cross.length <= 1e-3:
             continue
@@ -1123,10 +1143,11 @@ def fit_local_cylinder(
     )
     u_vec, v_vec = _plane_basis(axis_direction)
 
+    center_samples = _evenly_spaced_subset(face_group, max_intersection_face_count)
     points_2d = []
     normals_2d = []
     axis_coords = []
-    for sample in face_group:
+    for sample in center_samples:
         projected_normal = (sample.normal.dot(u_vec), sample.normal.dot(v_vec))
         projected_length = sqrt(projected_normal[0] ** 2 + projected_normal[1] ** 2)
         if projected_length <= 1e-3:

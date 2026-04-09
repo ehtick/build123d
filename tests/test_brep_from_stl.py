@@ -193,6 +193,22 @@ def test_box(tmp_path):
         assert geom_equal(primitive, code)
 
 
+def test_box_with_hole(tmp_path):
+    mesh = mesh_and_reload(
+        Box(5, 5, 1) - Cylinder(1, 1),
+        tmp_path / "surface_detection_v3_box_with_hole.stl",
+    )
+    primitives, leftovers, code_lines = bfs.detect_primitives(mesh)
+
+    assert len(primitives.filter_by(GeomType.PLANE)) == 6
+    assert len(primitives.filter_by(GeomType.CYLINDER)) == 1
+    assert len(primitives.filter_by(GeomType.SPHERE)) == 0
+    assert len(leftovers) == 0
+
+    for primitive, code in zip(primitives, code_lines):
+        assert geom_equal(primitive, code)
+
+
 def test_helper_edge_cases():
     face = Rectangle(1, 1).face()
 
@@ -247,6 +263,7 @@ def test_build_cylinder_face_error_paths(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     support_faces = [Rectangle(1, 1).face()]
@@ -281,6 +298,7 @@ def test_axis_property_and_build_cylinder_face_skips_axis_vertices(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     assert patch.axis.direction == Vector(0, 0, 1)
@@ -335,6 +353,7 @@ def test_sphere_like_face_components_and_face_error_helpers(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     sphere_patch = bfs.SpherePatch(
@@ -386,6 +405,7 @@ def test_grow_curved_patch_skips_zero_length_radials(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.25,
     )
     cylinder_mesh = make_mesh_index(
@@ -486,6 +506,7 @@ def test_merge_equivalent_cylinders_group_merge_branches():
             axis_point=Vector(0, 0, 0),
             axis_direction=Vector(0, 0, 1),
             radius=1.0,
+            normal_sign=1,
             residual=0.1,
         ),
         bfs.CylinderPatch(
@@ -494,6 +515,7 @@ def test_merge_equivalent_cylinders_group_merge_branches():
             axis_point=Vector(0, 0, 0),
             axis_direction=Vector(0, 0, 1),
             radius=1.0,
+            normal_sign=1,
             residual=0.2,
         ),
     ]
@@ -514,6 +536,7 @@ def test_merge_equivalent_cylinders_merges_group_with_residuals():
             axis_point=Vector(0, 0, 0),
             axis_direction=Vector(0, 0, 1),
             radius=1.0,
+            normal_sign=1,
             residual=0.1,
         ),
         bfs.CylinderPatch(
@@ -522,6 +545,7 @@ def test_merge_equivalent_cylinders_merges_group_with_residuals():
             axis_point=Vector(0, 0, 0),
             axis_direction=Vector(0, 0, 1),
             radius=1.0,
+            normal_sign=1,
             residual=0.2,
         ),
     ]
@@ -563,6 +587,7 @@ def test_validate_bounded_cylinder_basic_failure_modes(
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=patch_radius,
+        normal_sign=1,
         residual=0.0,
     )
     monkeypatch.setattr(bfs, "_unique_face_vertices", lambda _faces: vertices)
@@ -596,6 +621,7 @@ def test_validate_bounded_cylinder_late_failure_modes(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     monkeypatch.setattr(bfs, "_unique_face_vertices", lambda _faces: vertices)
@@ -627,6 +653,7 @@ def test_validate_bounded_cylinder_remaining_failure_modes(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
 
@@ -757,6 +784,7 @@ def test_validate_bounded_cylinder_remaining_failure_modes(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.5,
+        normal_sign=1,
         residual=0.0,
     )
     monkeypatch.setattr(
@@ -902,6 +930,25 @@ def test_fit_local_cylinder_remaining_failure_modes(monkeypatch):
     assert bfs.fit_local_cylinder(too_few_projected, 10.0) is None
 
 
+def test_fit_local_cylinder_large_sample_set():
+    samples = []
+    for index in range(96):
+        angle = 2.0 * np.pi * index / 96.0
+        x = float(np.cos(angle))
+        y = float(np.sin(angle))
+        z = -1.0 + 2.0 * (index % 12) / 11.0
+        samples.append(
+            make_face_sample(index, Vector(x, y, z), Vector(x, y, 0))
+        )
+
+    patch = bfs.fit_local_cylinder(samples, 10.0)
+
+    assert patch is not None
+    assert patch.axis_direction.dot(Vector(0, 0, 1)) == pytest.approx(1.0, abs=1e-2)
+    assert patch.radius == pytest.approx(1.0, abs=1e-2)
+    assert patch.normal_sign == 1
+
+
 def test_cylinder_like_face_indices_and_fit_local_sphere_failure_modes(monkeypatch):
     mesh_index = make_mesh_index(
         samples=[
@@ -1001,6 +1048,7 @@ def test_cylinder_sphere_disambiguation_and_finalize_cylinder(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=1.0,
     )
     samples = [make_face_sample(i, Vector(float(i), 0, 0), Vector(1, 0, 0)) for i in range(4)]
@@ -1033,6 +1081,7 @@ def test_cylinder_sphere_disambiguation_and_finalize_cylinder(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     monkeypatch.setattr(bfs, "grow_curved_patch", lambda *_args, **_kwargs: small_patch)
@@ -1044,6 +1093,7 @@ def test_cylinder_sphere_disambiguation_and_finalize_cylinder(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
     grow_results = iter([grown_patch, small_patch])
@@ -1116,6 +1166,34 @@ def test_detect_planes_cylinders_and_spheres_skip_invalid_candidates(monkeypatch
     assert bfs.detect_spheres(mesh, mesh_index, blocked_indices=set(), min_component_size=4) == []
 
 
+def test_detect_planes_accepts_two_face_component(monkeypatch):
+    mesh = SimpleNamespace(bounding_box=lambda: DummyBBox(10.0))
+    mesh_index = make_mesh_index(
+        faces=[DummyFace(), DummyFace()],
+        samples=[
+            make_face_sample(0, Vector(0, 0, 0), Vector(0, 0, 1)),
+            make_face_sample(1, Vector(1, 0, 0), Vector(0, 0, 1)),
+        ],
+    )
+    patch = bfs.PlanePatch(
+        kind="plane",
+        face_indices=frozenset({0, 1}),
+        origin=Vector(0, 0, 0),
+        normal=Vector(0, 0, 1),
+        u_min=0.0,
+        u_max=1.0,
+        v_min=0.0,
+        v_max=1.0,
+        residual=0.0,
+    )
+
+    monkeypatch.setattr(bfs, "_detect_planes_from_clean_proxy", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(bfs, "_plane_like_face_components", lambda *_args, **_kwargs: [[0, 1]])
+    monkeypatch.setattr(bfs, "_build_plane_patch", lambda *_args, **_kwargs: patch)
+
+    assert bfs.detect_planes(mesh, mesh_index, min_two_face_area_factor=0.0) == [patch]
+
+
 def test_detect_cylinders_additional_continue_paths(monkeypatch):
     mesh = SimpleNamespace(bounding_box=lambda: DummyBBox(10.0))
     mesh_index = make_mesh_index(
@@ -1128,6 +1206,7 @@ def test_detect_cylinders_additional_continue_paths(monkeypatch):
         axis_point=Vector(0, 0, 0),
         axis_direction=Vector(0, 0, 1),
         radius=1.0,
+        normal_sign=1,
         residual=0.0,
     )
 
