@@ -48,7 +48,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import combinations
 from math import acos, sqrt
-from typing import Any, Literal, TypeAlias, overload
+from typing import Any, Literal, TypeAlias, TypeVar, overload
 
 import numpy as np
 from sklearn.cluster import DBSCAN  # type: ignore[import-untyped]
@@ -71,6 +71,7 @@ from build123d import (
 )
 
 EPS = 1e-9
+T = TypeVar("T")
 EdgeKey: TypeAlias = tuple[tuple[float, float, float], tuple[float, float, float]]
 
 
@@ -235,7 +236,7 @@ def _point_rows(points: Sequence[Sequence[float]]) -> np.ndarray:
     return np.asarray(points, dtype=float)
 
 
-def _evenly_spaced_subset[T](values: Sequence[T], max_count: int) -> list[T]:
+def _evenly_spaced_subset(values: Sequence[T], max_count: int) -> list[T]:
     """Return a deterministic evenly spaced subset of a sequence."""
 
     if max_count <= 0:
