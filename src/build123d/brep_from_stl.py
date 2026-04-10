@@ -47,7 +47,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import combinations
-from math import acos, sqrt
+from math import acos, ceil, log10, sqrt
 from typing import Any, Literal, TypeAlias, TypeVar, overload
 
 import numpy as np
@@ -68,6 +68,7 @@ from build123d import (
     ShapeList,
     Sphere,
     Vector,
+    Vertex,
 )
 
 EPS = 1e-9
@@ -246,10 +247,7 @@ def _evenly_spaced_subset(values: Sequence[T], max_count: int) -> list[T]:
     if max_count == 1:
         return [values[0]]
     last_index = len(values) - 1
-    return [
-        values[round(i * last_index / (max_count - 1))]
-        for i in range(max_count)
-    ]
+    return [values[round(i * last_index / (max_count - 1))] for i in range(max_count)]
 
 
 # Clustering and low-level geometry helpers
@@ -1766,6 +1764,7 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
                     .group_by(Axis.X)[0]
                     .sort_by(Axis.Y)[0]
                 )
+                local_origin = Vertex(local_origin.X, local_origin.Y, 0)
                 global_origin = pln.from_local_coords(local_origin)
                 shifted_plane = pln.shift_origin(global_origin)
                 if not isinstance(shifted_plane, Plane):
@@ -1779,7 +1778,9 @@ def shapes_to_code(primitives: Iterable[Shape]) -> list[str]:
                 )
                 common = rect.intersect(primitive)
                 if not common or not isinstance(common[0], Face):
-                    raise RuntimeError("Error in generating planar rectangle")
+                    code_lines.append("Error in generating planar rectangle")
+                    continue
+                    # raise RuntimeError("Error in generating planar rectangle")
                 if abs(common[0].area - primitive.area) > TOLERANCE:
                     height, w = w, height
 
@@ -1919,5 +1920,16 @@ def detect_primitives(
         primitives, code_lines = map(list, zip(*primitive_code_pairs))
     else:
         primitives, code_lines = [], []
+
+    # Add instance variables to the generated code
+    if code_lines:
+        num_lines = len(code_lines)
+        num_digits = ceil(log10(num_lines))
+        SHAPE_KEYS = [("Rectangle", "r"), ("Circle", "c"), ("Sphere", "s")]
+        for i in range(num_lines):
+            code_type = next(
+                (key for label, key in SHAPE_KEYS if label in code_lines[i]), None
+            )
+            code_lines[i] = f"{code_type}{i:0{num_digits}d} = {code_lines[i]}"
 
     return ShapeList(primitives), ShapeList(leftovers), code_lines
