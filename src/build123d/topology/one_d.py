@@ -55,7 +55,6 @@ import copy
 import warnings
 from bisect import bisect_right
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from itertools import combinations
 from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
 from typing import TYPE_CHECKING, Literal, overload
@@ -63,7 +62,6 @@ from typing import cast as tcast
 
 import numpy as np
 import OCP.TopAbs as ta
-from OCP.BOPAlgo import BOPAlgo_Splitter
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve, BRepAdaptor_Curve
 from OCP.BRepAlgoAPI import (
@@ -71,7 +69,6 @@ from OCP.BRepAlgoAPI import (
     BRepAlgoAPI_Section,
     BRepAlgoAPI_Splitter,
 )
-
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_DisconnectedWire,
     BRepBuilderAPI_EmptyWire,
@@ -81,10 +78,8 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakePolygon,
     BRepBuilderAPI_MakeWire,
     BRepBuilderAPI_NonManifoldWire,
-    BRepBuilderAPI_MakeVertex,
 )
 from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_SupportType
-from OCP.BRepFeat import BRepFeat_SplitShape
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepLib import BRepLib, BRepLib_FindSurface
@@ -94,7 +89,6 @@ from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
-from OCP.ChFi2d import ChFi2d_FilletAlgo
 from OCP.Extrema import Extrema_ExtPC
 from OCP.GC import (
     GC_MakeArcOfCircle,
@@ -271,222 +265,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from .composite import Compound, Curve, Part, Sketch  # pylint: disable=R0801
     from .three_d import Solid  # pylint: disable=R0801
     from .two_d import Face, Shell  # pylint: disable=R0801
-
-
-@dataclass(frozen=True)
-class _WireFilletCorner:
-    """Context needed to fillet a single planar wire corner."""
-
-    wire: Wire
-    vertex: Vertex
-    surface: Geom_Plane
-    all_edges: ShapeList[Edge]
-    connected_edges: ShapeList[Edge]
-    connected_edge_indices: list[int]
-
-
-@dataclass(frozen=True)
-class _WireFilletSolution:
-    """Replacement edges for a filleted wire corner."""
-
-    trimmed_topods_edges: list[TopoDS_Edge]
-    fillet_topods_edge: TopoDS_Edge
-
-
-def _analyze_wire_fillet_corner(wire: Wire, vertex: Vertex) -> _WireFilletCorner:
-    """Collect the topology needed to fillet a single wire corner."""
-
-    find_surface = BRepLib_FindSurface(wire.wrapped, OnlyPlane=True)
-    surf = find_surface.Surface()
-    if not isinstance(surf, Geom_Plane):
-        raise ValueError(f"Wire is not planar {wire}")
-
-    all_edges = wire.edges()
-    connected_edges = all_edges.filter_by(
-        lambda edge: any(
-            edge_vertex.wrapped.IsSame(vertex.wrapped)
-            for edge_vertex in edge.vertices()
-        )
-    )
-    vertex_label = str(vertex)
-    if not connected_edges:
-        raise ValueError(f"Could not find shared vertex on wire: {vertex_label}")
-    if len(connected_edges) != 2:
-        raise ValueError(f"Vertex must connect exactly two edges: {vertex_label}")
-
-    connected_edge_indices = [all_edges.index(e) for e in connected_edges]
-
-    return _WireFilletCorner(
-        wire=wire,
-        vertex=vertex,
-        surface=surf,
-        all_edges=all_edges,
-        connected_edges=connected_edges,
-        connected_edge_indices=connected_edge_indices,
-    )
-
-
-def _solve_wire_fillet_corner_chfi2d(
-    corner: _WireFilletCorner, radius: float
-) -> _WireFilletSolution | None:
-    """Try to fillet a planar wire corner with ``ChFi2d_FilletAlgo``."""
-
-    fillet_builder = ChFi2d_FilletAlgo()
-    fillet_builder.Init(
-        corner.connected_edges[0].wrapped,
-        corner.connected_edges[1].wrapped,
-        corner.surface.Pln(),
-    )
-
-    vertex_point = BRep_Tool.Pnt_s(corner.vertex.wrapped)
-    if (
-        not fillet_builder.Perform(radius)
-        or fillet_builder.NbResults(vertex_point) == 0
-    ):
-        return None
-
-    trimmed_topods_edge0, trimmed_topods_edge1 = TopoDS_Edge(), TopoDS_Edge()
-    fillet_topods_edge = fillet_builder.Result(
-        vertex_point, trimmed_topods_edge0, trimmed_topods_edge1
-    )
-
-    return _WireFilletSolution(
-        trimmed_topods_edges=[trimmed_topods_edge0, trimmed_topods_edge1],
-        fillet_topods_edge=fillet_topods_edge,
-    )
-
-
-def _topods_edge_contains_vertex(
-    topods_edge: TopoDS_Edge, topods_vertex: TopoDS_Vertex
-) -> bool:
-    """Check whether an edge has the given vertex as one of its endpoints."""
-
-    edge_vertex0 = TopExp.FirstVertex_s(topods_edge)
-    edge_vertex1 = TopExp.LastVertex_s(topods_edge)
-    vertex_point = BRep_Tool.Pnt_s(topods_vertex)
-    return (
-        BRep_Tool.Pnt_s(edge_vertex0).Distance(vertex_point) < TOLERANCE
-        or BRep_Tool.Pnt_s(edge_vertex1).Distance(vertex_point) < TOLERANCE
-    )
-
-
-def _split_edge_at_vertex(edge: Edge, split_vertex: Vertex) -> list[TopoDS_Edge]:
-    """Split an edge at a vertex and return the resulting edge segments."""
-
-    splitter = BOPAlgo_Splitter()
-    splitter.AddArgument(edge.wrapped)
-    splitter.AddTool(split_vertex.wrapped)
-    splitter.Perform()
-
-    split_shape = splitter.Shape()
-    split_edges = []
-    explorer = TopExp_Explorer(split_shape, ta.TopAbs_EDGE)
-    while explorer.More():
-        split_edges.append(TopoDS.Edge(explorer.Current()))
-        explorer.Next()
-
-    return split_edges
-
-
-def _wire_fillet_corner_is_tangent_continuous(corner: _WireFilletCorner) -> bool:
-    """Determine if two incident edges are tangent-continuous at a corner."""
-
-    tangent0 = corner.connected_edges[0].tangent_at(corner.vertex)
-    tangent1 = corner.connected_edges[1].tangent_at(corner.vertex)
-    return tangent0.cross(tangent1).length <= TOLERANCE
-
-
-def _solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(
-    corner: _WireFilletCorner, radius: float
-) -> _WireFilletSolution | None:
-    """Fallback fillet using the ``Geom2dGcc_Circ2d2TanRad`` tangent-arc solver."""
-
-    fillet_arcs = _make_2tan_rad_arcs(
-        *corner.connected_edges,
-        radius=radius,
-        sagitta=Sagitta.BOTH,
-        edge_factory=Edge,
-    )
-    if not fillet_arcs:
-        return None
-
-    fillet_arc = fillet_arcs.sort_by_distance(corner.vertex)[0]
-
-    trimmed_topods_edges = []
-    for connected_edge in corner.connected_edges:
-        other_vertex = [v for v in connected_edge.vertices() if v != corner.vertex][0]
-        fillet_vertex = fillet_arc.vertices().sort_by_distance(connected_edge)[0]
-        split_vertex = Vertex(
-            BRepBuilderAPI_MakeVertex(Vector(fillet_vertex).to_pnt()).Vertex()
-        )
-        split_edges = _split_edge_at_vertex(copy.deepcopy(connected_edge), split_vertex)
-        trimmed_topods_edges.append(
-            next(
-                edge
-                for edge in split_edges
-                if _topods_edge_contains_vertex(edge, other_vertex.wrapped)
-            )
-        )
-
-    return _WireFilletSolution(
-        trimmed_topods_edges=trimmed_topods_edges,
-        fillet_topods_edge=fillet_arc.wrapped,
-    )
-
-
-def _splice_wire_fillet_corner(
-    corner: _WireFilletCorner, solution: _WireFilletSolution
-) -> Wire:
-    """Replace two connected edges with a fillet and rebuild the wire."""
-
-    all_topods_edges = [edge.wrapped for edge in corner.all_edges]
-
-    # Flip any edges that were reversed during trimming
-    for i in range(2):
-        if (
-            solution.trimmed_topods_edges[i].Orientation()
-            != corner.connected_edges[i].wrapped.Orientation()
-        ):
-            solution.trimmed_topods_edges[i].Reverse()
-
-    for i in range(2):
-        all_topods_edges[corner.connected_edge_indices[i]] = (
-            solution.trimmed_topods_edges[i]
-        )
-
-    n = len(all_topods_edges)
-    if corner.connected_edge_indices[1] == (corner.connected_edge_indices[0] + 1) % n:
-        insert_index = corner.connected_edge_indices[0] + 1
-    else:
-        insert_index = corner.connected_edge_indices[1] + 1
-
-    all_topods_edges.insert(insert_index, solution.fillet_topods_edge)
-
-    combined_edges = TopTools_ListOfShape()
-    for topods_edge in all_topods_edges:
-        combined_edges.Append(topods_edge)
-    wire_builder = BRepBuilderAPI_MakeWire()
-    wire_builder.Add(combined_edges)
-    wire_builder.Build()
-
-    return Wire(wire_builder.Wire())
-
-
-def _fillet_wire_corner(wire: Wire, vertex: Vertex, radius: float) -> Wire:
-    """Fillet a single planar wire corner with the available 2D fillet solvers."""
-
-    corner = _analyze_wire_fillet_corner(wire, vertex)
-    if _wire_fillet_corner_is_tangent_continuous(corner):
-        return wire
-    vertex_label = str(vertex)
-    solution = _solve_wire_fillet_corner_chfi2d(corner, radius)
-    if solution is None:
-        solution = _solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(corner, radius)
-    if solution is None:
-        raise ValueError(
-            f"Fillet algorithm failed for {vertex_label} with radius {radius}"
-        )
-    return _splice_wire_fillet_corner(corner, solution)
 
 
 class Mixin1D(Shape[TOPODS]):
@@ -4007,18 +3785,20 @@ class Wire(Mixin1D[TopoDS_Wire]):
         """
         if self._wrapped is None:
             raise ValueError("Can't fillet an empty wire")
-        filleted_wire = self
+
+        # Create a face to fillet
+        unfilleted_face = _make_topods_face_from_wires(self.wrapped)
+        # Fillet the face
+        fillet_builder = BRepFilletAPI_MakeFillet2d(unfilleted_face)
         for vertex in vertices:
-            if vertex.wrapped is None:
-                continue
-            current_vertices = filleted_wire.vertices().sort_by_distance(vertex)
-            if not current_vertices:
-                raise ValueError(f"Could not find fillet vertex on wire: {vertex}")
-            current_vertex = current_vertices[0]
-            if not isclose_b((Vector(current_vertex) - Vector(vertex)).length, 0.0):
-                raise ValueError(f"Could not find fillet vertex on wire: {vertex}")
-            filleted_wire = _fillet_wire_corner(filleted_wire, current_vertex, radius)
-        return filleted_wire
+            if vertex.wrapped is not None:
+                fillet_builder.AddFillet(vertex.wrapped, radius)
+        fillet_builder.Build()
+        filleted_face = downcast(fillet_builder.Shape())
+        if not isinstance(filleted_face, TopoDS_Face):
+            raise RuntimeError("An internal error occured creating the fillet")
+        # Return the outer wire
+        return Wire(BRepTools.OuterWire_s(filleted_face))
 
     def fix_degenerate_edges(self, precision: float) -> Wire:
         """fix_degenerate_edges
