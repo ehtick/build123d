@@ -33,14 +33,15 @@ from unittest.mock import patch, MagicMock
 
 import numpy as np
 from build123d.topology.shape_core import TOLERANCE
+import build123d.topology.one_d as one_d
 
 from build123d.build_enums import GeomType, PositionMode, Side
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Color, Location, Plane, Vector
-from build123d.objects_curve import Curve, Line, PolarLine, Polyline, Spline
+from build123d.objects_curve import Curve, Line, JernArc, PolarLine, Polyline, Spline
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import fillet
-from build123d.topology import Edge, Face, Wire
+from build123d.topology import Edge, Face, Vertex, Wire
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve
 from OCP.gp import gp_Pnt
 
@@ -69,6 +70,16 @@ class TestWire(unittest.TestCase):
         self.assertAlmostEqual(
             squaroid.length, 4 * (1 - 2 * 0.1) + 2 * math.pi * 0.1, 5
         )
+        straight_wire = Wire(
+            [
+                Edge.make_line((0, 0), (1, 0)),
+                Edge.make_line((1, 0), (2, 0)),
+            ]
+        )
+        straight_vertex = straight_wire.vertices().sort_by_distance((1, 0, 0))[0]
+        unmodified_wire = straight_wire.fillet_2d(0.1, [straight_vertex])
+        self.assertAlmostEqual(unmodified_wire.length, straight_wire.length, 5)
+        self.assertEqual(len(unmodified_wire.edges()), 2)
         square.wrapped = None
         with self.assertRaises(ValueError):
             square.fillet_2d(0.1, square.vertices())
@@ -224,18 +235,14 @@ class TestWire(unittest.TestCase):
             self.assertAlmostEqual(param, i / 20, 6)
 
     def test_tangent_at_reversed_edges(self):
-        with BuildLine(Plane.YZ) as wing_line:
-            l1 = Line((0, 65), (80 / 2 + 1.526 * 4, 65))
-            PolarLine(
-                l1 @ 1, 20.371288916, direction=Vector(0, 1, 0).rotate(Axis.X, -75)
-            )
-            fillet(wing_line.vertices(), 7)
-
-        w = wing_line.wire()
-        self.assertAlmostEqual(
-            w.tangent_at(0), (0, -0.2588190451025, 0.9659258262891), 6
+        w = Wire(
+            [
+                Line((0, 0), (0, 1)),
+                JernArc((0, 1), (0, 1), 1, -90).reversed(reconstruct=True),
+            ]
         )
-        self.assertAlmostEqual(w.tangent_at(1), (0, -1, 0), 6)
+        self.assertAlmostEqual(w.tangent_at(0), (0, 1, 0), 6)
+        self.assertAlmostEqual(w.tangent_at(1), (1, 0, 0), 6)
 
     def test_order_edges(self):
         w1 = Wire(
@@ -286,6 +293,77 @@ class TestWire(unittest.TestCase):
         self.assertTrue(w9.is_valid)
         with self.assertRaises(ValueError):
             Wire(bob="fred")
+
+
+class TestWireFilletHelpers(unittest.TestCase):
+    def test_analyze_wire_fillet_corner_non_planar(self):
+        wire = Wire(
+            [
+                Edge.make_line((0, 0, 0), (1, 0, 0)),
+                Edge.make_line((1, 0, 0), (1, 1, 1)),
+            ]
+        )
+        vertex = wire.vertices().sort_by_distance((1, 0, 0))[0]
+
+        mock_find_surface = MagicMock()
+        mock_find_surface.Surface.return_value = object()
+
+        with (
+            patch(
+                "build123d.topology.one_d.BRepLib_FindSurface",
+                return_value=mock_find_surface,
+            ),
+            self.assertRaises(ValueError) as ctx,
+        ):
+            one_d._analyze_wire_fillet_corner(wire, vertex)
+        self.assertIn("Wire is not planar", str(ctx.exception))
+
+    def test_analyze_wire_fillet_corner_missing_vertex(self):
+        wire = Wire.make_rect(1, 1)
+        vertex = Vertex((10, 10, 0))
+
+        with self.assertRaises(ValueError) as ctx:
+            one_d._analyze_wire_fillet_corner(wire, vertex)
+        self.assertIn("Could not find shared vertex on wire", str(ctx.exception))
+
+    def test_analyze_wire_fillet_corner_vertex_not_degree_two(self):
+        wire = Wire.make_rect(1, 1)
+        shared_vertex = wire.vertices()[0]
+        mock_edges = MagicMock()
+        mock_edges.filter_by.return_value = [MagicMock(), MagicMock(), MagicMock()]
+
+        with (
+            patch.object(wire, "edges", return_value=mock_edges),
+            self.assertRaises(ValueError) as ctx,
+        ):
+            one_d._analyze_wire_fillet_corner(wire, shared_vertex)
+        self.assertIn("Vertex must connect exactly two edges", str(ctx.exception))
+
+    def test_solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad_no_solution(self):
+        wire = Wire.make_rect(1, 1)
+        corner = one_d._analyze_wire_fillet_corner(wire, wire.vertices()[0])
+        self.assertIsNone(
+            one_d._solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(corner, 10)
+        )
+
+    def test_fillet_wire_corner_failure_when_all_solvers_fail(self):
+        wire = Wire.make_rect(1, 1)
+        vertex = wire.vertices()[0]
+
+        with (
+            patch(
+                "build123d.topology.one_d._solve_wire_fillet_corner_chfi2d",
+                return_value=None,
+            ),
+            patch(
+                "build123d.topology.one_d._solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad",
+                return_value=None,
+            ),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                one_d._fillet_wire_corner(wire, vertex, 0.1)
+
+        self.assertIn("Fillet algorithm failed", str(ctx.exception))
 
 
 class TestWireToBSpline(unittest.TestCase):

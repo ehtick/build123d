@@ -1836,15 +1836,32 @@ class Face(Mixin2D[TopoDS_Face]):
         Returns:
 
         """
+        vertices = [vertex for vertex in vertices if vertex.wrapped is not None]
+        if not vertices:
+            return self
 
-        fillet_builder = BRepFilletAPI_MakeFillet2d(self.wrapped)
+        outer_wire = self.outer_wire()
+        inner_wires = self.inner_wires()
+        filleted_wires: list[Wire] = []
 
-        for vertex in vertices:
-            fillet_builder.AddFillet(vertex.wrapped, radius)
+        for wire in [outer_wire, *inner_wires]:
+            vertices_in_wire = [
+                vertex
+                for vertex in vertices
+                if any(
+                    wire_vertex.wrapped.IsSame(vertex.wrapped)
+                    for wire_vertex in wire.vertices()
+                )
+            ]
+            filleted_wires.append(
+                wire.fillet_2d(radius, vertices_in_wire) if vertices_in_wire else wire
+            )
 
-        fillet_builder.Build()
+        filleted_face = self.__class__(filleted_wires[0], filleted_wires[1:])
+        if self.normal_at() != filleted_face.normal_at():
+            filleted_face = -filleted_face
 
-        return self.__class__.cast(fillet_builder.Shape())
+        return filleted_face
 
     def geom_adaptor(self) -> Geom_Surface:
         """Return the Geom Surface for this Face"""
