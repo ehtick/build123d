@@ -82,6 +82,7 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_MakeWire,
     BRepBuilderAPI_NonManifoldWire,
     BRepBuilderAPI_MakeVertex,
+    BRepBuilderAPI_Transform,
 )
 from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_SupportType
 from OCP.BRepFeat import BRepFeat_SplitShape
@@ -232,6 +233,7 @@ from build123d.geometry import (
     Axis,
     Color,
     Location,
+    Matrix,
     Plane,
     Vector,
     VectorLike,
@@ -279,7 +281,6 @@ class _WireFilletCorner:
 
     wire: Wire
     vertex: Vertex
-    surface: Geom_Plane
     all_edges: ShapeList[Edge]
     connected_edges: ShapeList[Edge]
     connected_edge_indices: list[int]
@@ -295,11 +296,6 @@ class _WireFilletSolution:
 
 def _analyze_wire_fillet_corner(wire: Wire, vertex: Vertex) -> _WireFilletCorner:
     """Collect the topology needed to fillet a single wire corner."""
-
-    find_surface = BRepLib_FindSurface(wire.wrapped, OnlyPlane=True)
-    surf = find_surface.Surface()
-    if not isinstance(surf, Geom_Plane):
-        raise ValueError(f"Wire is not planar {wire}")
 
     all_edges = wire.edges()
     connected_edges = all_edges.filter_by(
@@ -319,7 +315,6 @@ def _analyze_wire_fillet_corner(wire: Wire, vertex: Vertex) -> _WireFilletCorner
     return _WireFilletCorner(
         wire=wire,
         vertex=vertex,
-        surface=surf,
         all_edges=all_edges,
         connected_edges=connected_edges,
         connected_edge_indices=connected_edge_indices,
@@ -335,7 +330,7 @@ def _solve_wire_fillet_corner_chfi2d(
     fillet_builder.Init(
         corner.connected_edges[0].wrapped,
         corner.connected_edges[1].wrapped,
-        corner.surface.Pln(),
+        Plane.XY.wrapped,
     )
 
     vertex_point = BRep_Tool.Pnt_s(corner.vertex.wrapped)
@@ -4007,18 +4002,40 @@ class Wire(Mixin1D[TopoDS_Wire]):
         """
         if self._wrapped is None:
             raise ValueError("Can't fillet an empty wire")
-        filleted_wire = self
+
+        wire_pln = self.common_plane()
+        if wire_pln is None:
+            raise ValueError(f"Wire is not planar {self}")
+
+        # Force the wire to Plane.XY for the fillet operation
+        filleted_wire = wire_pln.to_local_coords(self)
         for vertex in vertices:
-            if vertex.wrapped is None:
-                continue
-            current_vertices = filleted_wire.vertices().sort_by_distance(vertex)
-            if not current_vertices:
-                raise ValueError(f"Could not find fillet vertex on wire: {vertex}")
-            current_vertex = current_vertices[0]
-            if not isclose_b((Vector(current_vertex) - Vector(vertex)).length, 0.0):
+            vertex_local = wire_pln.to_local_coords(vertex)
+            current_vertex = filleted_wire.vertices().sort_by_distance(vertex_local)[0]
+            if (Vector(current_vertex) - Vector(vertex_local)).length > TOLERANCE:
                 raise ValueError(f"Could not find fillet vertex on wire: {vertex}")
             filleted_wire = _fillet_wire_corner(filleted_wire, current_vertex, radius)
-        return filleted_wire
+
+        # Return the filleted wire to the wire plane
+        globalized_filleted_wire: Wire = wire_pln.from_local_coords(filleted_wire)
+
+        # Transform the wire back to the original location not that of the wire_pln
+        old_loc = globalized_filleted_wire.location
+        new_loc = self.location
+        geometry_adjust = new_loc.inverse() * old_loc
+        trsf = geometry_adjust.wrapped.Transformation()
+        base_wire = globalized_filleted_wire.wrapped.Located(TopLoc_Location())
+        transformed = TopoDS.Wire(
+            BRepBuilderAPI_Transform(base_wire, trsf, True).Shape()
+        )
+        final_wire = Wire(transformed)
+        final_wire.location = self.location
+
+        # Ensure the wire direction is the same
+        if self.is_forward != final_wire.is_forward:
+            final_wire.wrapped.Reverse()
+
+        return final_wire
 
     def fix_degenerate_edges(self, precision: float) -> Wire:
         """fix_degenerate_edges

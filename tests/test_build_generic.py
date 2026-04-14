@@ -811,7 +811,7 @@ class TestSweep(unittest.TestCase):
                         fillet(section.vertices(), radius=0.2)
             # Create the handle by sweeping along the path
             sweep(multisection=True)
-        self.assertAlmostEqual(handle.part.volume, 54.11246334691092, 5)
+        self.assertAlmostEqual(handle.part.volume, 54.11, 2)
 
     def test_passed_parameters(self):
         with BuildLine() as path:

@@ -37,7 +37,7 @@ import build123d.topology.one_d as one_d
 
 from build123d.build_enums import GeomType, PositionMode, Side
 from build123d.build_line import BuildLine
-from build123d.geometry import Axis, Color, Location, Plane, Vector
+from build123d.geometry import Axis, Color, Location, Plane, Pos, Vector
 from build123d.objects_curve import Curve, Line, JernArc, PolarLine, Polyline, Spline
 from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
 from build123d.operations_generic import fillet
@@ -83,6 +83,31 @@ class TestWire(unittest.TestCase):
         square.wrapped = None
         with self.assertRaises(ValueError):
             square.fillet_2d(0.1, square.vertices())
+
+    def test_fillet_non_planar(self):
+        wire = Wire(
+            [
+                Edge.make_line((0, 0, 0), (1, 0, 0)),
+                Edge.make_line((1, 0, 0), (1, 1, 0)),
+                Edge.make_line((1, 1, 0), (0, 0, 1)),
+            ]
+        )
+        with self.assertRaises(ValueError):
+            wire.fillet_2d(0.1, wire.vertices()[1])
+
+    def test_bad_vertex(self):
+        rect = Face.make_rect(2, 2).wire()
+        with self.assertRaises(ValueError):
+            rect.fillet_2d(0.2, Vertex(0, 0, 0))
+
+    def test_fillet_non_plane_xy(self):
+        wire_loc: Wire = (Plane.XZ * Pos(1, 2) * Rectangle(2, 2)).wire()
+        f_wire_loc = wire_loc.fillet_2d(0.2, wire_loc.vertices())
+        self.assertEqual(len(f_wire_loc.edges().filter_by(GeomType.CIRCLE)), 4)
+
+        wire_face: Wire = Face.make_rect(2, 2, plane=Plane.XZ).wire()
+        f_wire_face = wire_face.fillet_2d(0.2, wire_face.vertices())
+        self.assertEqual(len(f_wire_face.edges().filter_by(GeomType.CIRCLE)), 4)
 
     def test_chamfer_2d(self):
         square = Wire.make_rect(1, 1)
@@ -296,27 +321,6 @@ class TestWire(unittest.TestCase):
 
 
 class TestWireFilletHelpers(unittest.TestCase):
-    def test_analyze_wire_fillet_corner_non_planar(self):
-        wire = Wire(
-            [
-                Edge.make_line((0, 0, 0), (1, 0, 0)),
-                Edge.make_line((1, 0, 0), (1, 1, 1)),
-            ]
-        )
-        vertex = wire.vertices().sort_by_distance((1, 0, 0))[0]
-
-        mock_find_surface = MagicMock()
-        mock_find_surface.Surface.return_value = object()
-
-        with (
-            patch(
-                "build123d.topology.one_d.BRepLib_FindSurface",
-                return_value=mock_find_surface,
-            ),
-            self.assertRaises(ValueError) as ctx,
-        ):
-            one_d._analyze_wire_fillet_corner(wire, vertex)
-        self.assertIn("Wire is not planar", str(ctx.exception))
 
     def test_analyze_wire_fillet_corner_missing_vertex(self):
         wire = Wire.make_rect(1, 1)
