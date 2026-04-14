@@ -388,7 +388,27 @@ def _wire_fillet_corner_is_tangent_continuous(corner: _WireFilletCorner) -> bool
 
     tangent0 = corner.connected_edges[0].tangent_at(corner.vertex)
     tangent1 = corner.connected_edges[1].tangent_at(corner.vertex)
-    return tangent0.cross(tangent1).length <= TOLERANCE
+    if tangent0.cross(tangent1).length > TOLERANCE:
+        return False
+
+    sample_length = min(edge.length for edge in corner.connected_edges) * 1e-3
+    sample_length = min(sample_length, *(edge.length * 0.25 for edge in corner.connected_edges))
+    sample_length = max(sample_length, TOLERANCE * 100)
+
+    reflected_points = []
+    for edge in corner.connected_edges:
+        if TopExp.FirstVertex_s(edge.wrapped).IsSame(corner.vertex.wrapped):
+            sample_point = edge.position_at(sample_length, PositionMode.LENGTH)
+        else:
+            sample_point = edge.position_at(
+                edge.length - sample_length, PositionMode.LENGTH
+            )
+        reflected_points.append(Vector(corner.vertex) * 2 - Vector(sample_point))
+
+    return min(
+        corner.connected_edges[1].distance_to(reflected_points[0]),
+        corner.connected_edges[0].distance_to(reflected_points[1]),
+    ) <= max(TOLERANCE * 10, sample_length * 0.25)
 
 
 def _solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(

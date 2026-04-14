@@ -39,7 +39,7 @@ from build123d.build_enums import GeomType, PositionMode, Side
 from build123d.build_line import BuildLine
 from build123d.geometry import Axis, Color, Location, Plane, Pos, Vector
 from build123d.objects_curve import Curve, Line, JernArc, PolarLine, Polyline, Spline
-from build123d.objects_sketch import Circle, Rectangle, RegularPolygon
+from build123d.objects_sketch import Circle, Rectangle, RectangleRounded, RegularPolygon
 from build123d.operations_generic import fillet
 from build123d.topology import Edge, Face, Vertex, Wire
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve
@@ -349,6 +349,34 @@ class TestWireFilletHelpers(unittest.TestCase):
         self.assertIsNone(
             one_d._solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(corner, 10)
         )
+
+    def test_wire_fillet_corner_is_tangent_continuous_straight_wire(self):
+        wire = Wire(
+            [
+                Edge.make_line((0, 0), (1, 0)),
+                Edge.make_line((1, 0), (2, 0)),
+            ]
+        )
+        corner = one_d._analyze_wire_fillet_corner(
+            wire, wire.vertices().sort_by_distance((1, 0, 0))[0]
+        )
+
+        self.assertTrue(one_d._wire_fillet_corner_is_tangent_continuous(corner))
+
+    def test_wire_fillet_corner_is_not_tangent_continuous_on_rounded_cut_tips(self):
+        sketch = RectangleRounded(20, 10, 2)
+        sketch -= [Location(e.arc_center) for e in sketch.edges().filter_by(GeomType.CIRCLE)] * Circle(2)
+        wire = sketch.wire()
+
+        skipped_vertices = [(-10, -3, 0), (-10, 3, 0), (-8, 5, 0)]
+        for point in skipped_vertices:
+            with self.subTest(point=point):
+                corner = one_d._analyze_wire_fillet_corner(
+                    wire, wire.vertices().sort_by_distance(point)[0]
+                )
+                self.assertFalse(
+                    one_d._wire_fillet_corner_is_tangent_continuous(corner)
+                )
 
     def test_fillet_wire_corner_failure_when_all_solvers_fail(self):
         wire = Wire.make_rect(1, 1)
