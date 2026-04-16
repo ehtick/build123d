@@ -55,6 +55,7 @@ from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Generic,
     Literal,
     Optional,
@@ -162,6 +163,7 @@ Shapes = Literal["Vertex", "Edge", "Wire", "Face", "Shell", "Solid", "Compound"]
 TrimmingTool = Union[Plane, "Shell", "Face"]
 TOPODS = TypeVar("TOPODS", bound=TopoDS_Shape)
 CalcFn = Callable[[TopoDS_Shape, GProp_GProps], None]
+CompositeFactory = Callable[[Iterable["Shape"]], "Shape"]
 
 
 class Shape(NodeMixin, Generic[TOPODS]):
@@ -184,6 +186,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         topo_parent (Shape): assembly parent of this object
 
     """
+
+    composite_factories: ClassVar[dict[int | None, CompositeFactory]] = {}
 
     shape_LUT = {
         ta.TopAbs_VERTEX: "Vertex",
@@ -852,7 +856,32 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     # ---- Instance Methods ----
 
-    def __add__(self, other: None | Shape | Iterable[Shape]) -> Self | ShapeList[Self]:
+    @classmethod
+    def register_composite_factory(
+        cls, dimension: int | None, factory: CompositeFactory
+    ) -> None:
+        """Register a composite constructor without importing it here."""
+
+        cls.composite_factories[dimension] = factory
+
+    @classmethod
+    def make_composite(
+        cls, shapes: Iterable[Shape], dimension: int | None = None
+    ) -> Shape:
+        """Build the registered composite for a dimension."""
+
+        shape_list = ShapeList(shapes)
+        if dimension is None and shape_list:
+            dimensions = {shape._dim for shape in shape_list}
+            dimension = dimensions.pop() if len(dimensions) == 1 else None
+        factory = cls.composite_factories.get(dimension) or cls.composite_factories.get(
+            None
+        )
+        if factory is None:
+            raise RuntimeError("Composite factory is not registered")
+        return factory(shape_list)
+
+    def __add__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
         """fuse shape to self operator +"""
         # Convert `other` to list of base objects and filter out None values
         if other is None:
@@ -890,17 +919,21 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         return sum_shape
 
-    def __and__(self, other: Shape | Iterable[Shape]) -> None | Self | ShapeList[Self]:
+    def __and__(self, other: Shape | Iterable[Shape]) -> None | Self | Compound:
         """intersect shape with self operator &"""
         others = other if isinstance(other, (list, tuple)) else [other]
 
         if not self or (isinstance(other, Shape) and not other):
             raise ValueError("Cannot intersect shape with empty compound")
         new_shape = self.intersect(*others)
+        if isinstance(new_shape, list):
+            if len(new_shape) == 1:
+                new_shape = new_shape[0]
+            else:
+                new_shape = Shape.make_composite(new_shape)
 
         if (
-            not isinstance(new_shape, list)
-            and new_shape is not None
+            new_shape is not None
             and new_shape.wrapped is not None
             and SkipClean.clean
         ):
@@ -981,7 +1014,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             )
         return [loc * self for loc in other]
 
-    def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | ShapeList[Self]:
+    def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
         """cut shape from self operator -"""
 
         if self._wrapped is None:
@@ -1106,15 +1139,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
             elif not getattr(target, attr):
                 setattr(target, attr, getattr(self, attr))
 
-    def cut(self, *to_cut: Shape) -> Self | ShapeList[Self]:
+    def cut(self, *to_cut: Shape) -> Self | Compound:
         """Remove the positional arguments from this Shape.
 
         Args:
           *to_cut: Shape:
 
         Returns:
-            Self | ShapeList[Self]: Resulting object may be of a different class than self
-                or a ShapeList if multiple non-Compound object created
+            Self | Compound: Resulting object may be of a different class than self
         """
 
         cut_op = BRepAlgoAPI_Cut()
@@ -1270,7 +1302,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     def fuse(
         self, *to_fuse: Shape, glue: bool = False, tol: float | None = None
-    ) -> Self | ShapeList[Self]:
+    ) -> Self | Compound:
         """fuse
 
         Fuse a sequence of shapes into a single shape.
@@ -1281,8 +1313,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             tol (float, optional): tolerance. Defaults to None.
 
         Returns:
-            Self | ShapeList[Self]: Resulting object may be of a different class than self
-                or a ShapeList if multiple non-Compound object created
+            Self | Compound: Resulting object may be of a different class than self
 
         """
 
@@ -2312,7 +2343,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         args: Iterable[Shape],
         tools: Iterable[Shape],
         operation: BRepAlgoAPI_BooleanOperation | BRepAlgoAPI_Splitter,
-    ) -> Self | ShapeList:
+    ) -> Self | Compound:
         """Generic boolean operation
 
         Args:
@@ -2322,7 +2353,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
           BRepAlgoAPI_Splitter]:
 
         Returns:
-            Shape or ShapeList depending on result
+            Shape or Compound result
 
         """
         args = list(args)
@@ -2377,7 +2408,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
             )
             for result in results:
                 base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
-            return results
+            result = Shape.make_composite(results, highest_order[1])
+            base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
+            return result
 
         result = highest_order[0].cast(topo_result)
         base.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
@@ -2405,10 +2438,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         """
         result = self._bool_op(args, tools, operation)
-        if isinstance(result, ShapeList):
-            return result
         if result.is_null:
             return ShapeList()
+        if isinstance(result.wrapped, TopoDS_Compound):
+            return result.get_top_level_shapes()
         return ShapeList([result])
 
     def _ocp_section(

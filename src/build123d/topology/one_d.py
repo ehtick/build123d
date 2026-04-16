@@ -631,9 +631,7 @@ class Mixin1D(Shape[TOPODS]):
 
     # ---- Instance Methods ----
 
-    def __add__(
-        self, other: None | Shape | Iterable[Shape]
-    ) -> Edge | Wire | ShapeList[Edge]:
+    def __add__(self, other: None | Shape | Iterable[Shape]) -> Edge | Wire | Shape:
         """fuse shape to wire/edge operator +"""
 
         # Convert `other` to list of base topods objects and filter out None values
@@ -661,22 +659,20 @@ class Mixin1D(Shape[TOPODS]):
 
         if self._wrapped is None:  # an empty object
             if len(summands) == 1:
-                sum_shape: Edge | Wire | ShapeList[Edge] = summands[0]
+                sum_shape: Edge | Wire | Shape = summands[0]
             else:
                 try:
                     sum_shape = Wire(summand_edges)
                 except Exception:
                     # pylint: disable=[no-member]
                     sum_shape = summands[0].fuse(*summands[1:])
-                    if type(self).order == 4:
-                        sum_shape = type(self)(sum_shape)  # type: ignore
         else:
             try:
                 sum_shape = Wire(self.edges() + ShapeList(summand_edges))
             except Exception:
                 sum_shape = self.fuse(*summands)
 
-        if SkipClean.clean and not isinstance(sum_shape, list):
+        if SkipClean.clean:
             sum_shape = sum_shape.clean()
 
         # If there is only one Edge, return that
