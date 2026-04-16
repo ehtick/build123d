@@ -1426,7 +1426,10 @@ def test_detect_primitives_empty_sort_pair_path(monkeypatch):
     mesh_index = make_mesh_index(faces=[sample_face], samples=[], face_key_lookup={})
 
     monkeypatch.setattr(bfs.MeshIndex, "from_shape", lambda _mesh: mesh_index)
-    monkeypatch.setattr(bfs, "detect_planes", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(bfs, "detect_planes_from_clean_proxy", lambda *_args: [])
+    monkeypatch.setattr(
+        bfs, "detect_planes_from_normals", lambda *_args, **_kwargs: []
+    )
     monkeypatch.setattr(bfs, "detect_spheres", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(bfs, "detect_cylinders", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(bfs, "shapes_to_code", lambda primitives: [])
@@ -1436,3 +1439,88 @@ def test_detect_primitives_empty_sort_pair_path(monkeypatch):
     assert list(primitives) == []
     assert list(leftovers) == [sample_face]
     assert code_lines == []
+
+
+def test_detect_primitives_blocks_normal_planes_after_curved_patches(monkeypatch):
+    mesh = SimpleNamespace()
+    sample_faces = [Rectangle(1, 1).face() for _ in range(4)]
+    mesh_index = make_mesh_index(faces=sample_faces, samples=[], face_key_lookup={})
+    clean_patch = bfs.PlanePatch(
+        kind="plane",
+        face_indices=frozenset({0}),
+        origin=Vector(0, 0, 0),
+        normal=Vector(0, 0, 1),
+        u_min=0.0,
+        u_max=1.0,
+        v_min=0.0,
+        v_max=1.0,
+        residual=0.0,
+    )
+    sphere_patch = bfs.SpherePatch(
+        kind="sphere",
+        face_indices=frozenset({1}),
+        center=Vector(0, 0, 0),
+        radius=1.0,
+        residual=0.0,
+    )
+    cylinder_patch = bfs.CylinderPatch(
+        kind="cylinder",
+        face_indices=frozenset({2}),
+        axis_point=Vector(0, 0, 0),
+        axis_direction=Vector(0, 0, 1),
+        radius=1.0,
+        normal_sign=1,
+        residual=0.0,
+    )
+    normal_patch = bfs.PlanePatch(
+        kind="plane",
+        face_indices=frozenset({3}),
+        origin=Vector(0, 0, 0),
+        normal=Vector(0, 0, 1),
+        u_min=0.0,
+        u_max=1.0,
+        v_min=0.0,
+        v_max=1.0,
+        residual=0.0,
+    )
+    calls = []
+
+    def fake_detect_spheres(_mesh, _mesh_index, blocked_indices):
+        calls.append(("spheres", blocked_indices))
+        return [sphere_patch]
+
+    def fake_detect_cylinders(_mesh, _mesh_index, blocked_indices):
+        calls.append(("cylinders", blocked_indices))
+        return [cylinder_patch]
+
+    def fake_detect_planes_from_normals(_mesh, _mesh_index, blocked_indices):
+        calls.append(("normal_planes", blocked_indices))
+        return [normal_patch]
+
+    monkeypatch.setattr(bfs.MeshIndex, "from_shape", lambda _mesh: mesh_index)
+    monkeypatch.setattr(
+        bfs, "detect_planes_from_clean_proxy", lambda *_args: [clean_patch]
+    )
+    monkeypatch.setattr(bfs, "detect_spheres", fake_detect_spheres)
+    monkeypatch.setattr(bfs, "detect_cylinders", fake_detect_cylinders)
+    monkeypatch.setattr(
+        bfs, "detect_planes_from_normals", fake_detect_planes_from_normals
+    )
+    monkeypatch.setattr(bfs, "build_plane_face", lambda _patch: sample_faces[0])
+    monkeypatch.setattr(
+        bfs, "build_cylinder_face", lambda _patch, _support_faces: sample_faces[0]
+    )
+    monkeypatch.setattr(
+        bfs, "build_sphere_face", lambda _patch, _support_faces: sample_faces[0]
+    )
+    monkeypatch.setattr(
+        bfs, "shapes_to_code", lambda primitives: ["Rectangle(1, 1)"] * len(primitives)
+    )
+
+    bfs.detect_primitives(mesh)
+
+    assert calls == [
+        ("spheres", {0}),
+        ("cylinders", {0, 1}),
+        ("normal_planes", {0, 1, 2}),
+    ]
