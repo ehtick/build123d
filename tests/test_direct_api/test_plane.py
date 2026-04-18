@@ -35,7 +35,7 @@ import unittest
 import numpy as np
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
-from build123d.build_common import Locations
+from build123d.build_common import LocationList, Locations
 from build123d.build_enums import Align, GeomType, Mode
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -278,7 +278,7 @@ class TestPlane(unittest.TestCase):
         self.assertAlmostEqual(p3.z_dir, -p.z_dir, 6)
         self.assertAlmostEqual(p3.y_dir, (-p.z_dir).cross(p.x_dir).normalized(), 6)
 
-    def test_plane_mul(self):
+    def test_plane_mul_location(self):
         p = Plane(origin=(1, 2, 3), x_dir=(1, 0, 0), z_dir=(0, 0, 1))
         p2 = p * Location((1, 2, -1), (0, 0, 45))
         self.assertAlmostEqual(p2.origin, (2, 4, 2), 6)
@@ -297,8 +297,26 @@ class TestPlane(unittest.TestCase):
         self.assertAlmostEqual(p2.x_dir, (1, 0, 0), 6)
         self.assertAlmostEqual(p2.y_dir, (0, math.sqrt(2) / 2, math.sqrt(2) / 2), 6)
         self.assertAlmostEqual(p2.z_dir, (0, -math.sqrt(2) / 2, math.sqrt(2) / 2), 6)
+
+    def test_plane_mul_error(self):
+        p = Plane.XY
         with self.assertRaises(TypeError):
-            p2 * Vector(1, 1, 1)
+            p * Vector(1, 1, 1)
+
+        with self.assertRaises(TypeError):
+            p * 2
+
+    def test_plane_mul_locations(self):
+        p = Plane.XY
+        l1, l2 = Pos(1, 2, 3), Pos(4, 5, 6)
+        self.assertEqual(Plane.XY * (l1, l2), [p * l1, p * l2])
+
+    def test_plane_mul_shape(self):
+        p = Plane.XY.offset(2)
+        self.assertEqual(
+            repr((p * Box(1, 2, 3)).bounding_box()),
+            repr(Box(1, 2, 3).translate((0, 0, 2)).bounding_box()),
+        )
 
     def test_plane_methods(self):
         # Test error checking

@@ -3047,19 +3047,25 @@ class Plane(metaclass=PlaneMeta):
         """Reverse z direction of plane operator -"""
         return Plane(self.origin, self.x_dir, -self.z_dir)
 
-    def __mul__(self, other: Location | Shape) -> Plane | list[Plane] | Shape:
+    @overload
+    def __mul__(self, other: Location) -> Plane: ...
+    @overload
+    def __mul__(self, other: TShape) -> TShape: ...
+    @overload
+    def __mul__(self, other: Iterable[Location]) -> list[Plane]: ...
+    def __mul__(
+        self, other: Location | TShape | Iterable[Location]
+    ) -> Plane | list[Plane] | TShape:
         if isinstance(other, Location):
             return Plane(self.location * other)
-        if (  # LocationList
-            hasattr(other, "local_locations") and hasattr(other, "location_index")
-        ) or (  # tuple of locations
-            isinstance(other, (list, tuple))
-            and all([isinstance(o, Location) for o in other])
-        ):
-            return [self * loc for loc in other]
         if hasattr(other, "wrapped") and not isinstance(other, Vector):  # Shape
             return self.location * other
-
+        try:
+            others = list(other)
+            if all(isinstance(o, Location) for o in others):
+                return [self * loc for loc in others]
+        except TypeError:  # not iterable
+            pass
         raise TypeError(
             "Planes can only be multiplied with Locations or Shapes to relocate them"
         )
