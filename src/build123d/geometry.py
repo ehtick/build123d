@@ -76,6 +76,7 @@ from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TypeOfColo
 from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS_Vertex
+from typing_extensions import cast
 
 from build123d.build_enums import Align, Align2DType, Align3DType, Extrinsic, Intrinsic
 
@@ -3059,7 +3060,7 @@ class Plane(metaclass=PlaneMeta):
         if isinstance(other, Location):
             return Plane(self.location * other)
         if hasattr(other, "wrapped") and not isinstance(other, Vector):  # Shape
-            return self.location * other
+            return self.location * cast("Shape", other)
         try:
             others = list(other)
             if all(isinstance(o, Location) for o in others):
