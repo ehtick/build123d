@@ -42,7 +42,7 @@ import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from math import degrees, isclose, log10, pi, prod, radians
-from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeAlias, overload
 
 import numpy as np
 import webcolors  # type: ignore
@@ -76,14 +76,11 @@ from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TypeOfColo
 from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS_Vertex
-from typing_extensions import cast
 
 from build123d.build_enums import Align, Align2DType, Align3DType, Extrinsic, Intrinsic
 
 if TYPE_CHECKING:  # pragma: no cover
     from .topology import Edge, Face, Shape, Vertex
-
-TShape = TypeVar("TShape", bound="Shape")
 
 # Create a build123d logger to distinguish these logs from application logs.
 # If the user doesn't configure logging, all build123d logs will be discarded.
@@ -1884,61 +1881,32 @@ class Location:
         return Location(self.wrapped.Transformation())
 
     @overload
-    def __mul__(self, other: TShape) -> TShape: ...
-
-    @overload
     def __mul__(self, other: Location) -> Location: ...
 
     @overload
     def __mul__(self, other: Iterable[Location]) -> list[Location]: ...
 
     def __mul__(
-        self, other: TShape | Location | Iterable[Location]
-    ) -> TShape | Location | list[Location]:
+        self, other: Location | Iterable[Location]
+    ) -> Location | list[Location]:
         """Combine locations"""
         if self.wrapped is None:
             raise ValueError("Cannot move a shape at an empty location")
 
-        # other is a Shape
-        if hasattr(other, "wrapped") and isinstance(other.wrapped, TopoDS_Shape):
-            # result = other.moved(self)
-            downcast_lut: dict[
-                TopAbs_ShapeEnum, Callable[[TopoDS_Shape], TopoDS_Shape]
-            ] = {
-                TopAbs_ShapeEnum.TopAbs_VERTEX: TopoDS.Vertex,
-                TopAbs_ShapeEnum.TopAbs_EDGE: TopoDS.Edge,
-                TopAbs_ShapeEnum.TopAbs_WIRE: TopoDS.Wire,
-                TopAbs_ShapeEnum.TopAbs_FACE: TopoDS.Face,
-                TopAbs_ShapeEnum.TopAbs_SHELL: TopoDS.Shell,
-                TopAbs_ShapeEnum.TopAbs_SOLID: TopoDS.Solid,
-                TopAbs_ShapeEnum.TopAbs_COMPOUND: TopoDS.Compound,
-            }
-            assert other.wrapped is not None
-            try:
-                f_downcast = downcast_lut[other.wrapped.ShapeType()]
-            except KeyError as exc:
-                raise ValueError(f"Unknown object type {other}") from exc
-
-            result: Shape = copy_module.deepcopy(other, None)  # type: ignore[arg-type]
-            result.wrapped = f_downcast(other.wrapped.Moved(self.wrapped))
-            return result
-
-        # other is a Location
         if isinstance(other, Location):
             if other.wrapped is None:
                 raise ValueError("Can't multiply by empty location")
             return Location(self.wrapped * other.wrapped)
 
-        # other is a list of Locations
-        if isinstance(other, Iterable):
+        try:
             others = list(other)
-            if not all(isinstance(o, Location) for o in others):
-                raise ValueError("other must be a list of Locations")
-            if any(o.wrapped is None for o in others):
-                raise ValueError("Can't multiple by empty Locations")
-            return [Location(self.wrapped * loc.wrapped) for loc in others]
-
-        raise ValueError(f"Invalid input {other}")
+            if all(isinstance(o, Location) for o in others):
+                if any(o.wrapped is None for o in others):
+                    raise ValueError("Can't multiply by empty Locations")
+                return [Location(self.wrapped * loc.wrapped) for loc in others]
+        except TypeError:  # not iterable
+            pass
+        return NotImplemented  # will try Shape.__rmul__ for shapes
 
     def __pow__(self, exponent: int) -> Location:
         return Location(self.wrapped.Powered(exponent))

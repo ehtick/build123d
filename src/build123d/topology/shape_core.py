@@ -1010,9 +1010,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
     def __rmul__(self, other: Plane | Location | Iterable[Plane | Location]):
         """right multiply for positioning operator *"""
         if isinstance(other, Location):
-            return other * self
+            return self.moved(other)
         if isinstance(other, Plane):
-            return other.location * self
+            return self.moved(other.location)
         try:
             others = list(other)
             if all(isinstance(o, Location | Plane) for o in others):
