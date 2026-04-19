@@ -405,7 +405,7 @@ class TestLocations(unittest.TestCase):
         circles = GridLocations(2, 2, 2, 2) * Circle(1)
         self.assertEqual(len(circles), 4)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             GridLocations(2, 2, 2, 2) * "error"
 
     def test_grid_attributes(self):

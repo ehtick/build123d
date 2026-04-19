@@ -915,12 +915,6 @@ class LocationList:
         self.location_index += 1
         return result
 
-    def __mul__(self, shape: Shape) -> list[Shape]:
-        """Vectorized application of locations to a shape"""
-        if not isinstance(shape, Shape):
-            raise ValueError("Location list can only be multiplied with shapes")
-        return [loc * shape for loc in self.locations]
-
     @classmethod
     def _get_context(cls):
         """Return the instance of the current LocationList"""
