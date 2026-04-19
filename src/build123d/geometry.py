@@ -3051,25 +3051,17 @@ class Plane(metaclass=PlaneMeta):
     @overload
     def __mul__(self, other: Location) -> Plane: ...
     @overload
-    def __mul__(self, other: TShape) -> TShape: ...
-    @overload
     def __mul__(self, other: Iterable[Location]) -> list[Plane]: ...
-    def __mul__(
-        self, other: Location | TShape | Iterable[Location]
-    ) -> Plane | list[Plane] | TShape:
+    def __mul__(self, other: Location | Iterable[Location]) -> Plane | list[Plane]:
         if isinstance(other, Location):
             return Plane(self.location * other)
-        if hasattr(other, "wrapped") and not isinstance(other, Vector):  # Shape
-            return self.location * cast("Shape", other)
         try:
             others = list(other)
             if all(isinstance(o, Location) for o in others):
                 return [self * loc for loc in others]
         except TypeError:  # not iterable
             pass
-        raise TypeError(
-            "Planes can only be multiplied with Locations or Shapes to relocate them"
-        )
+        return NotImplemented  # will try Shape.__rmul__ for shapes
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
