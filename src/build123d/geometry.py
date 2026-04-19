@@ -1891,7 +1891,7 @@ class Location:
     ) -> Location | list[Location]:
         """Combine locations"""
         if self.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
+            raise ValueError("Cannot multiply empty location")
 
         if isinstance(other, Location):
             if other.wrapped is None:
