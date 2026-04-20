@@ -311,6 +311,9 @@ class TestPlane(unittest.TestCase):
         with self.assertRaises(TypeError):
             Vector(1, 1, 1) * p
 
+        with self.assertRaises(TypeError):
+            1 * p
+
         with self.assertRaises(ValueError):
             (2, 3, 4) * p
 
