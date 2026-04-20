@@ -280,19 +280,19 @@ class TestPlane(unittest.TestCase):
 
     def test_plane_mul_location(self):
         p = Plane(origin=(1, 2, 3), x_dir=(1, 0, 0), z_dir=(0, 0, 1))
-        p2 = p * Location((1, 2, -1), (0, 0, 45))
+        p2 = Location((1, 2, -1), (0, 0, 45)) * p
         self.assertAlmostEqual(p2.origin, (2, 4, 2), 6)
         self.assertAlmostEqual(p2.x_dir, (math.sqrt(2) / 2, math.sqrt(2) / 2, 0), 6)
         self.assertAlmostEqual(p2.y_dir, (-math.sqrt(2) / 2, math.sqrt(2) / 2, 0), 6)
         self.assertAlmostEqual(p2.z_dir, (0, 0, 1), 6)
 
-        p2 = p * Location((1, 2, -1), (0, 45, 0))
+        p2 = Location((1, 2, -1), (0, 45, 0)) * p
         self.assertAlmostEqual(p2.origin, (2, 4, 2), 6)
         self.assertAlmostEqual(p2.x_dir, (math.sqrt(2) / 2, 0, -math.sqrt(2) / 2), 6)
         self.assertAlmostEqual(p2.y_dir, (0, 1, 0), 6)
         self.assertAlmostEqual(p2.z_dir, (math.sqrt(2) / 2, 0, math.sqrt(2) / 2), 6)
 
-        p2 = p * Location((1, 2, -1), (45, 0, 0))
+        p2 = Location((1, 2, -1), (45, 0, 0)) * p
         self.assertAlmostEqual(p2.origin, (2, 4, 2), 6)
         self.assertAlmostEqual(p2.x_dir, (1, 0, 0), 6)
         self.assertAlmostEqual(p2.y_dir, (0, math.sqrt(2) / 2, math.sqrt(2) / 2), 6)
@@ -306,10 +306,35 @@ class TestPlane(unittest.TestCase):
         with self.assertRaises(TypeError):
             p * 2
 
+    def test_plane_rmul_error(self):
+        p = Plane.XY
+        with self.assertRaises(TypeError):
+            Vector(1, 1, 1) * p
+
+        with self.assertRaises(ValueError):
+            (2, 3, 4) * p
+
     def test_plane_mul_locations(self):
         p = Plane.XY
         l1, l2 = Pos(1, 2, 3), Pos(4, 5, 6)
-        self.assertEqual(Plane.XY * (l1, l2), [p * l1, p * l2])
+        self.assertEqual(p * (l1, l2), [p * l1, p * l2])
+
+    def test_plane_mul_planes(self):
+        p = Plane.XY
+        p1, p2 = Plane.XZ.offset(1), Plane.ZY.offset(-2)
+        self.assertEqual(p * (p1, p2), [p * p1, p * p2])
+
+    def test_plane_rmul_locations(self):
+        p = Plane.XY
+        l1, l2 = Pos(1, 2, 3), Pos(4, 5, 6)
+        self.assertEqual((l1, l2) * p, [l1 * p, l2 * p])
+
+    def test_plane_rmul_planes(self):
+        """when multiplying multiple planes with a single plane,
+        the multiple planes are treated as locations"""
+        p = Plane.XY
+        p1, p2 = Plane.XZ.offset(1), Plane.ZY.offset(-2)
+        self.assertEqual((p1, p2) * p, [Location(p1) * p, Location(p2) * p])
 
     def test_plane_mul_shape(self):
         p = Plane.XY.offset(2)

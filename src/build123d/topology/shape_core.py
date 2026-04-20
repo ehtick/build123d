@@ -2881,7 +2881,7 @@ class ShapeList(list[T]):
                     plane_xyz = tcast(
                         gp_XYZ,
                         (
-                            tcast(Plane, plane * Location(shape.location).inverse())
+                            tcast(Plane, Location(shape.location).inverse() * plane)
                         ).z_dir.wrapped.XYZ(),
                     )
                     t_edge = tcast(BRep_TEdge, shape.wrapped.TShape())

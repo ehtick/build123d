@@ -3017,19 +3017,45 @@ class Plane(metaclass=PlaneMeta):
         return Plane(self.origin, self.x_dir, -self.z_dir)
 
     @overload
-    def __mul__(self, other: Location) -> Plane: ...
+    def __mul__(self, other: Location | Plane) -> Location: ...
     @overload
-    def __mul__(self, other: Iterable[Location]) -> list[Plane]: ...
-    def __mul__(self, other: Location | Iterable[Location]) -> Plane | list[Plane]:
+    def __mul__(self, other: Iterable[Location | Plane]) -> list[Location]: ...
+    def __mul__(
+        self, other: Location | Plane | Iterable[Location | Plane]
+    ) -> Location | list[Location]:
         if isinstance(other, Location):
-            return Plane(self.location * other)
+            return Location(self) * other
+        if isinstance(other, Plane):
+            return Location(self) * other.location
         try:
             others = list(other)
-            if all(isinstance(o, Location) for o in others):
-                return [self * loc for loc in others]
+            if all(isinstance(other, Location | Plane) for other in others):
+                return [
+                    Location(self)
+                    * (other.location if isinstance(other, Plane) else other)
+                    for other in others
+                ]
         except TypeError:  # not iterable
             pass
-        return NotImplemented  # will try Shape.__rmul__ for shapes
+        return NotImplemented  # will try __rmul__ on other
+
+    @overload
+    def __rmul__(self, other: Location) -> Plane: ...
+    @overload
+    def __rmul__(self, other: Iterable[Location | Plane]) -> list[Plane]: ...
+    def __rmul__(
+        self, other: Location | Plane | Iterable[Location | Plane]
+    ) -> Plane | list[Plane]:
+        if isinstance(other, Location | Plane):
+            return self.move(other)
+        try:
+            others = list(other)
+            if any(not isinstance(other, Location | Plane) for other in others):
+                raise ValueError("Planes can only be multiplied by locations or planes")
+            return [self.move(loc) for loc in others]
+        except TypeError:  # not iterable
+            pass
+        raise TypeError()
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
@@ -3151,18 +3177,19 @@ class Plane(metaclass=PlaneMeta):
 
         return Plane(self._origin, new_x_dir, new_z_dir)
 
-    def move(self, loc: Location) -> Plane:
-        """Change the position & orientation of self by applying a relative location
+    # TODO should be called `moved` as it makes a new Plane?
+    def move(self, loc: Location | Plane) -> Plane:
+        """Change the position & orientation of a copy of self by applying a relative location
 
         Args:
-            loc (Location): relative change
+            loc (Location | Plane): relative change
 
         Returns:
             Plane: relocated plane
         """
-        self_copy = copy_module.deepcopy(self)
-        self_copy.wrapped.Transform(loc.wrapped.Transformation())
-        return Plane(self_copy.wrapped)
+        if isinstance(loc, Plane):
+            loc = loc.location
+        return Plane(self.location * loc)
 
     def _calc_transforms(self):
         """Computes transformation matrices to convert between local and global coordinates."""
