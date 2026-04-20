@@ -682,6 +682,11 @@ class TestShape(unittest.TestCase):
         translated_line = line.translate((0, 1, 0))
         self.assertIsNone(translated_line._wrapped)
 
+    def test_mul_non_iterable_non_location(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        with self.assertRaises(ValueError):
+            x = 3 * line
+
 
 class TestGlobalLocation(unittest.TestCase):
     def test_global_location_hierarchy(self):

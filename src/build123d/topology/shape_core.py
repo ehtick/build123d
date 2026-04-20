@@ -1003,16 +1003,21 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return 0
         return hash(self.wrapped)
 
-    def __rmul__(self, other):
+    @overload
+    def __rmul__(self, other: Plane | Location) -> Self: ...
+    @overload
+    def __rmul__(self, other: Iterable[Plane | Location]) -> list[Self]: ...
+    def __rmul__(self, other: Plane | Location | Iterable[Plane | Location]):
         """right multiply for positioning operator *"""
-        if not (
-            isinstance(other, (list, tuple))
-            and all(isinstance(o, (Location, Plane)) for o in other)
-        ):
-            raise ValueError(
-                "shapes can only be multiplied list of locations or planes"
-            )
-        return [loc * self for loc in other]
+        if isinstance(other, Location | Plane):
+            return self.moved(other)
+        try:
+            others = list(other)
+            if all(isinstance(o, Location | Plane) for o in others):
+                return [self.moved(other) for other in others]
+        except TypeError:  # not iterable
+            pass
+        raise ValueError("shapes can only be multiplied by locations or planes")
 
     def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
         """cut shape from self operator -"""
@@ -1583,17 +1588,19 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         return self
 
-    def moved(self, loc: Location) -> Self:
+    def moved(self, loc: Location | Plane) -> Self:
         """moved
 
         Apply a location in relative sense (i.e. update current location) to a copy of self
 
         Args:
-            loc (Location): new location relative to current location
+            loc (Location | Plane): new location relative to current location
 
         Returns:
             Shape: copy of Shape moved to relative location
         """
+        if isinstance(loc, Plane):
+            loc = loc.location
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
         if loc.wrapped is None:

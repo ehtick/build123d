@@ -322,6 +322,27 @@ class TestLocation(unittest.TestCase):
         self.assertAlmostEqual(locs[0].position, (-1, 2, 0), 5)
         self.assertAlmostEqual(locs[1].position, (3, 2, 0), 5)
 
+    def test_mult_empty_self(self):
+        """not sure if it can actually happen but the code checks for it"""
+        empty_loc = Location()
+        empty_loc.wrapped = None
+        with self.assertRaises(ValueError):
+            x = empty_loc * Pos(1, 2, 3)
+
+    def test_mult_empty_other(self):
+        """not sure if it can actually happen but the code checks for it"""
+        empty_loc = Location()
+        empty_loc.wrapped = None
+        with self.assertRaises(ValueError):
+            x = Pos(1, 2, 3) * empty_loc
+
+    def test_mult_empty_any_others(self):
+        """not sure if it can actually happen but the code checks for it"""
+        some_empty_locs = [Location(), Location(), Location()]
+        some_empty_locs[1].wrapped = None
+        with self.assertRaises(ValueError):
+            x = Pos(1, 2, 3) * some_empty_locs
+
     def test_as_json(self):
         data_dict = {
             "part1": {
