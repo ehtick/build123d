@@ -3047,12 +3047,12 @@ class Plane(metaclass=PlaneMeta):
         self, other: Location | Plane | Iterable[Location | Plane]
     ) -> Plane | list[Plane]:
         if isinstance(other, Location | Plane):
-            return self.move(other)
+            return self.moved(other)
         try:
             others = list(other)
             if any(not isinstance(other, Location | Plane) for other in others):
                 raise ValueError("Planes can only be multiplied by locations or planes")
-            return [self.move(loc) for loc in others]
+            return [self.moved(loc) for loc in others]
         except TypeError:  # not iterable
             pass
         raise TypeError()
@@ -3177,8 +3177,7 @@ class Plane(metaclass=PlaneMeta):
 
         return Plane(self._origin, new_x_dir, new_z_dir)
 
-    # TODO should be called `moved` as it makes a new Plane?
-    def move(self, loc: Location | Plane) -> Plane:
+    def moved(self, loc: Location | Plane) -> Plane:
         """Change the position & orientation of a copy of self by applying a relative location
 
         Args:

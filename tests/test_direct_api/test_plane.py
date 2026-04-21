@@ -458,8 +458,8 @@ class TestPlane(unittest.TestCase):
         with self.assertRaises(TypeError):
             Plane.XY.shift_origin(Edge.make_line((0, 0), (1, 1)))
 
-    def test_move(self):
-        pln = Plane.XY.move(Location((1, 2, 3)))
+    def test_moved(self):
+        pln = Plane.XY.moved(Location((1, 2, 3)))
         self.assertAlmostEqual(pln.origin, (1, 2, 3), 5)
 
     def test_rotated(self):
