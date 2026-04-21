@@ -3480,7 +3480,7 @@ def to_align_offset(
 
 class NotAllLocationLikeError(TypeError):
     def __init__(self, wrong_types: Iterable[Type[Any]]) -> None:
-        super().__init__(", ".join(t.__name__ for t in set(wrong_types)))
+        super().__init__(", ".join(sorted(t.__name__ for t in set(wrong_types))))
 
 
 def all_location_like(items: Iterable[Any]) -> list[Location | Plane]:
