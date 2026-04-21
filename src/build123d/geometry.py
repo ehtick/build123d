@@ -637,24 +637,23 @@ class Axis(metaclass=AxisMeta):
     _dim = 1
 
     @overload
-    def __init__(self, gp_ax1: gp_Ax1):
+    def __init__(self, gp_ax1: gp_Ax1) -> None:
         """Axis: point and direction"""
 
     @overload
-    def __init__(self, location: Location):
+    def __init__(self, location: Location) -> None:
         """Axis from location"""
 
     @overload
-    def __init__(self, origin: VectorLike, direction: VectorLike):
+    def __init__(self, origin: VectorLike, direction: VectorLike) -> None:
         """Axis: point and direction"""
 
     @overload
-    def __init__(self, edge: Edge):
+    def __init__(self, edge: Edge) -> None:
         """Axis: start of Edge"""
 
-    def __init__(
-        self, *args, **kwargs
-    ):  # pylint: disable=too-many-branches, too-many-locals
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # pylint: disable=too-many-branches, too-many-locals
 
         gp_ax1 = kwargs.pop("gp_ax1", None)
         origin = kwargs.pop("origin", None)
@@ -714,7 +713,11 @@ class Axis(metaclass=AxisMeta):
         elif not isinstance(gp_ax1, gp_Ax1):
             raise ValueError(f"Invalid Axis parameter: {gp_ax1}")
 
-        self.wrapped: gp_Ax1 = gp_ax1  # type: ignore[annotation-unchecked]
+        self._wrapped: gp_Ax1 = gp_ax1
+
+    @property
+    def wrapped(self):
+        return self._wrapped
 
     @property
     def position(self) -> Vector:
@@ -785,9 +788,7 @@ class Axis(metaclass=AxisMeta):
 
     def located(self, new_location: Location):
         """relocates self to a new location possibly changing position and direction"""
-        if self.wrapped is None:
-            raise ValueError("Can't located empty Axis")
-        top_location: TopLoc_Location = new_location.wrapped  # type: ignore[has-type]
+        top_location = new_location.wrapped
         self_gp_ax1: gp_Ax1 = self.wrapped
         new_gp_ax1: gp_Ax1 = self_gp_ax1.Transformed(top_location.Transformation())
         return Axis(new_gp_ax1)
@@ -1653,19 +1654,21 @@ class Location:
     }
 
     @overload
-    def __init__(self):
+    def __init__(self) -> None:
         """Location with no position or orientation"""
 
     @overload
-    def __init__(self, location: Location):
+    def __init__(self, location: Location) -> None:
         """Location from Location"""
 
     @overload
-    def __init__(self, position: VectorLike, angle: float = 0):
+    def __init__(self, position: VectorLike, angle: float = 0) -> None:
         """Location from position and rotation around z-axis by optional angle"""
 
     @overload
-    def __init__(self, position: VectorLike, orientation: RotationLike | None = None):
+    def __init__(
+        self, position: VectorLike, orientation: RotationLike | None = None
+    ) -> None:
         """Location from position and optional orientation (see Rotation class)"""
 
     @overload
@@ -1674,34 +1677,35 @@ class Location:
         position: VectorLike,
         orientation: RotationLike,
         ordering: Extrinsic | Intrinsic,
-    ):
+    ) -> None:
         """Location from position and optional orientation (see Rotation class).
         Orientation determined by optional ordering, defaults to Intrinsic.XYZ
         """
 
     @overload
-    def __init__(self, plane: Plane):
+    def __init__(self, plane: Plane) -> None:
         """Location from location of Plane."""
 
     @overload
-    def __init__(self, plane: Plane, plane_offset: VectorLike):
+    def __init__(self, plane: Plane, plane_offset: VectorLike) -> None:
         """Location from location of Plane translated by plane_offset"""
 
     @overload
-    def __init__(self, top_loc: TopLoc_Location):
+    def __init__(self, top_loc: TopLoc_Location) -> None:
         """Location from low-level TopLoc_Location object"""
 
     @overload
-    def __init__(self, gp_trsf: gp_Trsf):
+    def __init__(self, gp_trsf: gp_Trsf) -> None:
         """Location from low-level gp_Trsf object"""
 
     @overload
-    def __init__(self, position: VectorLike, direction: VectorLike, angle: float):
+    def __init__(
+        self, position: VectorLike, direction: VectorLike, angle: float
+    ) -> None:
         """Location from position and rotation around direction by angle"""
 
-    def __init__(
-        self, *args, **kwargs
-    ):  # pylint: disable=too-many-branches, too-many-locals, too-many-statements
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # pylint: disable=too-many-branches, too-many-locals, too-many-statements
 
         self.location_index = 0
 
@@ -1754,7 +1758,7 @@ class Location:
         # Construct transformation
         trsf = gp_Trsf()
 
-        if plane:
+        if isinstance(plane, Plane):
             cs = gp_Ax3(
                 plane.origin.to_pnt(),
                 plane.z_dir.to_dir(),
@@ -1763,7 +1767,7 @@ class Location:
             trsf.SetTransformation(cs)
             trsf.Invert()
 
-        elif gp_trsf:
+        elif isinstance(gp_trsf, gp_Trsf):
             trsf = gp_trsf
 
         elif angle is not None:
@@ -1786,12 +1790,16 @@ class Location:
             trsf.SetTranslationPart(Vector(position).wrapped)
 
         # Final assignment based on input
-        if location is not None:
-            self.wrapped = location.wrapped
-        elif top_loc is not None:
-            self.wrapped = top_loc
+        if isinstance(location, Location):
+            self._wrapped = location.wrapped
+        elif isinstance(top_loc, TopLoc_Location):
+            self._wrapped = top_loc
         else:
-            self.wrapped = TopLoc_Location(trsf)
+            self._wrapped = TopLoc_Location(trsf)
+
+    @property
+    def wrapped(self) -> TopLoc_Location:
+        return self._wrapped
 
     @property
     def position(self) -> Vector:
@@ -1810,13 +1818,11 @@ class Location:
         Args:
             value (VectorLike): New position
         """
-        if self.wrapped is None:
-            raise ValueError("Can't determine position of empty Location")
         trsf_position = gp_Trsf()
         trsf_position.SetTranslationPart(Vector(value).wrapped)
         trsf_orientation = gp_Trsf()
         trsf_orientation.SetRotation(self.wrapped.Transformation().GetRotation())
-        self.wrapped = TopLoc_Location(trsf_position * trsf_orientation)
+        self._wrapped = TopLoc_Location(trsf_position * trsf_orientation)
 
     @property
     def orientation(self) -> Vector:
@@ -1848,7 +1854,7 @@ class Location:
         quaternion.SetEulerAngles(self._rot_order_dict[ordering], *rotation)
         trsf_orientation = gp_Trsf()
         trsf_orientation.SetRotation(quaternion)
-        self.wrapped = TopLoc_Location(trsf_position * trsf_orientation)
+        self._wrapped = TopLoc_Location(trsf_position * trsf_orientation)
 
     @property
     def x_axis(self) -> Axis:
@@ -1890,19 +1896,13 @@ class Location:
         self, other: Location | Iterable[Location]
     ) -> Location | list[Location]:
         """Combine locations"""
-        if self.wrapped is None:
-            raise ValueError("Cannot multiply empty location")
 
         if isinstance(other, Location):
-            if other.wrapped is None:
-                raise ValueError("Can't multiply by empty location")
             return Location(self.wrapped * other.wrapped)
 
         try:
             others = list(other)
             if all(isinstance(o, Location) for o in others):
-                if any(o.wrapped is None for o in others):
-                    raise ValueError("Can't multiply by empty Locations")
                 return [Location(self.wrapped * loc.wrapped) for loc in others]
         except TypeError:  # not iterable
             pass
@@ -2196,7 +2196,11 @@ class OrientedBoundBox:
             BRepBndLib.AddOBB_s(shape.wrapped, obb, True)
         else:
             raise TypeError(f"Expected Bnd_OBB or Shape, got {type(shape).__name__}")
-        self.wrapped = obb
+        self._wrapped = obb
+
+    @property
+    def wrapped(self):
+        return self._wrapped
 
     @property
     def corners(self) -> list[Vector]:
@@ -2243,8 +2247,6 @@ class OrientedBoundBox:
         Returns:
             float: The diagonal length.
         """
-        if self.wrapped is None:
-            return 0.0
         return self.wrapped.SquareExtent() ** 0.5
 
     @property
@@ -2348,8 +2350,6 @@ class OrientedBoundBox:
         Returns:
             bool: True if 'other' is completely inside this bounding box; otherwise, False.
         """
-        if other.wrapped is None:
-            raise ValueError("Can't compare to a null obb")
         return self.wrapped.IsCompletelyInside(other.wrapped)
 
     def is_outside(self, point: Vector) -> bool:
@@ -2368,8 +2368,6 @@ class OrientedBoundBox:
         Returns:
             bool: True if the point is completely outside the bounding box; otherwise, False.
         """
-        if point.wrapped is None:
-            raise ValueError("Can't compare to a null point")
         return self.wrapped.IsOut(point.to_pnt())
 
     def __repr__(self) -> str:

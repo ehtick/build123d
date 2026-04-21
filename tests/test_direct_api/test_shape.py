@@ -579,22 +579,13 @@ class TestShape(unittest.TestCase):
         self.assertIs(empty, empty.transform_geometry(Matrix(translate_matrix)))
         with self.assertRaises(ValueError):
             empty.locate(Location())
-        empty_loc = Location()
-        empty_loc.wrapped = None
-        with self.assertRaises(ValueError):
-            box.locate(empty_loc)
+        
         with self.assertRaises(ValueError):
             empty.located(Location())
         with self.assertRaises(ValueError):
-            box.located(empty_loc)
-        with self.assertRaises(ValueError):
             empty.move(Location())
         with self.assertRaises(ValueError):
-            box.move(empty_loc)
-        with self.assertRaises(ValueError):
             empty.moved(Location())
-        with self.assertRaises(ValueError):
-            box.moved(empty_loc)
         # with self.assertRaises(ValueError):
         #     empty.relocate(Location())
         # with self.assertRaises(ValueError):
@@ -605,8 +596,6 @@ class TestShape(unittest.TestCase):
             empty.distance_to_with_closest_points(Vector(1, 1, 1))
         with self.assertRaises(ValueError):
             empty.distance_to(Vector(1, 1, 1))
-        with self.assertRaises(AttributeError):
-            box.intersect(empty_loc)
         self.assertEqual(empty._ocp_section(Vertex(1, 1, 1)), ([], []))
         self.assertEqual(empty.faces_intersected_by_axis(Axis.Z), ShapeList())
         with self.assertRaises(ValueError):
@@ -623,15 +612,9 @@ class TestShape(unittest.TestCase):
             empty.tessellate(0.001)
         with self.assertRaises(ValueError):
             empty.to_splines()
-        empty_axis = Axis((0, 0, 0), (1, 0, 0))
-        empty_axis.wrapped = None
-        with self.assertRaises(ValueError):
-            box.vertices().group_by(empty_axis)
         empty_wire = Wire()
         with self.assertRaises(ValueError):
             box.vertices().group_by(empty_wire)
-        with self.assertRaises(ValueError):
-            box.vertices().sort_by(empty_axis)
         with self.assertRaises(ValueError):
             box.vertices().sort_by(empty_wire)
 
