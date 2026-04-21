@@ -1734,17 +1734,17 @@ class Location:
             elif gp_trsf is None and isinstance(args[0], gp_Trsf):
                 gp_trsf = args[0]
             elif isinstance(args[0], (Vector, Iterable)):
-                position = Vector(args[0])
+                position = Vector(args[0])  # type: ignore
                 if len(args) > 1:
                     if isinstance(args[1], (Vector, Iterable)):
-                        orientation = Vector(args[1])
+                        orientation = Vector(args[1])  # type: ignore
                     elif isinstance(args[1], (int, float)):
                         angle = args[1]
                 if len(args) > 2:
                     if isinstance(args[1], (Vector, Iterable)) and isinstance(
                         args[2], (int, float)
                     ):
-                        direction = Vector(args[1])
+                        direction = Vector(args[1])  # type: ignore
                         angle = args[2]
                     elif isinstance(args[2], (Intrinsic, Extrinsic)):
                         ordering = args[2]
