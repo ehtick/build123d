@@ -143,10 +143,12 @@ from build123d.geometry import (
     ColorLike,
     Location,
     Matrix,
+    NotAllLocationLikeError,
     OrientedBoundBox,
     Plane,
     Vector,
     VectorLike,
+    all_location_like,
     logger,
 )
 
@@ -1012,12 +1014,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if isinstance(other, Location | Plane):
             return self.moved(other)
         try:
-            others = list(other)
-            if all(isinstance(o, Location | Plane) for o in others):
-                return [self.moved(other) for other in others]
+            return [self.moved(loc) for loc in all_location_like(other)]
+        except NotAllLocationLikeError as e:
+            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}")
         except TypeError:  # not iterable
             pass
-        raise ValueError("shapes can only be multiplied by locations or planes")
+        raise TypeError(
+            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
+        )
 
     def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
         """cut shape from self operator -"""

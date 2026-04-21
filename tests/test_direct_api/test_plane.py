@@ -308,14 +308,14 @@ class TestPlane(unittest.TestCase):
 
     def test_plane_rmul_error(self):
         p = Plane.XY
-        with self.assertRaises(TypeError):
-            Vector(1, 1, 1) * p
 
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(TypeError, r"Plane cannot be multiplied by int"):
             1 * p
 
-        with self.assertRaises(TypeError):
-            (2, 3, 4) * p
+        with self.assertRaisesRegex(
+            TypeError, r"Plane cannot be multiplied by float, int"
+        ):
+            (2, 3.3, 4) * p
 
     def test_plane_mul_locations(self):
         p = Plane.XY

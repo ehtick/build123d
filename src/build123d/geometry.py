@@ -42,7 +42,7 @@ import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from math import degrees, isclose, log10, pi, prod, radians
-from typing import TYPE_CHECKING, Any, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Type, TypeAlias, cast, overload
 
 import numpy as np
 import webcolors  # type: ignore
@@ -3049,12 +3049,14 @@ class Plane(metaclass=PlaneMeta):
         if isinstance(other, Location | Plane):
             return self.moved(other)
         try:
-            others = list(other)
-            if all(isinstance(other, Location | Plane) for other in others):
-                return [self.moved(loc) for loc in others]
+            return [self.moved(loc) for loc in all_location_like(other)]
+        except NotAllLocationLikeError as e:
+            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}")
         except TypeError:  # not iterable
             pass
-        raise TypeError("Planes can only be multiplied by locations or planes")
+        raise TypeError(
+            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
+        )
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
@@ -3474,3 +3476,23 @@ def to_align_offset(
         elif alignment == Align.NONE:
             align_offset.append(0)
     return Vector(*align_offset)
+
+
+class NotAllLocationLikeError(TypeError):
+    def __init__(self, wrong_types: Iterable[Type[Any]]) -> None:
+        super().__init__(", ".join(t.__name__ for t in set(wrong_types)))
+
+
+def all_location_like(items: Iterable[Any]) -> list[Location | Plane]:
+    """Returns the items as a list unless any of them is not an instance of `Location | Plane`.
+    Otherwise raises `NotAllLocationLikeError`."""
+    items = list(items)
+
+    if wrong_types := set(
+        cast(Type[Any], type(item))
+        for item in items
+        if not isinstance(item, Location | Plane)
+    ):
+        raise NotAllLocationLikeError(wrong_types)
+    else:
+        return items
