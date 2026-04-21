@@ -878,9 +878,6 @@ class LocationList:
     def __init__(self, locations: list[Location]):
         self._reset_tok = None
         self.local_locations = locations
-        self.location_index = 0
-        self.plane_index = 0
-        self.iter_loc = None
 
     def __enter__(self):
         """Upon entering create a token to restore contextvars"""
@@ -902,18 +899,7 @@ class LocationList:
         )
 
     def __iter__(self):
-        """Initialize to beginning"""
-        self.location_index = 0
-        self.iter_loc = self.locations
-        return self
-
-    def __next__(self):
-        """While not through all the locations, return the next one"""
-        if self.location_index >= len(self.iter_loc):
-            raise StopIteration
-        result = self.iter_loc[self.location_index]
-        self.location_index += 1
-        return result
+        return iter(self.locations)
 
     @classmethod
     def _get_context(cls):
@@ -1249,7 +1235,6 @@ class WorkplaneList:
         self._reset_tok = None
         self.workplanes = WorkplaneList._convert_to_planes(workplanes)
         self.locations_context = None
-        self.plane_index = 0
 
     @staticmethod
     def _convert_to_planes(objs: Iterable[Face | Plane | Location]) -> list[Plane]:
@@ -1286,17 +1271,7 @@ class WorkplaneList:
         )
 
     def __iter__(self):
-        """Initialize to beginning"""
-        self.plane_index = 0
-        return self
-
-    def __next__(self):
-        """While not through all the workplanes, return the next one"""
-        if self.plane_index >= len(self.workplanes):
-            raise StopIteration
-        result = self.workplanes[self.plane_index]
-        self.plane_index += 1
-        return result
+        return iter(self.workplanes)
 
     @classmethod
     def _get_context(cls):

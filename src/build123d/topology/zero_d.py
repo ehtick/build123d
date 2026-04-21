@@ -104,8 +104,6 @@ class Vertex(Shape[TopoDS_Vertex]):
         """Vertex from Vector or other iterators"""
 
     def __init__(self, *args, **kwargs):
-        self.vertex_index = 0
-
         ocp_vx = kwargs.pop("ocp_vx", None)
         v = kwargs.pop("v", None)
         x = kwargs.pop("X", 0)
@@ -252,23 +250,7 @@ class Vertex(Shape[TopoDS_Vertex]):
 
     def __iter__(self):
         """Initialize to beginning"""
-        self.vertex_index = 0
-        return self
-
-    def __next__(self):
-        """return the next value"""
-        if self.vertex_index == 0:
-            self.vertex_index += 1
-            value = self.X
-        elif self.vertex_index == 1:
-            self.vertex_index += 1
-            value = self.Y
-        elif self.vertex_index == 2:
-            self.vertex_index += 1
-            value = self.Z
-        else:
-            raise StopIteration
-        return value
+        return iter((self.X, self.Y, self.Z))
 
     def __repr__(self) -> str:
         """To String
