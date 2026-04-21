@@ -314,7 +314,7 @@ class TestPlane(unittest.TestCase):
         with self.assertRaises(TypeError):
             1 * p
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             (2, 3, 4) * p
 
     def test_plane_mul_locations(self):

@@ -3050,12 +3050,11 @@ class Plane(metaclass=PlaneMeta):
             return self.moved(other)
         try:
             others = list(other)
-            if any(not isinstance(other, Location | Plane) for other in others):
-                raise ValueError("Planes can only be multiplied by locations or planes")
-            return [self.moved(loc) for loc in others]
+            if all(isinstance(other, Location | Plane) for other in others):
+                return [self.moved(loc) for loc in others]
         except TypeError:  # not iterable
             pass
-        raise TypeError()
+        raise TypeError("Planes can only be multiplied by locations or planes")
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
