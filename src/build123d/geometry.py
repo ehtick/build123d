@@ -42,7 +42,7 @@ import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from math import degrees, isclose, log10, pi, prod, radians
-from typing import TYPE_CHECKING, Any, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Type, TypeAlias, cast, overload
 
 import numpy as np
 import webcolors  # type: ignore
@@ -3017,19 +3017,46 @@ class Plane(metaclass=PlaneMeta):
         return Plane(self.origin, self.x_dir, -self.z_dir)
 
     @overload
-    def __mul__(self, other: Location) -> Plane: ...
+    def __mul__(self, other: Location | Plane) -> Location: ...
     @overload
-    def __mul__(self, other: Iterable[Location]) -> list[Plane]: ...
-    def __mul__(self, other: Location | Iterable[Location]) -> Plane | list[Plane]:
+    def __mul__(self, other: Iterable[Location | Plane]) -> list[Location]: ...
+    def __mul__(
+        self, other: Location | Plane | Iterable[Location | Plane]
+    ) -> Location | list[Location]:
         if isinstance(other, Location):
-            return Plane(self.location * other)
+            return Location(self) * other
+        if isinstance(other, Plane):
+            return Location(self) * other.location
         try:
             others = list(other)
-            if all(isinstance(o, Location) for o in others):
-                return [self * loc for loc in others]
+            if all(isinstance(other, Location | Plane) for other in others):
+                return [
+                    Location(self)
+                    * (other.location if isinstance(other, Plane) else other)
+                    for other in others
+                ]
         except TypeError:  # not iterable
             pass
-        return NotImplemented  # will try Shape.__rmul__ for shapes
+        return NotImplemented  # will try __rmul__ on other
+
+    @overload
+    def __rmul__(self, other: Location) -> Plane: ...
+    @overload
+    def __rmul__(self, other: Iterable[Location | Plane]) -> list[Plane]: ...
+    def __rmul__(
+        self, other: Location | Plane | Iterable[Location | Plane]
+    ) -> Plane | list[Plane]:
+        if isinstance(other, Location | Plane):
+            return self.moved(other)
+        try:
+            return [self.moved(loc) for loc in all_location_like(other)]
+        except NotAllLocationLikeError as e:
+            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}")
+        except TypeError:  # not iterable
+            pass
+        raise TypeError(
+            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
+        )
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
@@ -3151,18 +3178,18 @@ class Plane(metaclass=PlaneMeta):
 
         return Plane(self._origin, new_x_dir, new_z_dir)
 
-    def move(self, loc: Location) -> Plane:
-        """Change the position & orientation of self by applying a relative location
+    def moved(self, loc: Location | Plane) -> Plane:
+        """Change the position & orientation of a copy of self by applying a relative location
 
         Args:
-            loc (Location): relative change
+            loc (Location | Plane): relative change
 
         Returns:
             Plane: relocated plane
         """
-        self_copy = copy_module.deepcopy(self)
-        self_copy.wrapped.Transform(loc.wrapped.Transformation())
-        return Plane(self_copy.wrapped)
+        if isinstance(loc, Plane):
+            loc = loc.location
+        return Plane(self.location * loc)
 
     def _calc_transforms(self):
         """Computes transformation matrices to convert between local and global coordinates."""
@@ -3449,3 +3476,23 @@ def to_align_offset(
         elif alignment == Align.NONE:
             align_offset.append(0)
     return Vector(*align_offset)
+
+
+class NotAllLocationLikeError(TypeError):
+    def __init__(self, wrong_types: Iterable[Type[Any]]) -> None:
+        super().__init__(", ".join(sorted(t.__name__ for t in set(wrong_types))))
+
+
+def all_location_like(items: Iterable[Any]) -> list[Location | Plane]:
+    """Returns the items as a list unless any of them is not an instance of `Location | Plane`.
+    Otherwise raises `NotAllLocationLikeError`."""
+    items = list(items)
+
+    if wrong_types := set(
+        cast(Type[Any], type(item))
+        for item in items
+        if not isinstance(item, Location | Plane)
+    ):
+        raise NotAllLocationLikeError(wrong_types)
+    else:
+        return items

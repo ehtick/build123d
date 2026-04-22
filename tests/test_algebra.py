@@ -762,9 +762,9 @@ class AlgebraTests(unittest.TestCase):
         self.assertEqual(s3._dim, 3)
         self.assertAlmostEqual(s3.volume, (16 - 1) * 4, 5)
 
-        split_cut = Solid.make_box(
-            4, 1, 1, Plane((-2, -0.5, -0.5))
-        ) - Solid.make_box(1, 2, 2, Plane((-0.5, -1, -1)))
+        split_cut = Solid.make_box(4, 1, 1, Plane((-2, -0.5, -0.5))) - Solid.make_box(
+            1, 2, 2, Plane((-0.5, -1, -1))
+        )
         self.assertTrue(isinstance(split_cut, Part))
         self.assertEqual(len(split_cut.solids()), 2)
         self.assertAlmostEqual(split_cut.volume, 3, 5)
@@ -917,7 +917,9 @@ class RightMultipleTests(unittest.TestCase):
         self.assertTupleAlmostEquals(c[0].position, (1, 2, 3), 6)
 
     def test_rmul_error(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(
+            TypeError, r"Circle cannot be multiplied by Vector"
+        ):
             [Vector(1, 2, 3)] * Circle(1)
 
 

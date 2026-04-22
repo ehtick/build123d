@@ -682,9 +682,16 @@ class TestShape(unittest.TestCase):
         translated_line = line.translate((0, 1, 0))
         self.assertIsNone(translated_line._wrapped)
 
-    def test_mul_non_iterable_non_location(self):
+    def test_rmul_iterable_non_location(self):
         line = Edge.make_line((0, 0), (1, 0))
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(
+            TypeError, r"Edge cannot be multiplied by float, str"
+        ):
+            x = (Pos(), "abc", 1.2) * line
+
+    def test_rmul_non_iterable_non_location(self):
+        line = Edge.make_line((0, 0), (1, 0))
+        with self.assertRaisesRegex(TypeError, r"Edge cannot be multiplied by int"):
             x = 3 * line
 
 

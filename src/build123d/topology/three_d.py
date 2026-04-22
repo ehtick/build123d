@@ -1311,7 +1311,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         if isinstance(bbox, BoundBox):
             return Solid.make_box(*bbox.size).locate(Location(bbox.min))
         else:
-            moved_plane: Plane = Plane(Location(-bbox.size / 2)).move(bbox.location)
+            moved_plane: Plane = Plane(Location(-bbox.size / 2)).moved(bbox.location)
             return Solid.make_box(
                 bbox.size.X, bbox.size.Y, bbox.size.Z, plane=moved_plane
             )
