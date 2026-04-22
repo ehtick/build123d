@@ -32,7 +32,7 @@ from unittest.mock import patch, PropertyMock
 from build123d.build_enums import CenterOf, Kind
 from build123d.geometry import Axis, Plane
 from build123d.objects_part import Box, Cylinder
-from build123d.topology import Face, Shape, Solid
+from build123d.topology import Compound, Face, Part, Shape, Solid
 
 
 class TestMixin3D(unittest.TestCase):
@@ -78,6 +78,20 @@ class TestMixin3D(unittest.TestCase):
         max_radius = box.max_fillet(box.edges().sort_by(Axis.Z)[-1:])
 
         self.assertGreater(max_radius, 0)
+
+    def test_make_3d_result_compound(self):
+        compound = Compound(
+            [
+                Solid.make_box(1, 1, 1),
+                Solid.make_box(1, 1, 1).translate((2, 0, 0)),
+            ]
+        )
+
+        result = Solid._make_3d_result(compound.wrapped)
+
+        self.assertIsInstance(result, Part)
+        self.assertEqual(len(result.solids()), 2)
+        self.assertTrue(result.is_valid)
 
     def test_chamfer_too_high_length(self):
         box = Solid.make_box(1, 1, 1)
