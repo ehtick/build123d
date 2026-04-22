@@ -459,8 +459,29 @@ class TestPlane(unittest.TestCase):
             Plane.XY.shift_origin(Edge.make_line((0, 0), (1, 1)))
 
     def test_moved(self):
-        pln = Plane.XY.moved(Location((1, 2, 3)))
+        original = Plane.XY
+        pln = original.moved(Location((1, 2, 3)))
         self.assertAlmostEqual(pln.origin, (1, 2, 3), 5)
+        self.assertAlmostEqual(original.origin, (0, 0, 0), 5)
+
+    def test_move(self):
+        pln = Plane.XY
+        result = pln.move(Location((1, 2, 3), (0, 45, 0)))
+        expected = Plane.XY.moved(Location((1, 2, 3), (0, 45, 0)))
+
+        self.assertIs(result, pln)
+        self.assertAlmostEqual(pln.origin, expected.origin, 5)
+        self.assertAlmostEqual(pln.x_dir, expected.x_dir, 5)
+        self.assertAlmostEqual(pln.y_dir, expected.y_dir, 5)
+        self.assertAlmostEqual(pln.z_dir, expected.z_dir, 5)
+
+    def test_move_plane(self):
+        pln = Plane.XY
+        result = pln.move(Plane.XZ.offset(1))
+        expected = Plane.XY.moved(Plane.XZ.offset(1))
+
+        self.assertIs(result, pln)
+        self.assertEqual(pln, expected)
 
     def test_rotated(self):
         rotated_plane = Plane.XY.rotated((45, 0, 0))

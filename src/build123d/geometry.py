@@ -3191,6 +3191,26 @@ class Plane(metaclass=PlaneMeta):
             loc = loc.location
         return Plane(self.location * loc)
 
+    def move(self, loc: Location | Plane) -> Plane:
+        """Change the position & orientation of self by applying a relative location
+
+        Args:
+            loc (Location | Plane): relative change
+
+        Returns:
+            Plane: relocated self
+        """
+        moved_plane = self.moved(loc)
+        self._origin = moved_plane.origin
+        self.x_dir = moved_plane.x_dir
+        self.z_dir = moved_plane.z_dir
+        self.y_dir = moved_plane.y_dir
+        self._calc_transforms()
+        self.wrapped = gp_Pln(
+            gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
+        )
+        return self
+
     def _calc_transforms(self):
         """Computes transformation matrices to convert between local and global coordinates."""
         # reverse_transform is the forward transformation matrix from world to local coordinates
