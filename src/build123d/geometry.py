@@ -52,7 +52,7 @@ from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_Transform
 from OCP.BRepGProp import BRepGProp, BRepGProp_Face  # used for mass calculation
 from OCP.BRepTools import BRepTools
-from OCP.Geom import Geom_BoundedSurface, Geom_Line, Geom_Plane
+from OCP.Geom import Geom_BoundedSurface, Geom_ElementarySurface, Geom_Line, Geom_Plane
 from OCP.GeomAPI import GeomAPI_IntCS, GeomAPI_IntSS, GeomAPI_ProjectPointOnSurf
 from OCP.gp import (
     gp_Ax1,
@@ -470,6 +470,11 @@ class Vector:
                 round(self.Y, TOL_DIGITS - 1),
                 round(self.Z, TOL_DIGITS - 1),
             )
+        )
+
+    def __round__(self, ndigits: int | None = None):
+        return Vector(
+            round(self.X, ndigits), round(self.Y, ndigits), round(self.Z, ndigits)
         )
 
     def __copy__(self) -> Vector:
@@ -2576,7 +2581,7 @@ class Matrix:
         """
         if not isinstance(row_col, tuple) or (len(row_col) != 2):
             raise IndexError("Matrix subscript must provide (row, column)")
-        (row, col) = row_col
+        row, col = row_col
         if not ((0 <= row <= 3) and (0 <= col <= 3)):
             raise IndexError(f"Out of bounds access into 4x4 matrix: {repr(row_col)}")
         if row < 3:
@@ -2715,7 +2720,6 @@ class Plane(metaclass=PlaneMeta):
         x_dir (Vector): x direction
         y_dir (Vector): y direction
         z_dir (Vector): z direction
-        local_coord_system (gp_Ax3): OCP coordinate system
         forward_transform (Matrix): forward location transformation matrix
         reverse_transform (Matrix): reverse location transformation matrix
         wrapped (gp_Pln): the OCP plane object
@@ -2745,7 +2749,7 @@ class Plane(metaclass=PlaneMeta):
         return Vector(normal)
 
     @overload
-    def __init__(self, gp_pln: gp_Pln):
+    def __init__(self, gp_pln: gp_Pln) -> None:
         """Return a plane from a OCCT gp_pln"""
 
     @overload
@@ -2754,7 +2758,7 @@ class Plane(metaclass=PlaneMeta):
         origin: VectorLike,
         x_dir: VectorLike | None = None,
         z_dir: VectorLike = (0, 0, 1),
-    ):
+    ) -> None:
         """Return a new plane at origin with x_dir and z_dir"""
 
     @overload
@@ -2764,23 +2768,23 @@ class Plane(metaclass=PlaneMeta):
         x_dir: VectorLike,
         *,
         y_dir: VectorLike,
-    ):
+    ) -> None:
         """Return a new plane at origin with x_dir and y_dir"""
 
     @overload
-    def __init__(self, face: Face, x_dir: VectorLike | None = None):
+    def __init__(self, face: Face, x_dir: VectorLike | None = None) -> None:
         """Return a plane extending the face.
         Note: for non planar face this will return the underlying work plane"""
 
     @overload
-    def __init__(self, location: Location):
+    def __init__(self, location: Location) -> None:
         """Return a plane aligned with a given location"""
 
     @overload
-    def __init__(self, axis: Axis, x_dir: VectorLike | None = None):
+    def __init__(self, axis: Axis, x_dir: VectorLike | None = None) -> None:
         """Return a plane with the z_dir aligned with the axis and optional x_dir direction"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         """Create a plane from either an OCCT gp_pln, Face, Location, or coordinates"""
 
@@ -2833,14 +2837,20 @@ class Plane(metaclass=PlaneMeta):
                     raise TypeError(type_error_message) from exc
 
         if arg_plane:
-            self.wrapped = arg_plane
-        elif arg_face:
+            assert isinstance(arg_plane, gp_Pln)
+            self._wrapped = self._ensure_right_handed(arg_plane)
+            return
+
+        x_dir = None
+        y_dir = None
+        z_dir = None
+        if arg_face:
             surface = BRep_Tool.Surface_s(arg_face.wrapped)
             if not arg_face.is_planar:
                 raise ValueError("Planes can only be created from planar faces")
             properties = GProp_GProps()
             BRepGProp.SurfaceProperties_s(arg_face.wrapped, properties)
-            self._origin = Vector(properties.CentreOfMass())
+            origin = Vector(properties.CentreOfMass())
 
             if isinstance(surface, Geom_BoundedSurface):
                 point = gp_Pnt()
@@ -2848,82 +2858,85 @@ class Plane(metaclass=PlaneMeta):
                 tangent_v = gp_Vec()
                 surface.D1(0.5, 0.5, point, face_x_dir, tangent_v)
             else:
-                face_x_dir = surface.Position().XDirection()
+                assert isinstance(surface, Geom_ElementarySurface)  # for .Position()
+                face_x_dir = gp_Vec(surface.Position().XDirection())
 
-            self.x_dir = Vector(arg_x_dir) if arg_x_dir else Vector(face_x_dir)
-            self.x_dir = Vector(round(i, 14) for i in self.x_dir)
-            self.z_dir = Plane.get_topods_face_normal(arg_face.wrapped)
-            self.z_dir = Vector(round(i, 14) for i in self.z_dir)
+            x_dir = Vector(arg_x_dir) if arg_x_dir else Vector(face_x_dir)
+            x_dir = round(Vector(x_dir), 14)
+            z_dir = Plane.get_topods_face_normal(arg_face.wrapped)
+            z_dir = round(Vector(z_dir), 14)
         elif arg_location:
             topo_face = BRepBuilderAPI_MakeFace(
                 Plane.XY.wrapped, -1.0, 1.0, -1.0, 1.0
             ).Face()
             topo_face.Move(arg_location.wrapped)
-            self._origin = arg_location.position
-            self.x_dir = Vector(BRep_Tool.Surface_s(topo_face).Position().XDirection())
-            self.x_dir = Vector(round(i, 14) for i in self.x_dir)
-            self.z_dir = Plane.get_topods_face_normal(topo_face)
-            self.z_dir = Vector(round(i, 14) for i in self.z_dir)
+            origin = arg_location.position
+            surface = BRep_Tool.Surface_s(topo_face)
+            assert isinstance(surface, Geom_ElementarySurface)  # for .Position()
+            x_dir = Vector(surface.Position().XDirection())
+            x_dir = round(Vector(x_dir), 14)
+            z_dir = Plane.get_topods_face_normal(topo_face)
+            z_dir = round(Vector(z_dir), 14)
         elif arg_axis:
-            self._origin = arg_axis.position
-            self.x_dir = Vector(arg_x_dir) if arg_x_dir is not None else None
-            self.z_dir = arg_axis.direction
+            origin = arg_axis.position
+            x_dir = Vector(arg_x_dir) if arg_x_dir is not None else None
+            z_dir = arg_axis.direction
         elif arg_origin is not None:
-            self._origin = Vector(arg_origin)
-            self.x_dir = Vector(arg_x_dir) if arg_x_dir else None
-            self.z_dir = Vector(arg_z_dir)
+            origin = Vector(arg_origin)
+            x_dir = Vector(arg_x_dir) if arg_x_dir else None
+            z_dir = Vector(arg_z_dir)
         else:
             raise TypeError(type_error_message)
 
-        if hasattr(self, "wrapped"):
-            self._origin = Vector(self.wrapped.Location())
-            self.x_dir = Vector(self.wrapped.XAxis().Direction())
-            self.y_dir = Vector(self.wrapped.YAxis().Direction())
-            self.z_dir = Vector(self.wrapped.Axis().Direction())
+        if passed_y_dir and passed_z_dir:
+            raise TypeError("Specify either y_dir or z_dir, not both")
+
+        if arg_y_dir is not None:
+            if x_dir is None:
+                raise ValueError("x_dir must be provided when y_dir is specified")
+            if Vector(x_dir).length == 0.0:
+                raise ValueError("x_dir must be non null")
+            if Vector(arg_y_dir).length == 0.0:
+                raise ValueError("y_dir must be non null")
+
+            x_dir = Vector(x_dir).normalized()
+            y_input = Vector(arg_y_dir).normalized()
+
+            z_from_xy = x_dir.cross(y_input)
+            if z_from_xy.length == 0.0:
+                raise ValueError("x_dir and y_dir must not be parallel")
+
+            z_dir = z_from_xy.normalized()
+            y_dir = z_dir.cross(x_dir).normalized()
+            x_dir = y_dir.cross(z_dir).normalized()
         else:
-            if passed_y_dir and passed_z_dir:
-                raise TypeError("Specify either y_dir or z_dir, not both")
+            if z_dir.length == 0.0:
+                raise ValueError("z_dir must be non null")
+            z_dir = z_dir.normalized()
 
-            if arg_y_dir is not None:
-                if self.x_dir is None:
-                    raise ValueError("x_dir must be provided when y_dir is specified")
-                if Vector(self.x_dir).length == 0.0:
-                    raise ValueError("x_dir must be non null")
-                if Vector(arg_y_dir).length == 0.0:
-                    raise ValueError("y_dir must be non null")
-
-                self.x_dir = Vector(self.x_dir).normalized()
-                y_input = Vector(arg_y_dir).normalized()
-
-                z_from_xy = self.x_dir.cross(y_input)
-                if z_from_xy.length == 0.0:
-                    raise ValueError("x_dir and y_dir must not be parallel")
-
-                self.z_dir = z_from_xy.normalized()
-                self.y_dir = self.z_dir.cross(self.x_dir).normalized()
+            if x_dir is None:
+                ax3 = gp_Ax3(origin.to_pnt(), z_dir.to_dir())
+                x_dir = Vector(ax3.XDirection()).normalized()
             else:
-                if self.z_dir.length == 0.0:
-                    raise ValueError("z_dir must be non null")
-                self.z_dir = self.z_dir.normalized()
+                if Vector(x_dir).length == 0.0:
+                    raise ValueError("x_dir must be non null")
+                x_dir = Vector(x_dir).normalized()
 
-                if self.x_dir is None:
-                    ax3 = gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir())
-                    self.x_dir = Vector(ax3.XDirection()).normalized()
-                else:
-                    if Vector(self.x_dir).length == 0.0:
-                        raise ValueError("x_dir must be non null")
-                    self.x_dir = Vector(self.x_dir).normalized()
+        ax3 = gp_Ax3(origin.to_pnt(), z_dir.to_dir(), x_dir.to_dir())
+        self._wrapped = self._ensure_right_handed(gp_Pln(ax3))
 
-                self.y_dir = self.z_dir.cross(self.x_dir).normalized()
+    @property
+    def wrapped(self) -> gp_Pln:
+        return self._wrapped
 
-            self.wrapped = gp_Pln(
-                gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
-            )
+    @staticmethod
+    def _ensure_right_handed(pln: gp_Pln):
+        if pln.Position().Direct():
+            return pln
 
-        self.local_coord_system = None  #: gp_Ax3 | None
-        self.reverse_transform = None  #: Matrix | None
-        self.forward_transform = None  #: Matrix | None
-        self.origin = self._origin  # set origin to calculate transformations
+        warnings.warn("Trying to set a left-handed plane", stacklevel=3)
+        ax2 = gp_Ax2(pln.Location(), pln.Axis().Direction(), pln.XAxis().Direction())
+        return gp_Pln(gp_Ax3(ax2))
 
     def offset(self, amount: float) -> Plane:
         """Move the Plane by amount in the direction of z_dir"""
@@ -2950,7 +2963,7 @@ class Plane(metaclass=PlaneMeta):
 
         return (
             # origins are the same
-            abs(self._origin - other.origin) < eq_tolerance_origin
+            abs(self.origin - other.origin) < eq_tolerance_origin
             # z-axis vectors are parallel (assumption: both are unit vectors)
             and abs(self.z_dir.dot(other.z_dir) - 1) < eq_tolerance_dot
             # x-axis vectors are parallel (assumption: both are unit vectors)
@@ -3042,17 +3055,31 @@ class Plane(metaclass=PlaneMeta):
 
     @property
     def origin(self) -> Vector:
-        """Get the Plane origin"""
-        return self._origin
+        """global position of local (0,0,0) point"""
+        return Vector(self.wrapped.Location())
 
     @origin.setter
-    def origin(self, value):
+    def origin(self, value: VectorLike):
         """Set the Plane origin"""
-        self._origin = Vector(value)
-        self._calc_transforms()
-        self.wrapped = gp_Pln(
-            gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
-        )
+        self.wrapped.SetLocation(Vector(value).to_pnt())
+
+    @property
+    def z_dir(self) -> Vector:
+        return Vector(self.wrapped.Axis().Direction())
+
+    @property
+    def x_dir(self) -> Vector:
+        return Vector(self.wrapped.XAxis().Direction())
+
+    @x_dir.setter
+    def x_dir(self, dir: VectorLike):
+        ax2 = self.to_gp_ax2()
+        ax2.SetXDirection(Vector(dir).to_dir())
+        self.wrapped.SetPosition(gp_Ax3(ax2))
+
+    @property
+    def y_dir(self) -> Vector:
+        return Vector(self.wrapped.YAxis().Direction())
 
     def shift_origin(self, locator: Axis | VectorLike | Vertex) -> Plane:
         """shift plane origin
@@ -3120,18 +3147,15 @@ class Plane(metaclass=PlaneMeta):
             ordering = Intrinsic.XYZ
 
         # Note: this is not a geometric Vector
-        rotation = [radians(a) for a in rotation]
+        a1, a2, a3 = map(radians, Vector(rotation))
         quaternion = gp_Quaternion()
-        quaternion.SetEulerAngles(Location._rot_order_dict[ordering], *rotation)
+        quaternion.SetEulerAngles(Location._rot_order_dict[ordering], a1, a2, a3)
         trsf_rotation = gp_Trsf()
         trsf_rotation.SetRotation(quaternion)
-        transformation = Matrix(gp_GTrsf(trsf_rotation))
 
-        # Compute the new plane.
-        new_x_dir = self.x_dir.transform(transformation)
-        new_z_dir = self.z_dir.transform(transformation)
-
-        return Plane(self._origin, new_x_dir, new_z_dir)
+        ax = self.to_gp_ax2().Transformed(trsf_rotation)
+        ax.SetLocation(self.wrapped.Location())
+        return Plane(gp_Pln(gp_Ax3(ax)))
 
     def moved(self, loc: Location | Plane) -> Plane:
         """Change the position & orientation of a copy of self by applying a relative location
@@ -3155,57 +3179,39 @@ class Plane(metaclass=PlaneMeta):
         Returns:
             Plane: relocated self
         """
-        moved_plane = self.moved(loc)
-        self._origin = moved_plane.origin
-        self.x_dir = moved_plane.x_dir
-        self.z_dir = moved_plane.z_dir
-        self.y_dir = moved_plane.y_dir
-        self._calc_transforms()
-        self.wrapped = gp_Pln(
-            gp_Ax3(self._origin.to_pnt(), self.z_dir.to_dir(), self.x_dir.to_dir())
-        )
+        self._wrapped = self._ensure_right_handed(self.moved(loc).wrapped)
         return self
 
-    def _calc_transforms(self):
-        """Computes transformation matrices to convert between local and global coordinates."""
-        # reverse_transform is the forward transformation matrix from world to local coordinates
-        # ok i will be really honest, i cannot understand exactly why this works
-        # something bout the order of the translation and the rotation.
-        # the double-inverting is strange, and I don't understand it.
-        forward = Matrix()
-        inverse = Matrix()
-
-        forward_t = gp_Trsf()
-        inverse_t = gp_Trsf()
-
+    @property
+    def forward_transform(self):
+        """forward location transformation matrix"""
         global_coord_system = gp_Ax3()
-        local_coord_system = gp_Ax3(
-            gp_Pnt(*self._origin),
-            gp_Dir(*self.z_dir),
-            gp_Dir(*self.x_dir),
-        )
-
+        local_coord_system = self.to_gp_ax3()
+        forward_t = gp_Trsf()
         forward_t.SetTransformation(global_coord_system, local_coord_system)
-        forward.wrapped = gp_GTrsf(forward_t)
+        return Matrix(gp_GTrsf(forward_t))
 
+    @property
+    def reverse_transform(self):
+        """reverse location transformation matrix"""
+        global_coord_system = gp_Ax3()
+        local_coord_system = self.to_gp_ax3()
+        inverse_t = gp_Trsf()
         inverse_t.SetTransformation(local_coord_system, global_coord_system)
-        inverse.wrapped = gp_GTrsf(inverse_t)
-
-        self.local_coord_system = local_coord_system  #: gp_Ax3
-        self.reverse_transform = inverse  #: Matrix
-        self.forward_transform = forward  #: Matrix
+        return Matrix(gp_GTrsf(inverse_t))
 
     @property
     def location(self) -> Location:
         """Return Location representing the origin and z direction"""
         return Location(self)
 
+    def to_gp_ax3(self) -> gp_Ax3:
+        """Return gp_Ax3 version of the plane"""
+        return self.wrapped.Position()
+
     def to_gp_ax2(self) -> gp_Ax2:
         """Return gp_Ax2 version of the plane"""
-        axis = gp_Ax2()
-        axis.SetAxis(gp_Ax1(self.origin.to_pnt(), self.z_dir.to_dir()))
-        axis.SetXDirection(self.x_dir.to_dir())
-        return axis
+        return self.wrapped.Position().Ax2()
 
     def _to_from_local_coords(
         self, obj: VectorLike | Any | BoundBox, to_from: bool = True
@@ -3360,7 +3366,7 @@ class Plane(metaclass=PlaneMeta):
                 return axis
 
             geom_line = Geom_Line(axis.wrapped)
-            geom_plane = Geom_Plane(self.local_coord_system)
+            geom_plane = Geom_Plane(self.to_gp_ax3())
 
             intersection_calculator = GeomAPI_IntCS(geom_line, geom_plane)
 

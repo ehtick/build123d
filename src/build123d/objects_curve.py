@@ -1120,7 +1120,7 @@ class EllipticalCenterArc(BaseEdgeObject):
             )
         ellipse_workplane.origin = center_pnt
 
-        rotate_axis = Axis(ellipse_workplane.origin, ellipse_workplane.z_dir.to_dir())
+        rotate_axis = Axis(ellipse_workplane.origin, ellipse_workplane.z_dir)
         arc_factor = Vector(arc_size) if isinstance(arc_size, Sequence) else arc_size
 
         if deprecated_parameter:
@@ -1338,9 +1338,7 @@ class ParabolicCenterArc(BaseEdgeObject):
             start_angle=start_angle,
             end_angle=end_angle,
             angular_direction=angular_direction,
-        ).rotate(
-            Axis(parabola_workplane.origin, parabola_workplane.z_dir.to_dir()), rotation
-        )
+        ).rotate(Axis(parabola_workplane.origin, parabola_workplane.z_dir), rotation)
 
         super().__init__(curve, mode=mode)
 
@@ -1396,7 +1394,7 @@ class HyperbolicCenterArc(BaseEdgeObject):
             end_angle=end_angle,
             angular_direction=angular_direction,
         ).rotate(
-            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()),
+            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir),
             rotation,
         )
 
