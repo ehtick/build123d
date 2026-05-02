@@ -220,24 +220,7 @@ class Vector:
         self._wrapped = ocp_vec
 
     def __iter__(self):
-        """Initialize to beginning"""
-        self.vector_index = 0
-        return self
-
-    def __next__(self):
-        """return the next value"""
-        if self.vector_index == 0:
-            self.vector_index += 1
-            value = self.X
-        elif self.vector_index == 1:
-            self.vector_index += 1
-            value = self.Y
-        elif self.vector_index == 2:
-            self.vector_index += 1
-            value = self.Z
-        else:
-            raise StopIteration
-        return value
+        return iter((self.X, self.Y, self.Z))
 
     @property
     def X(self) -> float:
@@ -1306,7 +1289,6 @@ class Color:
 
     def __init__(self, *args, **kwargs):
         self.wrapped = None
-        self.iter_index = 0
         red, green, blue, alpha, name, color_code = (1.0, 1.0, 1.0, 1.0, None, None)
         default_rgb = (red, green, blue, alpha)
 
@@ -1404,20 +1386,9 @@ class Color:
             self.wrapped = Quantity_ColorRGBA(the_color, alpha)
 
     def __iter__(self):
-        """Initialize to beginning"""
-        self.iter_index = 0
-        return self
-
-    def __next__(self):
-        """return the next value"""
         r, g, b = self.wrapped.GetRGB().Values(Quantity_TypeOfColor.Quantity_TOC_sRGB)
         rgb_tuple = (r, g, b, self.wrapped.Alpha())
-
-        if self.iter_index > 3:
-            raise StopIteration
-        value = rgb_tuple[self.iter_index]
-        self.iter_index += 1
-        return round(value, 7)
+        return (round(value, 7) for value in rgb_tuple)
 
     def __copy__(self) -> Color:
         """Return copy of self"""
@@ -1950,28 +1921,14 @@ class Location:
         )
 
     def __iter__(self):
-        """Initialize to beginning"""
-        self.location_index = 0
-        return self
-
-    def __next__(self) -> Vector:
-        """return the next value"""
         transformation = self.wrapped.Transformation()
         trans = transformation.TranslationPart()
         rot = transformation.GetRotation()
-        rv_trans: Vector = Vector(trans.X(), trans.Y(), trans.Z())
-        rv_rot: Vector = Vector(
-            *[degrees(a) for a in rot.GetEulerAngles(gp_EulerSequence.gp_Intrinsic_XYZ)]
+        rv_trans: Vector = Vector(trans)
+        rv_rot = Vector(
+            map(degrees, rot.GetEulerAngles(gp_EulerSequence.gp_Intrinsic_XYZ))
         )  # type: ignore[assignment]
-        if self.location_index == 0:
-            self.location_index += 1
-            value = rv_trans
-        elif self.location_index == 1:
-            self.location_index += 1
-            value = rv_rot
-        else:
-            raise StopIteration
-        return value
+        return iter((rv_trans, rv_rot))
 
     def __neg__(self) -> Location:
         """Flip the orientation without changing the position operator -"""
