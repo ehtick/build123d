@@ -56,7 +56,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from math import radians, cos, tan
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -91,6 +91,7 @@ from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from OCP.TopoDS import (
     TopoDS,
+    TopoDS_Compound,
     TopoDS_Face,
     TopoDS_Shape,
     TopoDS_Shell,
@@ -137,7 +138,7 @@ from .zero_d import Vertex
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .composite import Compound  # pylint: disable=R0801
+    from .composite import Compound, Part  # pylint: disable=R0801
 
 
 class Mixin3D(Shape[TOPODS]):
@@ -179,6 +180,22 @@ class Mixin3D(Shape[TOPODS]):
         """Unused - only here because Mixin1D is a subclass of Shape"""
         return NotImplemented
 
+    @staticmethod
+    def _make_3d_result(shape: TopoDS_Shape) -> Solid | Part:
+        """Wrap a 3D operation result as topology, not as the source subclass."""
+        result = downcast(shape)
+
+        if isinstance(result, TopoDS_Compound):
+            result = downcast(unwrap_topods_compound(result, True))
+
+        if isinstance(result, TopoDS_Compound):
+            solids = ShapeList(
+                Solid(TopoDS.Solid(s)) for s in get_top_level_topods_shapes(result)
+            )
+            return cast("Part", Shape.make_composite(solids, 3))
+
+        return Solid(TopoDS.Solid(result))
+
     # ---- Instance Methods ----
 
     def center(self, center_of: CenterOf = CenterOf.MASS) -> Vector:
@@ -214,7 +231,7 @@ class Mixin3D(Shape[TOPODS]):
         length2: float | None,
         edge_list: Iterable[Edge],
         face: Face | None = None,
-    ) -> Self:
+    ) -> Solid | Part:
         """Chamfer
 
         Chamfers the specified edges of this solid.
@@ -229,7 +246,7 @@ class Mixin3D(Shape[TOPODS]):
                 must be part of the face
 
         Returns:
-            Self:  Chamfered solid
+            Solid | Part:  Chamfered solid or 3D composite
         """
         edge_list = list(edge_list)
         if face:
@@ -265,7 +282,7 @@ class Mixin3D(Shape[TOPODS]):
             )  # NB: edge_face_map return a generic TopoDS_Shape
 
         try:
-            new_shape = self.__class__(chamfer_builder.Shape())
+            new_shape = self._make_3d_result(chamfer_builder.Shape())
             if not new_shape.is_valid:
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
@@ -329,7 +346,7 @@ class Mixin3D(Shape[TOPODS]):
 
         return self.__class__(shape)
 
-    def fillet(self, radius: float, edge_list: Iterable[Edge]) -> Self:
+    def fillet(self, radius: float, edge_list: Iterable[Edge]) -> Solid | Part:
         """Fillet
 
         Fillets the specified edges of this solid.
@@ -339,7 +356,7 @@ class Mixin3D(Shape[TOPODS]):
             edge_list (Iterable[Edge]): a list of Edge objects, which must belong to this solid
 
         Returns:
-            Any: Filleted solid
+            Solid | Part: Filleted solid or 3D composite
         """
         native_edges = [e.wrapped for e in edge_list]
 
@@ -349,7 +366,7 @@ class Mixin3D(Shape[TOPODS]):
             fillet_builder.Add(radius, native_edge)
 
         try:
-            new_shape = self.__class__(fillet_builder.Shape())
+            new_shape = self._make_3d_result(fillet_builder.Shape())
             if not new_shape.is_valid:
                 raise Standard_Failure
         except (StdFail_NotDone, Standard_Failure) as err:
@@ -578,7 +595,7 @@ class Mixin3D(Shape[TOPODS]):
 
             # Do these numbers work? - if not try with the smaller window
             try:
-                new_shape = self.__class__(fillet_builder.Shape())
+                new_shape = self._make_3d_result(fillet_builder.Shape())
                 if not new_shape.is_valid:
                     # raise fillet_exception
                     raise Standard_Failure
@@ -1294,7 +1311,7 @@ class Solid(Mixin3D[TopoDS_Solid]):
         if isinstance(bbox, BoundBox):
             return Solid.make_box(*bbox.size).locate(Location(bbox.min))
         else:
-            moved_plane: Plane = Plane(Location(-bbox.size / 2)).move(bbox.location)
+            moved_plane: Plane = Plane(Location(-bbox.size / 2)).moved(bbox.location)
             return Solid.make_box(
                 bbox.size.X, bbox.size.Y, bbox.size.Z, plane=moved_plane
             )

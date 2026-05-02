@@ -143,10 +143,12 @@ from build123d.geometry import (
     ColorLike,
     Location,
     Matrix,
+    NotAllLocationLikeError,
     OrientedBoundBox,
     Plane,
     Vector,
     VectorLike,
+    all_location_like,
     logger,
 )
 
@@ -1012,12 +1014,14 @@ class Shape(NodeMixin, Generic[TOPODS]):
         if isinstance(other, Location | Plane):
             return self.moved(other)
         try:
-            others = list(other)
-            if all(isinstance(o, Location | Plane) for o in others):
-                return [self.moved(other) for other in others]
+            return [self.moved(loc) for loc in all_location_like(other)]
+        except NotAllLocationLikeError as e:
+            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}")
         except TypeError:  # not iterable
             pass
-        raise ValueError("shapes can only be multiplied by locations or planes")
+        raise TypeError(
+            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
+        )
 
     def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
         """cut shape from self operator -"""
@@ -1505,8 +1509,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
         self.wrapped.Location(loc.wrapped)
 
         return self
@@ -1524,10 +1526,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
-        shape_copy: Shape = copy.deepcopy(self, None)
-        shape_copy.wrapped.Location(loc.wrapped)  # type: ignore
+        shape_copy = copy.deepcopy(self, None)
+        shape_copy.wrapped.Location(loc.wrapped)
         return shape_copy
 
     def mesh(self, tolerance: float, angular_tolerance: float = 0.1):
@@ -1581,8 +1581,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
 
         self.wrapped.Move(loc.wrapped)
 
@@ -1603,8 +1601,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
             loc = loc.location
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
         shape_copy: Shape = copy.deepcopy(self, None)
         shape_copy.wrapped = tcast(TOPODS, downcast(self.wrapped.Moved(loc.wrapped)))
         return shape_copy
@@ -1738,12 +1734,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
         if self._wrapped is None:
             raise ValueError("Cannot relocate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot relocate a shape at an empty location")
 
         if self.location != loc:
             old_ax = gp_Ax3()
-            old_ax.Transform(self.location.wrapped.Transformation())  # type: ignore
+            old_ax.Transform(self.location.wrapped.Transformation())
 
             new_ax = gp_Ax3()
             new_ax.Transform(loc.wrapped.Transformation())
@@ -2881,7 +2875,7 @@ class ShapeList(list[T]):
                     plane_xyz = tcast(
                         gp_XYZ,
                         (
-                            tcast(Plane, plane * Location(shape.location).inverse())
+                            tcast(Plane, Location(shape.location).inverse() * plane)
                         ).z_dir.wrapped.XYZ(),
                     )
                     t_edge = tcast(BRep_TEdge, shape.wrapped.TShape())
