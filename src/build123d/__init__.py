@@ -150,6 +150,7 @@ __all__ = [
     "Pos",
     "RotationLike",
     "ShapeList",
+    "topo_distance_to",
     "Axis",
     "Color",
     "Curve",

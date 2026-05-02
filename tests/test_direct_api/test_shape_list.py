@@ -46,6 +46,7 @@ from build123d.topology import (
     ShapeList,
     Shell,
     Solid,
+    topo_distance_to,
     Vertex,
     Wire,
 )
@@ -314,6 +315,53 @@ class TestShapeList(unittest.TestCase):
         with BuildPart() as box:
             Box(1, 1, 1)
         self.assertEqual(len(box.edges().sort_by_distance((0, 0, 0))), 12)
+
+    def test_topological_distance_faces(self):
+        box = Solid.make_box(1, 1, 1)
+        faces = box.faces()
+        top_face = faces.sort_by(Axis.Z)[-1]
+        bottom_face = faces.sort_by(Axis.Z)[0]
+
+        face_groups = faces.group_by(topo_distance_to(top_face))
+
+        self.assertEqual([len(group) for group in face_groups], [1, 4, 1])
+        self.assertIn(top_face, face_groups[0])
+        self.assertIn(bottom_face, face_groups[2])
+
+    def test_topological_distance_edges(self):
+        wire = Face.make_rect(2, 1).outer_wire()
+        edges = wire.edges()
+        top_edge = edges.sort_by(Axis.Y)[-1]
+        bottom_edge = edges.sort_by(Axis.Y)[0]
+
+        edge_groups = edges.group_by(topo_distance_to(top_edge))
+
+        self.assertEqual([len(group) for group in edge_groups], [1, 2, 1])
+        self.assertIn(top_edge, edge_groups[0])
+        self.assertIn(bottom_edge, edge_groups[2])
+
+    def test_topological_distance_multiple_sources(self):
+        box = Solid.make_box(1, 1, 1)
+        faces = box.faces()
+        top_face = faces.sort_by(Axis.Z)[-1]
+        bottom_face = faces.sort_by(Axis.Z)[0]
+
+        face_groups = faces.group_by(topo_distance_to([top_face, bottom_face]))
+
+        self.assertEqual([len(group) for group in face_groups], [2, 4])
+
+    def test_topological_distance_requires_topo_parent(self):
+        faces = ShapeList([Face.make_rect(1, 1), Face.make_rect(1, 1, Plane((4, 4)))])
+
+        with self.assertRaises(ValueError):
+            topo_distance_to(faces[0])
+
+    def test_topological_distance_requires_uniform_shape_type(self):
+        box = Solid.make_box(1, 1, 1)
+        mixed = ShapeList([box.faces()[0], box.edges()[0]])
+
+        with self.assertRaises(ValueError):
+            topo_distance_to(mixed)
 
     def test_vertices(self):
         sl = ShapeList([Face.make_rect(1, 1), Face.make_rect(1, 1, Plane((4, 4)))])

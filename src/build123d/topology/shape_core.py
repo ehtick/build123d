@@ -50,8 +50,10 @@ import copy
 import itertools
 import warnings
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from functools import reduce
+from math import inf
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -130,6 +132,7 @@ from OCP.TopTools import (
     TopTools_IndexedDataMapOfShapeListOfShape,
     TopTools_ListOfShape,
     TopTools_SequenceOfShape,
+    TopTools_ShapeMapHasher,
 )
 from typing_extensions import Self
 
@@ -2625,6 +2628,172 @@ class GroupBy(Generic[T, K]):
                         printer.text(",")
                         printer.breakable()
                     printer.pretty(item)
+
+
+def topo_distance_to(
+    other: Shape | Iterable[Shape],
+) -> Callable[[Shape], int | float]:
+    """Return a key function that yields topological distance to ``other``.
+
+    The returned callable is intended for use with :meth:`ShapeList.sort_by`
+    and :meth:`ShapeList.group_by`. Distances are measured on the full topology
+    of the shared ``topo_parent`` of the reference shape(s), not only within
+    the ``ShapeList`` being sorted or grouped.
+
+    The first-pass implementation supports homogeneous collections of:
+    ``Vertex``, ``Edge``, ``Wire``, ``Face``, ``Shell``, and ``Solid``.
+
+    Adjacency is defined by shared lower-order topology:
+    - ``Face`` via shared ``Edge``
+    - ``Edge``/``Wire`` via shared ``Vertex``
+    - ``Shell``/``Solid`` via shared ``Face``
+    - ``Vertex`` via shared ``Edge``
+
+    Reference shapes have distance ``0``. Directly connected shapes have
+    distance ``1``. Each additional intervening peer increases the distance
+    by ``1``. Unreachable shapes return ``inf``.
+
+    Args:
+        other: reference shape or shapes
+
+    Raises:
+        ValueError: empty reference set, mixed shape types, unsupported
+            shape type, missing ``topo_parent``, or multiple parents
+
+    Returns:
+        Callable[[Shape], int | float]: key function for sorting/grouping
+    """
+    sources = ShapeList([other]) if isinstance(other, Shape) else ShapeList(other)
+
+    if not sources:
+        raise ValueError("Cannot measure topological distance to an empty object")
+    if not all(isinstance(shape, Shape) for shape in sources):
+        raise ValueError("Topological distance requires Shape objects")
+
+    peer_type = sources[0].shape_type
+    if any(shape.shape_type != peer_type for shape in sources):
+        raise ValueError("Topological distance requires shapes of the same type")
+
+    plural_lut = {
+        "Vertex": "vertices",
+        "Edge": "edges",
+        "Wire": "wires",
+        "Face": "faces",
+        "Shell": "shells",
+        "Solid": "solids",
+    }
+    connector_enum_lut = {
+        "Edge": ta.TopAbs_VERTEX,
+        "Wire": ta.TopAbs_VERTEX,
+        "Face": ta.TopAbs_EDGE,
+        "Shell": ta.TopAbs_FACE,
+        "Solid": ta.TopAbs_FACE,
+    }
+
+    if peer_type not in plural_lut:
+        raise ValueError(f"Topological distance is not supported for {peer_type}")
+
+    parents = [shape.topo_parent for shape in sources if shape.topo_parent is not None]
+    if not parents:
+        raise ValueError("Topological distance requires shapes with a topo_parent")
+    parent = parents[0]
+    if any(not parent.is_same(candidate) for candidate in parents[1:]):
+        raise ValueError("Topological distance requires a shared topo_parent")
+
+    peers = tcast(ShapeList[Shape], getattr(parent, plural_lut[peer_type])())
+    shape_hasher = TopTools_ShapeMapHasher()
+    peer_lookup = {
+        shape_hasher(peer.wrapped): peer for peer in peers if peer.wrapped is not None
+    }
+
+    if peer_type == "Vertex":
+        vertex_neighbors: dict[Shape, set[Shape]] = {peer: set() for peer in peers}
+        vertex_edge_map = TopTools_IndexedDataMapOfShapeListOfShape()
+        TopExp.MapShapesAndAncestors_s(
+            parent.wrapped,
+            ta.TopAbs_VERTEX,
+            ta.TopAbs_EDGE,
+            vertex_edge_map,
+        )
+
+        for index in range(vertex_edge_map.Extent()):
+            vertex_wrapped = TopoDS.Vertex(vertex_edge_map.FindKey(index + 1))
+            vertex_peer = peer_lookup.get(shape_hasher(vertex_wrapped))
+            if vertex_peer is None:
+                continue
+
+            for edge_wrapped in vertex_edge_map.FindFromKey(vertex_wrapped):
+                edge = TopoDS.Edge(edge_wrapped)
+                vertex0 = TopoDS_Vertex()
+                vertex1 = TopoDS_Vertex()
+                TopExp.Vertices_s(edge, vertex0, vertex1)
+
+                for neighbor_wrapped in (vertex0, vertex1):
+                    neighbor = peer_lookup.get(shape_hasher(neighbor_wrapped))
+                    if neighbor is not None and neighbor != vertex_peer:
+                        vertex_neighbors[vertex_peer].add(neighbor)
+    else:
+        connector_peer_map = TopTools_IndexedDataMapOfShapeListOfShape()
+        TopExp.MapShapesAndAncestors_s(
+            parent.wrapped,
+            connector_enum_lut[peer_type],
+            Shape.inverse_shape_LUT[peer_type],
+            connector_peer_map,
+        )
+
+        peer_connectors: dict[Shape, list[TopoDS_Shape]] = {peer: [] for peer in peers}
+        connector_to_peers: dict[TopoDS_Shape, list[Shape]] = {}
+
+        for index in range(connector_peer_map.Extent()):
+            connector = connector_peer_map.FindKey(index + 1)
+            connected_peers = []
+            for peer_wrapped in connector_peer_map.FindFromKey(connector):
+                peer = peer_lookup.get(shape_hasher(peer_wrapped))
+                if peer is None:
+                    continue
+                connected_peers.append(peer)
+                peer_connectors[peer].append(connector)
+            connector_to_peers[connector] = connected_peers
+
+    distances: dict[Shape, int] = {}
+    frontier: deque[Shape] = deque()
+    for source in sources:
+        if source in peers and source not in distances:
+            distances[source] = 0
+            frontier.append(source)
+
+    while frontier:
+        current = frontier.popleft()
+        if peer_type == "Vertex":
+            neighbors = vertex_neighbors[current]
+        else:
+            neighbors = {
+                peer
+                for connector in peer_connectors[current]
+                for peer in connector_to_peers[connector]
+                if peer != current
+            }
+
+        for neighbor in neighbors:
+            if neighbor in distances:
+                continue
+            distances[neighbor] = distances[current] + 1
+            frontier.append(neighbor)
+
+    def key_f(obj: Shape) -> int | float:
+        if not isinstance(obj, Shape):
+            raise ValueError("Topological distance requires Shape objects")
+        if obj.shape_type != peer_type:
+            raise ValueError("Topological distance requires shapes of the same type")
+        if obj.topo_parent is None:
+            raise ValueError("Topological distance requires shapes with a topo_parent")
+        if not parent.is_same(obj.topo_parent):
+            raise ValueError("Topological distance requires a shared topo_parent")
+
+        graph_distance = distances.get(obj, inf)
+        return graph_distance
+
+    return key_f
 
 
 class ShapeList(list[T]):
