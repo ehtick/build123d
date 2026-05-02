@@ -1509,8 +1509,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
         self.wrapped.Location(loc.wrapped)
 
         return self
@@ -1528,10 +1526,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
-        shape_copy: Shape = copy.deepcopy(self, None)
-        shape_copy.wrapped.Location(loc.wrapped)  # type: ignore
+        shape_copy = copy.deepcopy(self, None)
+        shape_copy.wrapped.Location(loc.wrapped)
         return shape_copy
 
     def mesh(self, tolerance: float, angular_tolerance: float = 0.1):
@@ -1585,8 +1581,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
 
         self.wrapped.Move(loc.wrapped)
 
@@ -1607,8 +1601,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
             loc = loc.location
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
         shape_copy: Shape = copy.deepcopy(self, None)
         shape_copy.wrapped = tcast(TOPODS, downcast(self.wrapped.Moved(loc.wrapped)))
         return shape_copy
@@ -1742,12 +1734,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
         if self._wrapped is None:
             raise ValueError("Cannot relocate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot relocate a shape at an empty location")
 
         if self.location != loc:
             old_ax = gp_Ax3()
-            old_ax.Transform(self.location.wrapped.Transformation())  # type: ignore
+            old_ax.Transform(self.location.wrapped.Transformation())
 
             new_ax = gp_Ax3()
             new_ax.Transform(loc.wrapped.Transformation())
