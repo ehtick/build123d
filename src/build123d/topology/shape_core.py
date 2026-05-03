@@ -131,7 +131,7 @@ from OCP.TopTools import (
     TopTools_ListOfShape,
     TopTools_SequenceOfShape,
 )
-from typing_extensions import Self
+from typing_extensions import Self, deprecated
 
 from build123d.build_enums import CenterOf, GeomType, Keep, SortBy, Transition
 from build123d.geometry import (
@@ -452,14 +452,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return self._wrapped is None or self.wrapped.IsNull()
 
     @property
+    @deprecated(
+        "The 'is_planar_face' property is deprecated and will be removed in a future version."
+        " Use 'Face.is_planar' instead"
+    )
     def is_planar_face(self) -> bool:
         """Is the shape a planar face even though its geom_type may not be PLANE"""
-        warnings.warn(
-            "The ``is_planar_face`` property is deprecated and will be removed in a future version."
-            "Use ``Face.is_planar`` instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         if self._wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
             return False
         surface = BRep_Tool.Surface_s(self.wrapped)

@@ -37,6 +37,7 @@ from itertools import product
 from math import atan2, copysign, cos, degrees, radians, sin, sqrt
 from scipy.optimize import minimize
 from typing import overload, Literal
+from typing_extensions import deprecated
 
 from build123d.build_common import WorkplaneList, flatten_sequence, validate_inputs
 from build123d.build_enums import (
@@ -1120,7 +1121,7 @@ class EllipticalCenterArc(BaseEdgeObject):
             )
         ellipse_workplane.origin = center_pnt
 
-        rotate_axis = Axis(ellipse_workplane.origin, ellipse_workplane.z_dir.to_dir())
+        rotate_axis = Axis(ellipse_workplane.origin, ellipse_workplane.z_dir)
         arc_factor = Vector(arc_size) if isinstance(arc_size, Sequence) else arc_size
 
         if deprecated_parameter:
@@ -1338,9 +1339,7 @@ class ParabolicCenterArc(BaseEdgeObject):
             start_angle=start_angle,
             end_angle=end_angle,
             angular_direction=angular_direction,
-        ).rotate(
-            Axis(parabola_workplane.origin, parabola_workplane.z_dir.to_dir()), rotation
-        )
+        ).rotate(Axis(parabola_workplane.origin, parabola_workplane.z_dir), rotation)
 
         super().__init__(curve, mode=mode)
 
@@ -1396,7 +1395,7 @@ class HyperbolicCenterArc(BaseEdgeObject):
             end_angle=end_angle,
             angular_direction=angular_direction,
         ).rotate(
-            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir.to_dir()),
+            Axis(hyperbola_workplane.origin, hyperbola_workplane.z_dir),
             rotation,
         )
 
@@ -2168,6 +2167,10 @@ class ThreePointArc(BaseEdgeObject):
         super().__init__(arc, mode=mode)
 
 
+@deprecated(
+    "The 'PointArcTangentLine' object is deprecated and will be removed in a future version."
+    " Use ConstrainedLines instead."
+)
 class PointArcTangentLine(BaseEdgeObject):
     """Line Object: Point Arc Tangent Line
 
@@ -2190,13 +2193,6 @@ class PointArcTangentLine(BaseEdgeObject):
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
     ):
-        warnings.warn(
-            "The 'PointArcTangentLine' object is deprecated and will be removed in a future version."
-            " Use ConstrainedLines instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         side_sign = {
             Side.LEFT: -1,
             Side.RIGHT: 1,
@@ -2247,6 +2243,10 @@ class PointArcTangentLine(BaseEdgeObject):
         super().__init__(tangent, mode)
 
 
+@deprecated(
+    "The 'PointArcTangentArc' object is deprecated and will be removed in a future version."
+    " Use ConstrainedArcs instead."
+)
 class PointArcTangentArc(BaseEdgeObject):
     """Line Object: Point Arc Tangent Arc
 
@@ -2276,13 +2276,6 @@ class PointArcTangentArc(BaseEdgeObject):
         side: Side = Side.LEFT,
         mode: Mode = Mode.ADD,
     ):
-        warnings.warn(
-            "The 'PointArcTangentArc' object is deprecated and will be removed in a future version."
-            " Use ConstrainedArcs instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
 
@@ -2402,6 +2395,10 @@ class PointArcTangentArc(BaseEdgeObject):
         super().__init__(arc, mode=mode)
 
 
+@deprecated(
+    "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version."
+    " Use ConstrainedLines instead."
+)
 class ArcArcTangentLine(BaseEdgeObject):
     """Line Object: Arc Arc Tangent Line
 
@@ -2427,13 +2424,6 @@ class ArcArcTangentLine(BaseEdgeObject):
         keep: Keep = Keep.INSIDE,
         mode: Mode = Mode.ADD,
     ):
-        warnings.warn(
-            "The 'ArcArcTangentLine' object is deprecated and will be removed in a future version."
-            " Use ConstrainedLines instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         context: BuildLine | None = BuildLine._get_context(self)
         validate_inputs(context, self)
 
@@ -2499,6 +2489,10 @@ class ArcArcTangentLine(BaseEdgeObject):
         super().__init__(tangent, mode)
 
 
+@deprecated(
+    "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version."
+    " Use ConstrainedArcs instead."
+)
 class ArcArcTangentArc(BaseEdgeObject):
     """Line Object: Arc Arc Tangent Arc
 
@@ -2535,12 +2529,6 @@ class ArcArcTangentArc(BaseEdgeObject):
         short_sagitta: bool = True,
         mode: Mode = Mode.ADD,
     ):
-        warnings.warn(
-            "The 'ArcArcTangentArc' object is deprecated and will be removed in a future version."
-            " Use ConstrainedArcs instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         keep_placement, keep_type = (keep, keep) if isinstance(keep, Keep) else keep
 
         context: BuildLine | None = BuildLine._get_context(self)
