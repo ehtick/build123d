@@ -45,6 +45,7 @@ from math import degrees, isclose, log10, pi, prod, radians
 from typing import TYPE_CHECKING, Any, Type, TypeAlias, cast, overload
 
 import numpy as np
+from typing_extensions import deprecated
 import webcolors  # type: ignore
 from OCP.Bnd import Bnd_Box, Bnd_OBB
 from OCP.BRep import BRep_Tool
@@ -257,14 +258,12 @@ class Vector:
         """OCCT object"""
         return self._wrapped
 
+    @deprecated(
+        "to_tuple is deprecated and will be removed in a future version. "
+        " Use 'tuple(Vector)' instead."
+    )
     def to_tuple(self) -> tuple[float, float, float]:
         """Return tuple equivalent"""
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'tuple(Vector)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return (self.X, self.Y, self.Z)
 
     @property
@@ -781,14 +780,12 @@ class Axis(metaclass=AxisMeta):
         new_gp_ax1: gp_Ax1 = self_gp_ax1.Transformed(top_location.Transformation())
         return Axis(new_gp_ax1)
 
+    @deprecated(
+        "to_tuple is deprecated and will be removed in a future version. "
+        " Use 'Plane(Axis)' instead."
+    )
     def to_plane(self) -> Plane:
         """Return self as Plane"""
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'Plane(Axis)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return Plane(origin=self.position, z_dir=self.direction)
 
     def is_coaxial(
@@ -1989,26 +1986,20 @@ class Location:
 
         return Location(Plane(origin=pos, x_dir=mx_dir, z_dir=mz_dir))
 
+    @deprecated(
+        "to_axis is deprecated and will be removed in a future version. "
+        " Use 'Axis(Location)' instead."
+    )
     def to_axis(self) -> Axis:
         """Convert the location into an Axis"""
-        warnings.warn(
-            "to_axis is deprecated and will be removed in a future version. "
-            "Use 'Axis(Location)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return Axis.Z.located(self)
 
+    @deprecated(
+        "to_tuple is deprecated and will be removed in a future version. "
+        " Use 'tuple(Location)' instead."
+    )
     def to_tuple(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
         """Convert the location to a translation, rotation tuple."""
-
-        warnings.warn(
-            "to_tuple is deprecated and will be removed in a future version. "
-            "Use 'tuple(Location)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         transformation = self.wrapped.Transformation()
         trans = transformation.TranslationPart()
         rot = transformation.GetRotation()

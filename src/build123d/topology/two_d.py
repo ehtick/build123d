@@ -129,7 +129,7 @@ from OCP.TopoDS import (
 )
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
 from ocp_gordon import interpolate_curve_network
-from typing_extensions import Self
+from typing_extensions import Self, deprecated
 
 from build123d.build_enums import (
     CenterOf,
@@ -1291,17 +1291,14 @@ class Face(Mixin2D[TopoDS_Face]):
         )
 
     @classmethod
+    @deprecated(
+        "The 'make_plane' method is deprecated and will be removed in a future version."
+    )
     def make_plane(
         cls,
         plane: Plane = Plane.XY,
     ) -> Face:
         """Create a unlimited size Face aligned with plane"""
-        warnings.warn(
-            "The 'make_plane' method is deprecated and will be removed in a future version.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         pln_shape = BRepBuilderAPI_MakeFace(plane.wrapped).Face()
         return cls(pln_shape)
 
@@ -2232,6 +2229,9 @@ class Face(Mixin2D[TopoDS_Face]):
                 projected_shapes.append(shape)
         return projected_shapes
 
+    @deprecated(
+        "The 'to_arcs' method is deprecated and will be removed in a future version."
+    )
     def to_arcs(self, tolerance: float = 1e-3) -> Face:
         """to_arcs
 
@@ -2247,11 +2247,6 @@ class Face(Mixin2D[TopoDS_Face]):
         Returns:
             Face: approximated face
         """
-        warnings.warn(
-            "The 'to_arcs' method is deprecated and will be removed in a future version.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         if self._wrapped is None:
             raise ValueError("Cannot approximate an empty shape")
 
