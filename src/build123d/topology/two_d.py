@@ -102,7 +102,7 @@ from OCP.GeomAPI import (
 )
 from OCP.GeomLib import GeomLib_IsPlanarSurface
 from OCP.GeomProjLib import GeomProjLib
-from OCP.gp import gp_Ax1, gp_Pnt, gp_Vec
+from OCP.gp import gp_Ax1, gp_Ax3, gp_Pln, gp_Pnt, gp_Vec
 from OCP.GProp import GProp_GProps
 from OCP.Precision import Precision
 from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Wire
@@ -1065,7 +1065,12 @@ class Face(Mixin2D[TopoDS_Face]):
         """Is the face planar even though its geom_type may not be PLANE - if so return Plane"""
         surface = BRep_Tool.Surface_s(self.wrapped)
         planar_searcher = GeomLib_IsPlanarSurface(surface, TOLERANCE)
-        return Plane(planar_searcher.Plan()) if planar_searcher.IsPlanar() else None
+        if not planar_searcher.IsPlanar():
+            return None
+        pln = planar_searcher.Plan()
+        if not pln.Position().Direct():  # A left-handed plane was returned
+            pln = gp_Pln(gp_Ax3(pln.Position().Ax2()))
+        return Plane(pln)
 
     @property
     def length(self) -> None | float:
