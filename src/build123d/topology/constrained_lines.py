@@ -277,20 +277,34 @@ def _enclosed_circ_param_offset(
     params: list[float],
 ) -> list[float]:
     """
-    Adjusts the circle parameters by adding pi if the solution circle is
+    Adjusts solution-circle parameters by adding pi if the solution circle is
     enclosed within a tangent circular edge.
+
+    Only applies when at least one tangent input is non-circular: GccAna_Circ2d3Tan
+    (invoked for all-circle inputs) already computes the correct tangent direction
+    for the enclosed case, so no offset is needed there.
     """
+    adapts = [
+        BRepAdaptor_Curve(t[0].wrapped) if isinstance(t[0].wrapped, TopoDS_Edge) else None
+        for t in tangent_tuples
+    ]
+    is_circ = [
+        a is not None and a.GetType() == GeomAbs_CurveType.GeomAbs_Circle
+        for a in adapts
+    ]
+
+    if all(is_circ):
+        return list(params)
+
     center_pnt = circ.Location()
     center_vrt = Vector(center_pnt.X(), center_pnt.Y(), 0)
 
     pars = list(params)
-    for i, (obj, _) in enumerate(tangent_tuples):
-        if isinstance(obj, Vector):
+    for i, (par, circ_flag, t) in enumerate(zip(params, is_circ, tangent_tuples)):
+        if isinstance(t[0], Vector):
             continue
-        adapt = BRepAdaptor_Curve(obj.wrapped)
-        if adapt.GetType() == GeomAbs_CurveType.GeomAbs_Circle:
-            if (center_vrt - obj.arc_center).length < obj.radius:
-                pars[i] += pi
+        if circ_flag and (center_vrt - t[0].arc_center).length < t[0].radius:
+            pars[i] = par + pi
 
     return pars
 
