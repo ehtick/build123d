@@ -395,44 +395,44 @@ class TestShape(unittest.TestCase):
     def test_vertex(self):
         v = Edge.make_circle(1).vertex()
         self.assertTrue(isinstance(v, Vertex))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one vertex"):
             Wire.make_rect(1, 1).vertex()
 
     def test_edge(self):
         e = Edge.make_circle(1).edge()
         self.assertTrue(isinstance(e, Edge))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one edge"):
             Wire.make_rect(1, 1).edge()
 
     def test_wire(self):
         w = Wire.make_circle(1).wire()
         self.assertTrue(isinstance(w, Wire))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one wire"):
             Solid.make_box(1, 1, 1).wire()
 
     def test_compound(self):
         c = Compound.make_text("hello", 10)
         self.assertTrue(isinstance(c, Compound))
         c2 = Compound.make_text("world", 10)
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one compound"):
             Compound(children=[c, c2]).compound()
 
     def test_face(self):
         f = Face.make_rect(1, 1)
         self.assertTrue(isinstance(f, Face))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one face"):
             Solid.make_box(1, 1, 1).face()
 
     def test_shell(self):
         s = Solid.make_sphere(1).shell()
         self.assertTrue(isinstance(s, Shell))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one shell"):
             extrude(Compound.make_text("two", 10), amount=5).shell()
 
     def test_solid(self):
         s = Solid.make_sphere(1).solid()
         self.assertTrue(isinstance(s, Solid))
-        with self.assertWarns(UserWarning):
+        with self.assertRaisesRegex(ValueError, "Expected exactly one solid"):
             Compound(Solid.make_sphere(1).split(Plane.XY, keep=Keep.BOTH)).solid()
 
     def test_manifold(self):
@@ -625,12 +625,18 @@ class TestShape(unittest.TestCase):
         self.assertEqual(Vertex(1, 1, 1).shells(), ShapeList())
         self.assertEqual(Vertex(1, 1, 1).solids(), ShapeList())
         self.assertEqual(Vertex(1, 1, 1).compounds(), ShapeList())
-        self.assertIsNone(Vertex(1, 1, 1).edge())
-        self.assertIsNone(Vertex(1, 1, 1).wire())
-        self.assertIsNone(Vertex(1, 1, 1).face())
-        self.assertIsNone(Vertex(1, 1, 1).shell())
-        self.assertIsNone(Vertex(1, 1, 1).solid())
-        self.assertIsNone(Vertex(1, 1, 1).compound())
+        with self.assertRaisesRegex(ValueError, "Expected exactly one edge"):
+            Vertex(1, 1, 1).edge()
+        with self.assertRaisesRegex(ValueError, "Expected exactly one wire"):
+            Vertex(1, 1, 1).wire()
+        with self.assertRaisesRegex(ValueError, "Expected exactly one face"):
+            Vertex(1, 1, 1).face()
+        with self.assertRaisesRegex(ValueError, "Expected exactly one shell"):
+            Vertex(1, 1, 1).shell()
+        with self.assertRaisesRegex(ValueError, "Expected exactly one solid"):
+            Vertex(1, 1, 1).solid()
+        with self.assertRaisesRegex(ValueError, "Expected exactly one compound"):
+            Vertex(1, 1, 1).compound()
 
     def test_rotate(self):
         line = Edge.make_line((0, 0), (1, 0))

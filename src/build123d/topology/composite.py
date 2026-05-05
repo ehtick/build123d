@@ -593,16 +593,13 @@ class Compound(Mixin3D[TopoDS_Compound]):
             middle = self.bounding_box().center()
         return middle
 
-    def compound(self) -> Compound | None:
+    def compound(self) -> Compound:
         """Return the Compound"""
         shape_list = self.compounds()
         entity_count = len(shape_list)
-        if entity_count > 1:
-            warnings.warn(
-                f"Found {entity_count} compounds, returning first",
-                stacklevel=2,
-            )
-        return shape_list[0] if shape_list else None
+        if entity_count != 1:
+            raise ValueError(f"Expected exactly one compound, found {entity_count}")
+        return shape_list[0]
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""

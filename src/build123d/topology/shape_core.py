@@ -818,6 +818,36 @@ class Shape(NodeMixin, Generic[TOPODS]):
         calc_function(obj.wrapped, properties)
         return properties.Mass()
 
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Vertex"]) -> ShapeList[Vertex]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Edge"]) -> ShapeList[Edge]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Wire"]) -> ShapeList[Wire]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Face"]) -> ShapeList[Face]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Shell"]) -> ShapeList[Shell]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(shape: Shape, entity_type: Literal["Solid"]) -> ShapeList[Solid]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Compound"]
+    ) -> ShapeList[Compound]: ...
+
     @staticmethod
     def get_shape_list(
         shape: Shape,
@@ -835,25 +865,55 @@ class Shape(NodeMixin, Generic[TOPODS]):
             item.topo_parent = shape if shape.topo_parent is None else shape.topo_parent
         return shape_list
 
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Vertex"]) -> Vertex: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Edge"]) -> Edge: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Wire"]) -> Wire: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Face"]) -> Face: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Shell"]) -> Shell: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Solid"]) -> Solid: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(
+        shape: Shape, entity_type: Literal["Compound"]
+    ) -> Compound: ...
+
     @staticmethod
     def get_single_shape(
         shape: Shape,
         entity_type: Literal[
             "Vertex", "Edge", "Wire", "Face", "Shell", "Solid", "Compound"
         ],
-    ) -> Shape | None:
-        """Helper to extract a single entity of a specific type from a shape,
-        with a warning if count != 1."""
+    ) -> Shape:
+        """Return the single entity of the requested type.
+
+        Raises:
+            ValueError: if the number of matching entities is not exactly one.
+        """
         shape_list = Shape.get_shape_list(shape, entity_type)
         entity_count = len(shape_list)
-        if entity_count == 0:
-            return None
-        if entity_count > 1:
-            warnings.warn(
-                f"Found {entity_count} {entity_type.lower()}s, returning first",
-                stacklevel=3,
+        if entity_count != 1:
+            raise ValueError(
+                f"Expected exactly one {entity_type.lower()}, found {entity_count}"
             )
-        return shape_list[0] if shape_list else None
+        return shape_list[0]
 
     # ---- Instance Methods ----
 
@@ -1104,9 +1164,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """Points on two shapes where the distance between them is minimal"""
         return self.distance_to_with_closest_points(other)[1:3]
 
-    def compound(self) -> Compound | None:
+    def compound(self) -> Compound:
         """Return the Compound"""
-        return None
+        return Shape.get_single_shape(self, "Compound")
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""
@@ -1223,7 +1283,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
             yield dist_calc.Value()
 
-    def edge(self) -> Edge | None:
+    def edge(self) -> Edge:
         """Return the Edge"""
         return Shape.get_single_shape(self, "Edge")
 
@@ -1240,7 +1300,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return []
         return _topods_entities(self.wrapped, topo_type)
 
-    def face(self) -> Face | None:
+    def face(self) -> Face:
         """Return the Face"""
         return Shape.get_single_shape(self, "Face")
 
@@ -1788,7 +1848,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         return self._apply_transform(transformation)
 
-    def shell(self) -> Shell | None:
+    def shell(self) -> Shell:
         """Return the Shell"""
         return Shape.get_single_shape(self, "Shell")
 
@@ -1846,7 +1906,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             result = Shape._show_tree(tree[0], show_center)
         return result
 
-    def solid(self) -> Solid | None:
+    def solid(self) -> Solid:
         """Return the Solid"""
         return Shape.get_single_shape(self, "Solid")
 
@@ -2307,7 +2367,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             self_translated = self.moved(Location(TopLoc_Location(transformation)))
         return self_translated
 
-    def wire(self) -> Wire | None:
+    def wire(self) -> Wire:
         """Return the Wire"""
         return Shape.get_single_shape(self, "Wire")
 
@@ -2501,7 +2561,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return shape_to_html(self)._repr_html_()
         return repr(self)
 
-    def vertex(self) -> Vertex | None:
+    def vertex(self) -> Vertex:
         """Return the Vertex"""
         return Shape.get_single_shape(self, "Vertex")
 
@@ -2749,8 +2809,8 @@ class ShapeList(list[T]):
         compounds = self.compounds()
         compound_count = len(compounds)
         if compound_count != 1:
-            warnings.warn(
-                f"Found {compound_count} compounds, returning first", stacklevel=2
+            raise ValueError(
+                f"Expected exactly one compound, found {compound_count}"
             )
         return compounds[0]
 
@@ -2763,7 +2823,7 @@ class ShapeList(list[T]):
         edges = self.edges()
         edge_count = len(edges)
         if edge_count != 1:
-            warnings.warn(f"Found {edge_count} edges, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one edge, found {edge_count}")
         return edges[0]
 
     def edges(self) -> ShapeList[Edge]:
@@ -2775,8 +2835,7 @@ class ShapeList(list[T]):
         faces = self.faces()
         face_count = len(faces)
         if face_count != 1:
-            msg = f"Found {face_count} faces, returning first"
-            warnings.warn(msg, stacklevel=2)
+            raise ValueError(f"Expected exactly one face, found {face_count}")
         return faces[0]
 
     def faces(self) -> ShapeList[Face]:
@@ -3073,7 +3132,7 @@ class ShapeList(list[T]):
         shells = self.shells()
         shell_count = len(shells)
         if shell_count != 1:
-            warnings.warn(f"Found {shell_count} shells, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one shell, found {shell_count}")
         return shells[0]
 
     def shells(self) -> ShapeList[Shell]:
@@ -3085,7 +3144,7 @@ class ShapeList(list[T]):
         solids = self.solids()
         solid_count = len(solids)
         if solid_count != 1:
-            warnings.warn(f"Found {solid_count} solids, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one solid, found {solid_count}")
         return solids[0]
 
     def solids(self) -> ShapeList[Solid]:
@@ -3217,9 +3276,7 @@ class ShapeList(list[T]):
         vertices = self.vertices()
         vertex_count = len(vertices)
         if vertex_count != 1:
-            warnings.warn(
-                f"Found {vertex_count} vertices, returning first", stacklevel=2
-            )
+            raise ValueError(f"Expected exactly one vertex, found {vertex_count}")
         return vertices[0]
 
     def vertices(self) -> ShapeList[Vertex]:
@@ -3231,7 +3288,7 @@ class ShapeList(list[T]):
         wires = self.wires()
         wire_count = len(wires)
         if wire_count != 1:
-            warnings.warn(f"Found {wire_count} wires, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one wire, found {wire_count}")
         return wires[0]
 
     def wires(self) -> ShapeList[Wire]:
