@@ -125,12 +125,12 @@ from .shape_core import (
     get_top_level_topods_shapes,
     shapetype,
     unwrap_topods_compound,
+    _make_topods_compound_from_shapes,
 )
 from .two_d import Face, Mixin2D, Shell, sort_wires_by_build_order
 from .utils import (
     _extrude_topods_shape,
     _make_loft,
-    _make_topods_compound_from_shapes,
     find_max_dimension,
 )
 from .zero_d import Vertex

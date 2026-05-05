@@ -116,6 +116,7 @@ from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import (
     TopoDS,
+    TopoDS_Builder,
     TopoDS_Compound,
     TopoDS_Edge,
     TopoDS_Face,
@@ -820,27 +821,39 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Vertex"]) -> ShapeList[Vertex]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Vertex"]
+    ) -> ShapeList[Vertex]: ...
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Edge"]) -> ShapeList[Edge]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Edge"]
+    ) -> ShapeList[Edge]: ...
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Wire"]) -> ShapeList[Wire]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Wire"]
+    ) -> ShapeList[Wire]: ...
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Face"]) -> ShapeList[Face]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Face"]
+    ) -> ShapeList[Face]: ...
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Shell"]) -> ShapeList[Shell]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Shell"]
+    ) -> ShapeList[Shell]: ...
 
     @overload
     @staticmethod
-    def get_shape_list(shape: Shape, entity_type: Literal["Solid"]) -> ShapeList[Solid]: ...
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Solid"]
+    ) -> ShapeList[Solid]: ...
 
     @overload
     @staticmethod
@@ -2430,21 +2443,45 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         arg = TopTools_ListOfShape()
         for obj in args:
-            if obj.wrapped is not None:
-                arg.Append(obj.wrapped)
+            if obj._wrapped is not None:
+                arg.Append(obj._wrapped)
 
         tool = TopTools_ListOfShape()
         for obj in tools:
-            if obj.wrapped is not None:
-                tool.Append(obj.wrapped)
+            if obj._wrapped is not None:
+                tool.Append(obj._wrapped)
 
-        operation.SetArguments(arg)
-        operation.SetTools(tool)
+        # Handle operations with "zero" shapes
+        topo_result = None
+        if isinstance(operation, BRepAlgoAPI_Cut):
+            if tool.IsEmpty():
+                if arg.Extent() == 1:
+                    topo_result = arg.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(arg)
+        elif isinstance(operation, BRepAlgoAPI_Fuse):
+            if tool.IsEmpty():
+                if arg.Extent() == 1:
+                    topo_result = arg.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(arg)
+            elif arg.IsEmpty():
+                if tool.Extent() == 1:
+                    topo_result = tool.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(tool)
+        elif isinstance(operation, BRepAlgoAPI_Common):
+            if tool.IsEmpty() or arg.IsEmpty():
+                return self.__class__()
 
-        operation.SetRunParallel(True)
-        operation.Build()
+        if topo_result is None:
+            operation.SetArguments(arg)
+            operation.SetTools(tool)
 
-        topo_result = downcast(operation.Shape())
+            operation.SetRunParallel(True)
+            operation.Build()
+
+            topo_result = downcast(operation.Shape())
 
         # Clean
         if SkipClean.clean:
@@ -2809,9 +2846,7 @@ class ShapeList(list[T]):
         compounds = self.compounds()
         compound_count = len(compounds)
         if compound_count != 1:
-            raise ValueError(
-                f"Expected exactly one compound, found {compound_count}"
-            )
+            raise ValueError(f"Expected exactly one compound, found {compound_count}")
         return compounds[0]
 
     def compounds(self) -> ShapeList[Compound]:
@@ -3573,3 +3608,27 @@ def unwrap_topods_compound(
 
     # If there are no elements or more than one element, return TopoDS_Compound
     return compound
+
+
+def _make_topods_compound_from_shapes(
+    occt_shapes: Iterable[TopoDS_Shape | None],
+) -> TopoDS_Compound:
+    """Create an OCCT TopoDS_Compound
+
+    Create an OCCT TopoDS_Compound object from an iterable of TopoDS_Shape objects
+
+    Args:
+        occt_shapes (Iterable[TopoDS_Shape]): OCCT shapes
+
+    Returns:
+        TopoDS_Compound: OCCT compound
+    """
+    comp = TopoDS_Compound()
+    comp_builder = TopoDS_Builder()
+    comp_builder.MakeCompound(comp)
+
+    for shape in occt_shapes:
+        if shape is not None:
+            comp_builder.Add(comp, shape)
+
+    return comp

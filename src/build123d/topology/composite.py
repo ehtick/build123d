@@ -108,12 +108,12 @@ from .shape_core import (
     downcast,
     shapetype,
     topods_dim,
+    _make_topods_compound_from_shapes,
 )
 from .three_d import Mixin3D, Solid
 from .two_d import Face, Shell
 from .utils import (
     _extrude_topods_shape,
-    _make_topods_compound_from_shapes,
     tuplify,
     unwrapped_shapetype,
 )

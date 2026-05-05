@@ -33,6 +33,7 @@ from random import uniform
 from unittest.mock import PropertyMock, patch
 
 import numpy as np
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from anytree import PreOrderIter
 from build123d.build_enums import CenterOf, GeomType, Keep
 from build123d.geometry import (
@@ -59,6 +60,7 @@ from build123d.topology import (
     Vertex,
     Wire,
 )
+from build123d.topology.composite import Part
 from build123d.joints import RigidJoint
 
 
@@ -117,6 +119,44 @@ class TestShape(unittest.TestCase):
         fuzzy = box1.fuse(box2, tol=1e-6)
         self.assertTrue(fuzzy.is_valid)
         self.assertAlmostEqual(fuzzy.volume, 2, 5)
+
+    def test_boolean_zero_cut(self):
+        box = Solid.make_box(1, 2, 3)
+        zero = Solid()
+
+        result = box.cut(zero)
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
+
+        result = box - zero
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
+
+    def test_boolean_zero_fuse(self):
+        box = Solid.make_box(1, 2, 3)
+        zero = Solid()
+
+        result = box.fuse(zero)
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
+
+        result = zero.fuse(box)
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
+
+        result = box + zero
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
+
+        result = zero + box
+        self.assertTrue(isinstance(result, Solid))
+        self.assertTrue(result.is_valid)
+        self.assertAlmostEqual(result.volume, box.volume, 5)
 
     def test_faces_intersected_by_axis(self):
         box = Solid.make_box(1, 1, 1, Plane((0, 0, 1)))
@@ -338,6 +378,46 @@ class TestShape(unittest.TestCase):
         )
         self.assertAlmostEqual(Vector(intersections[0]), (0.5, 0.5, 0), 5)
         self.assertAlmostEqual(Vector(intersections[1]), (0.5, 0.5, 1), 5)
+
+    def test_boolean_zero_intersection(self):
+        box = Solid.make_box(1, 2, 3)
+        zero = Solid()
+
+        self.assertIsNone(box.intersect(zero))
+        self.assertIsNone(zero.intersect(box))
+
+    def test_boolean_zero_cut_multi_args(self):
+        box1 = Solid.make_box(1, 1, 1)
+        box2 = Solid.make_box(1, 1, 1, Plane((2, 0, 0)))
+        zero = Solid()
+
+        result = box1._bool_op((box1, box2), (zero,), BRepAlgoAPI_Cut())
+        self.assertTrue(isinstance(result, Part))
+        self.assertTrue(result.is_valid)
+        self.assertEqual(len(result.solids()), 2)
+        self.assertAlmostEqual(result.volume, box1.volume + box2.volume, 5)
+
+    def test_boolean_zero_fuse_multi_args(self):
+        box1 = Solid.make_box(1, 1, 1)
+        box2 = Solid.make_box(1, 1, 1, Plane((2, 0, 0)))
+        zero = Solid()
+
+        result = box1._bool_op((box1, box2), (zero,), BRepAlgoAPI_Fuse())
+        self.assertTrue(isinstance(result, Part))
+        self.assertTrue(result.is_valid)
+        self.assertEqual(len(result.solids()), 2)
+        self.assertAlmostEqual(result.volume, box1.volume + box2.volume, 5)
+
+    def test_boolean_zero_fuse_multi_tools(self):
+        box1 = Solid.make_box(1, 1, 1)
+        box2 = Solid.make_box(1, 1, 1, Plane((2, 0, 0)))
+        zero = Solid()
+
+        result = box1._bool_op((zero,), (box1, box2), BRepAlgoAPI_Fuse())
+        self.assertTrue(isinstance(result, Part))
+        self.assertTrue(result.is_valid)
+        self.assertEqual(len(result.solids()), 2)
+        self.assertAlmostEqual(result.volume, box1.volume + box2.volume, 5)
 
     def test_clean_error(self):
         """Note that this test is here to alert build123d to changes in bad OCCT clean behavior
