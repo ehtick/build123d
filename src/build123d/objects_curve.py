@@ -1639,6 +1639,11 @@ class FilletPolyline(BaseLineObject):
         validate_inputs(context, self)
         points = flatten_sequence(*pts)
 
+        # Handle user closed polylines
+        if (Vector(points[0]) - Vector(points[-1])).length < TOLERANCE:
+            close = True
+            points.pop(-1)
+
         if len(points) < 2:
             raise ValueError("FilletPolyline requires two or more pts")
 
@@ -1659,6 +1664,7 @@ class FilletPolyline(BaseLineObject):
                 raise ValueError(f"radius {r} must be non-negative")
 
         lines_pts = WorkplaneList.localize(*points)
+
         # Create the polyline
 
         new_edges = [

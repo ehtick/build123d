@@ -435,6 +435,15 @@ class BuildLineTests(unittest.TestCase):
             )
         assert len(p.edges()) > 0
 
+        # test FilletPolyline with a user closed shape
+        l1 = FilletPolyline(
+            (0, 0), (2, 6), (0, 5), (-2, 6), (0, 0), radius=(0, 0.1, 0, 0)
+        )
+        assert all(
+            sum(v in e.vertices() for e in l1.edges()) == 2 for v in l1.vertices()
+        )
+        assert len(l1.edges().filter_by(GeomType.CIRCLE)) == 1
+
     def test_intersecting_line(self):
         with BuildLine():
             l1 = Line((0, 0), (10, 0))
