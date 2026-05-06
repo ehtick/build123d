@@ -3231,32 +3231,36 @@ class Edge(Mixin1D[TopoDS_Edge]):
             Edge: trimmed edge
         """
 
+        # Get the normalized edge parameters
         start_u = Mixin1D._to_param(self, start, "start")
         end_u = Mixin1D._to_param(self, end, "end")
 
-        start_u, end_u = sorted([start_u, end_u])
+        start_point = self.position_at(start_u)
 
-        # if start_u >= end_u:
-        #     raise ValueError(f"start ({start_u}) must be less than end ({end_u})")
+        # Convert the normalized edge parameters into curve parameters
+        comp_curve_start, parm_start, _ = self._occt_param_at(start_u)
+        _comp_curve_end, parm_end, _ = self._occt_param_at(end_u)
 
-        if self._wrapped is None:
-            raise ValueError("Can't trim empty edge")
-
-        self_copy = copy.deepcopy(self)
-        assert self_copy.wrapped is not None
-
-        new_curve = BRep_Tool.Curve_s(
-            self_copy.wrapped, self.param_at(0), self.param_at(1)
+        # Rebuild the edge
+        trimmed_edge = Edge(
+            BRepBuilderAPI_MakeEdge(
+                BRep_Tool.Curve_s(
+                    self.wrapped,
+                    comp_curve_start.FirstParameter(),
+                    comp_curve_start.LastParameter(),
+                ),
+                *sorted([parm_start, parm_end]),
+            ).Edge()
         )
-        parm_start = self.param_at(start_u)
-        parm_end = self.param_at(end_u)
-        trimmed_curve = Geom_TrimmedCurve(
-            new_curve,
-            parm_start,
-            parm_end,
+
+        # Reverse it if necessary
+        same_start = (trimmed_edge.position_at(0) - start_point).length < TOLERANCE
+        same_direction = (
+            self.tangent_at(start_u).dot(trimmed_edge.tangent_at(0)) > 1 - TOLERANCE
         )
-        new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
-        return Edge(new_edge)
+        if same_start and same_direction:
+            return trimmed_edge
+        return trimmed_edge.reversed(reconstruct=True)
 
     def trim_to_length(self, start: float | VectorLike, length: float) -> Edge:
         """trim_to_length

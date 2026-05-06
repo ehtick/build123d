@@ -221,6 +221,22 @@ class TestWire(unittest.TestCase):
         t8 = c.trim(0.4, 0.9)
         self.assertAlmostEqual(c.length * 0.5, t8.length, 5)
 
+        reversed_arc = Edge.make_circle(
+            3, Plane((5, 3, 0)), start_angle=-90, end_angle=0
+        ).reversed()
+        explicit_reversed_wire = Wire(
+            [
+                Edge.make_line((0, 0), (5, 0)),
+                reversed_arc,
+                Edge.make_line((8, 3), (12, 3)),
+            ]
+        )
+        trimmed_reversed_wire = explicit_reversed_wire.trim(0.2, 0.8)
+        self.assertEqual(len(trimmed_reversed_wire.edges()), 3)
+        self.assertAlmostEqual(trimmed_reversed_wire.length, 8.227433388230814, 5)
+        self.assertAlmostEqual(trimmed_reversed_wire @ 0, (2.7424777960769386, 0, 0), 5)
+        self.assertAlmostEqual(trimmed_reversed_wire @ 1, (9.257522203923063, 3, 0), 5)
+
     def test_param_at_point(self):
         e = Edge.make_three_point_arc((0, -20), (5, 0), (0, 20))
         # Three edges are created 0->0.5->0.75->1.0
