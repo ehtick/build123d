@@ -170,6 +170,7 @@ from OCP.Standard import (
 )
 from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TColStd import (
+    TColStd_Array1OfInteger,
     TColStd_Array1OfReal,
     TColStd_HArray1OfBoolean,
     TColStd_HArray1OfReal,
@@ -2465,6 +2466,85 @@ class Edge(Mixin1D[TopoDS_Edge]):
             raise ValueError("B-spline interpolation failed")
 
         spline_geom = spline_builder.Curve()
+
+        return cls(BRepBuilderAPI_MakeEdge(spline_geom).Edge())
+
+    @classmethod
+    def make_bspline(
+        cls,
+        control_points: Iterable[VectorLike],
+        knots: Iterable[float],
+        degree: int,
+        weights: Iterable[float] | None = None,
+        periodic: bool = False,
+    ) -> Edge:
+        """Create an exact B-spline edge from control points and knot data.
+
+        Args:
+            control_points (Iterable[VectorLike]): Control points (poles) defining
+                the spline shape.
+            knots (Iterable[float]): Knot sequence for the spline. Repeated knot
+                values are converted to unique knot values plus multiplicities.
+            degree (int): Polynomial degree of the spline.
+            weights (Iterable[float] | None, optional): Optional per-control-point
+                weights for rational B-splines. Defaults to ``None``.
+            periodic (bool, optional): Whether to create a periodic spline.
+                Defaults to ``False``.
+
+        Raises:
+            ValueError: B-spline requires at least one knot.
+
+        Returns:
+            Edge: the B-spline edge
+        """
+
+        knot_list = list(knots)
+        if not knot_list:
+            raise ValueError("B-spline requires at least one knot")
+
+        point_vectors = [Vector(point) for point in control_points]
+        unique_knots = [knot_list[0]]
+        multiplicities = [1]
+        for knot in knot_list[1:]:
+            if abs(knot - unique_knots[-1]) <= TOLERANCE:
+                multiplicities[-1] += 1
+            else:
+                unique_knots.append(knot)
+                multiplicities.append(1)
+
+        poles_array = TColgp_Array1OfPnt(1, len(point_vectors))
+        for index, point in enumerate(point_vectors, start=1):
+            poles_array.SetValue(index, point.to_pnt())
+
+        knots_array = TColStd_Array1OfReal(1, len(unique_knots))
+        for index, knot in enumerate(unique_knots, start=1):
+            knots_array.SetValue(index, float(knot))
+
+        multiplicities_array = TColStd_Array1OfInteger(1, len(multiplicities))
+        for index, multiplicity in enumerate(multiplicities, start=1):
+            multiplicities_array.SetValue(index, multiplicity)
+
+        weights_list = list(weights) if weights is not None else []
+        if weights_list:
+            weights_array = TColStd_Array1OfReal(1, len(weights_list))
+            for index, weight in enumerate(weights_list, start=1):
+                weights_array.SetValue(index, float(weight))
+            spline_geom = Geom_BSplineCurve(
+                poles_array,
+                weights_array,
+                knots_array,
+                multiplicities_array,
+                degree,
+                periodic,
+            )
+        else:
+            spline_geom = Geom_BSplineCurve(
+                poles_array,
+                knots_array,
+                multiplicities_array,
+                degree,
+                periodic,
+            )
 
         return cls(BRepBuilderAPI_MakeEdge(spline_geom).Edge())
 

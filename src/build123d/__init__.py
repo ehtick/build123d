@@ -86,6 +86,7 @@ __all__ = [
     "Airfoil",
     "Bezier",
     "BlendCurve",
+    "BSpline",
     "CenterArc",
     "ConstrainedArcs",
     "ConstrainedLines",
