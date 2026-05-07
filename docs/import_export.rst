@@ -259,6 +259,7 @@ For example:
 ============
 .. py:module:: importers
 
+.. autofunction:: import_dxf
 .. autofunction:: import_svg
 .. autofunction:: import_svg_as_buildline_code
 
