@@ -988,9 +988,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         else:
             sum_shape = self.fuse(*summands)
 
-        if SkipClean.clean and not isinstance(sum_shape, list):
-            sum_shape = sum_shape.clean()
-
         return sum_shape
 
     def __and__(self, other: Shape | Iterable[Shape]) -> None | Self | Compound:
