@@ -2825,11 +2825,12 @@ def topo_distance_to(
     if peer_type not in plural_lut:
         raise ValueError(f"Topological distance is not supported for {peer_type}")
 
-    parents = [shape.topo_parent for shape in sources if shape.topo_parent is not None]
-    if not parents:
+    parents = [shape.topo_parent for shape in sources]
+    if any(parent is None for parent in parents):
         raise ValueError("Topological distance requires shapes with a topo_parent")
-    parent = parents[0]
-    if any(not parent.is_same(candidate) for candidate in parents[1:]):
+    valid_parents = tcast(list[Shape], parents)
+    parent = valid_parents[0]
+    if any(not parent.is_same(candidate) for candidate in valid_parents[1:]):
         raise ValueError("Topological distance requires a shared topo_parent")
 
     peers = tcast(ShapeList[Shape], getattr(parent, plural_lut[peer_type])())
