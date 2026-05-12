@@ -53,23 +53,11 @@ from typing import Any, Literal, TypeAlias, TypeVar, overload
 import numpy as np
 from sklearn.cluster import DBSCAN  # type: ignore[import-untyped]
 
-from build123d import (
-    TOL_DIGITS,
-    Align,
-    Axis,
-    Cylinder,
-    Face,
-    GeomType,
-    Location,
-    Plane,
-    Pos,
-    Rectangle,
-    Shape,
-    ShapeList,
-    Sphere,
-    Vector,
-    Vertex,
-)
+from build123d.build_enums import Align, GeomType
+from build123d.geometry import TOL_DIGITS, Axis, Location, Plane, Pos, Vector
+from build123d.objects_part import Cylinder, Sphere
+from build123d.objects_sketch import Rectangle
+from build123d.topology import Face, Shape, ShapeList, Vertex
 
 EPS = 1e-9
 T = TypeVar("T")
@@ -1883,12 +1871,14 @@ def detect_primitives(
     throughout the pipeline.
 
     Detection proceeds in stages:
+
     1. High-confidence planes are found first from cleaned proxy faces.
     2. Spheres are found next from broad radius-signature classification,
        connected or sewn regions, local sphere fitting, and region growth.
     3. Cylinders are detected from area-grouped sewn regions and local
        cylinder seeds, then grown, refit, and validated.
-    4. Remaining coplanar connected components are detected as fallback planes.
+    4. Remaining coplanar connected components are detected as fallback
+       planes.
 
     Each accepted patch is converted into a build123d Face, unmatched mesh
     faces are returned as leftovers, and the generated code strings are sorted

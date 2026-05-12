@@ -8,6 +8,7 @@ from build123d.build_sketch import *
 from build123d.exporters import *
 from build123d.geometry import *
 from build123d.importers import *
+from build123d.import_dxf import import_dxf
 from build123d.joints import *
 from build123d.mesher import *
 from build123d.objects_curve import *
@@ -22,6 +23,7 @@ from build123d.drafting import *
 from build123d.persistence import modify_copyreg
 from build123d.exporters3d import *
 from build123d.text import available_fonts, FontManager
+from build123d.brep_from_stl import detect_primitives
 
 from .version import version as __version__
 
@@ -85,6 +87,7 @@ __all__ = [
     "Airfoil",
     "Bezier",
     "BlendCurve",
+    "BSpline",
     "CenterArc",
     "ConstrainedArcs",
     "ConstrainedLines",
@@ -186,7 +189,9 @@ __all__ = [
     "DotLength",
     "Mesher",
     # Importer functions
+    "detect_primitives",
     "import_brep",
+    "import_dxf",
     "import_step",
     "import_stl",
     "import_svg",

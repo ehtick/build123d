@@ -191,6 +191,30 @@ class TestFace(unittest.TestCase):
             extrude(amount=1)
         self.assertEqual(test.faces().sort_by(Axis.Z).last.geometry, "POLYGON")
 
+    def test_uv_face(self):
+        dome = Sphere(1, rotation=(90, 0, 0))
+        domed_box = Box(
+            1, 1, 1, align=(Align.CENTER, Align.CENTER, Align.MIN)
+        ) & dome
+        domed_box -= Cylinder(0.1, 1, align=Align.NONE)
+        spherical_face = domed_box.faces().filter_by(GeomType.SPHERE)[0]
+
+        uv_face = spherical_face.uv_face
+
+        self.assertTrue(uv_face.is_valid)
+        self.assertTrue(uv_face.is_planar)
+        self.assertEqual(uv_face.geom_type, GeomType.PLANE)
+        self.assertEqual(len(uv_face.edges()), len(spherical_face.edges()))
+        self.assertEqual(
+            len(uv_face.outer_wire().edges()),
+            len(spherical_face.outer_wire().edges()),
+        )
+        self.assertEqual(len(uv_face.inner_wires()), len(spherical_face.inner_wires()))
+        self.assertEqual(len(uv_face.inner_wires()), 1)
+        self.assertEqual(len(uv_face.inner_wires()[0].edges()), 1)
+        self.assertEqual(len(uv_face.edges().filter_by(GeomType.BSPLINE)), 3)
+        self.assertGreater(uv_face.area, 0)
+
     def test_is_planar(self):
         self.assertTrue(Face.make_rect(1, 1).is_planar)
         self.assertFalse(
@@ -1326,6 +1350,11 @@ class TestFace(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             Face(Wire.make_circle(5), [perimeter])
+
+    def test_seams(self):
+        self.assertEqual(len(Face.make_rect(1, 1).seams), 0)
+        self.assertEqual(len(Sphere(1).face().seams), 1)
+        self.assertEqual(len(Torus(4, 1).face().seams), 2)
 
 
 class TestAxesOfSysmmetrySplitNone(unittest.TestCase):

@@ -103,7 +103,7 @@ from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
-from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
+from OCP.BRepTools import BRepTools
 from OCP.gce import gce_MakeLin
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
 from OCP.GeomLib import GeomLib_IsPlanarSurface
@@ -118,6 +118,7 @@ from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import (
     TopoDS,
+    TopoDS_Builder,
     TopoDS_Compound,
     TopoDS_Edge,
     TopoDS_Face,
@@ -134,7 +135,7 @@ from OCP.TopTools import (
     TopTools_SequenceOfShape,
     TopTools_ShapeMapHasher,
 )
-from typing_extensions import Self
+from typing_extensions import Self, deprecated
 
 from build123d.build_enums import CenterOf, GeomType, Keep, SortBy, Transition
 from build123d.geometry import (
@@ -315,6 +316,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     @property
     def wrapped(self):
+        """OCP TopoDS object"""
         assert self._wrapped
         return self._wrapped
 
@@ -455,14 +457,12 @@ class Shape(NodeMixin, Generic[TOPODS]):
         return self._wrapped is None or self.wrapped.IsNull()
 
     @property
+    @deprecated(
+        "The 'is_planar_face' property is deprecated and will be removed in a future version."
+        " Use 'Face.is_planar' instead"
+    )
     def is_planar_face(self) -> bool:
         """Is the shape a planar face even though its geom_type may not be PLANE"""
-        warnings.warn(
-            "The ``is_planar_face`` property is deprecated and will be removed in a future version."
-            "Use ``Face.is_planar`` instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         if self._wrapped is None or not isinstance(self.wrapped, TopoDS_Face):
             return False
         surface = BRep_Tool.Surface_s(self.wrapped)
@@ -822,6 +822,48 @@ class Shape(NodeMixin, Generic[TOPODS]):
         calc_function(obj.wrapped, properties)
         return properties.Mass()
 
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Vertex"]
+    ) -> ShapeList[Vertex]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Edge"]
+    ) -> ShapeList[Edge]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Wire"]
+    ) -> ShapeList[Wire]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Face"]
+    ) -> ShapeList[Face]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Shell"]
+    ) -> ShapeList[Shell]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Solid"]
+    ) -> ShapeList[Solid]: ...
+
+    @overload
+    @staticmethod
+    def get_shape_list(
+        shape: Shape, entity_type: Literal["Compound"]
+    ) -> ShapeList[Compound]: ...
+
     @staticmethod
     def get_shape_list(
         shape: Shape,
@@ -839,25 +881,55 @@ class Shape(NodeMixin, Generic[TOPODS]):
             item.topo_parent = shape if shape.topo_parent is None else shape.topo_parent
         return shape_list
 
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Vertex"]) -> Vertex: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Edge"]) -> Edge: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Wire"]) -> Wire: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Face"]) -> Face: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Shell"]) -> Shell: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(shape: Shape, entity_type: Literal["Solid"]) -> Solid: ...
+
+    @overload
+    @staticmethod
+    def get_single_shape(
+        shape: Shape, entity_type: Literal["Compound"]
+    ) -> Compound: ...
+
     @staticmethod
     def get_single_shape(
         shape: Shape,
         entity_type: Literal[
             "Vertex", "Edge", "Wire", "Face", "Shell", "Solid", "Compound"
         ],
-    ) -> Shape | None:
-        """Helper to extract a single entity of a specific type from a shape,
-        with a warning if count != 1."""
+    ) -> Shape:
+        """Return the single entity of the requested type.
+
+        Raises:
+            ValueError: if the number of matching entities is not exactly one.
+        """
         shape_list = Shape.get_shape_list(shape, entity_type)
         entity_count = len(shape_list)
-        if entity_count == 0:
-            return None
-        elif entity_count > 1:
-            warnings.warn(
-                f"Found {entity_count} {entity_type.lower()}s, returning first",
-                stacklevel=3,
+        if entity_count != 1:
+            raise ValueError(
+                f"Expected exactly one {entity_type.lower()}, found {entity_count}"
             )
-        return shape_list[0] if shape_list else None
+        return shape_list[0]
 
     # ---- Instance Methods ----
 
@@ -937,11 +1009,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             else:
                 new_shape = Shape.make_composite(new_shape)
 
-        if (
-            new_shape is not None
-            and new_shape.wrapped is not None
-            and SkipClean.clean
-        ):
+        if new_shape is not None and new_shape.wrapped is not None and SkipClean.clean:
             new_shape = new_shape.clean()
 
         return new_shape
@@ -1019,7 +1087,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
         try:
             return [self.moved(loc) for loc in all_location_like(other)]
         except NotAllLocationLikeError as e:
-            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}")
+            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}") from e
         except TypeError:  # not iterable
             pass
         raise TypeError(
@@ -1112,9 +1180,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """Points on two shapes where the distance between them is minimal"""
         return self.distance_to_with_closest_points(other)[1:3]
 
-    def compound(self) -> Compound | None:
+    def compound(self) -> Compound:
         """Return the Compound"""
-        return None
+        return Shape.get_single_shape(self, "Compound")
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""
@@ -1231,7 +1299,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
             yield dist_calc.Value()
 
-    def edge(self) -> Edge | None:
+    def edge(self) -> Edge:
         """Return the Edge"""
         return Shape.get_single_shape(self, "Edge")
 
@@ -1248,7 +1316,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             return []
         return _topods_entities(self.wrapped, topo_type)
 
-    def face(self) -> Face | None:
+    def face(self) -> Face:
         """Return the Face"""
         return Shape.get_single_shape(self, "Face")
 
@@ -1435,6 +1503,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             common_set = ShapeList(set(next_set))  # deduplicate
         return common_set if common_set else None
 
+    # pylint: disable=unused-argument
     def _intersect(
         self,
         other: Shape | Vector | Location | Axis | Plane,
@@ -1470,6 +1539,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
             ShapeList of contact shapes (empty for base implementation)
         """
         return ShapeList()
+
+    # pylint: enable=unused-argument
 
     def is_equal(self, other: Shape) -> bool:
         """Returns True if two shapes are equal, i.e. if they share the same
@@ -1512,8 +1583,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
         self.wrapped.Location(loc.wrapped)
 
         return self
@@ -1531,10 +1600,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot locate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot locate a shape at an empty location")
-        shape_copy: Shape = copy.deepcopy(self, None)
-        shape_copy.wrapped.Location(loc.wrapped)  # type: ignore
+        shape_copy = copy.deepcopy(self, None)
+        shape_copy.wrapped.Location(loc.wrapped)
         return shape_copy
 
     def mesh(self, tolerance: float, angular_tolerance: float = 0.1):
@@ -1588,8 +1655,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
         """
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
 
         self.wrapped.Move(loc.wrapped)
 
@@ -1610,8 +1675,6 @@ class Shape(NodeMixin, Generic[TOPODS]):
             loc = loc.location
         if self._wrapped is None:
             raise ValueError("Cannot move an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot move a shape at an empty location")
         shape_copy: Shape = copy.deepcopy(self, None)
         shape_copy.wrapped = tcast(TOPODS, downcast(self.wrapped.Moved(loc.wrapped)))
         return shape_copy
@@ -1745,12 +1808,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
         )
         if self._wrapped is None:
             raise ValueError("Cannot relocate an empty shape")
-        if loc.wrapped is None:
-            raise ValueError("Cannot relocate a shape at an empty location")
 
         if self.location != loc:
             old_ax = gp_Ax3()
-            old_ax.Transform(self.location.wrapped.Transformation())  # type: ignore
+            old_ax.Transform(self.location.wrapped.Transformation())
 
             new_ax = gp_Ax3()
             new_ax.Transform(loc.wrapped.Transformation())
@@ -1788,22 +1849,68 @@ class Shape(NodeMixin, Generic[TOPODS]):
             rotated_self = self.moved(Location(TopLoc_Location(transformation)))
         return rotated_self
 
-    def scale(self, factor: float) -> Self:
-        """Scales this shape through a transformation.
+    def scale(
+        self,
+        factor: float | tuple[float, float, float],
+        about: VectorLike | None = None,
+    ) -> Self:
+        """Scale this shape about a point.
+
+        Non-uniform scaling may change the underlying geometry type to splines.
+        When ``about`` isn't provided, the shape is scaled about its location.
 
         Args:
-          factor: float:
+            factor (float | tuple[float, float, float]): uniform scale factor or
+                three scale factors for the X, Y and Z directions.
+            about (VectorLike, optional): point to scale about. Defaults to the
+                shape's location position.
 
         Returns:
-
+            Shape: a copy of the scaled shape.
         """
 
-        transformation = gp_Trsf()
-        transformation.SetScale(gp_Pnt(), factor)
+        current_location = self.location
+        assert current_location is not None
+        about_point = current_location.position if about is None else Vector(about)
 
-        return self._apply_transform(transformation)
+        if isinstance(factor, (int, float)):
+            transformation = gp_Trsf()
+            transformation.SetScale(about_point.to_pnt(), float(factor))
+            return self._apply_transform(transformation)
+        elif (
+            isinstance(factor, tuple)
+            and len(factor) == 3
+            and all(isinstance(scale, (int, float)) for scale in factor)
+        ):
+            scale_vector = Vector(factor)
+            scale_matrix = Matrix(
+                [
+                    [
+                        scale_vector.X,
+                        0.0,
+                        0.0,
+                        about_point.X * (1 - scale_vector.X),
+                    ],
+                    [
+                        0.0,
+                        scale_vector.Y,
+                        0.0,
+                        about_point.Y * (1 - scale_vector.Y),
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        scale_vector.Z,
+                        about_point.Z * (1 - scale_vector.Z),
+                    ],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            return self.transform_geometry(scale_matrix)
+        else:
+            raise ValueError("factor must be a float or a three tuple of float")
 
-    def shell(self) -> Shell | None:
+    def shell(self) -> Shell:
         """Return the Shell"""
         return Shape.get_single_shape(self, "Shell")
 
@@ -1861,7 +1968,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             result = Shape._show_tree(tree[0], show_center)
         return result
 
-    def solid(self) -> Solid | None:
+    def solid(self) -> Solid:
         """Return the Solid"""
         return Shape.get_single_shape(self, "Solid")
 
@@ -2322,7 +2429,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
             self_translated = self.moved(Location(TopLoc_Location(transformation)))
         return self_translated
 
-    def wire(self) -> Wire | None:
+    def wire(self) -> Wire:
         """Return the Wire"""
         return Shape.get_single_shape(self, "Wire")
 
@@ -2385,21 +2492,45 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         arg = TopTools_ListOfShape()
         for obj in args:
-            if obj.wrapped is not None:
-                arg.Append(obj.wrapped)
+            if obj._wrapped is not None:
+                arg.Append(obj._wrapped)
 
         tool = TopTools_ListOfShape()
         for obj in tools:
-            if obj.wrapped is not None:
-                tool.Append(obj.wrapped)
+            if obj._wrapped is not None:
+                tool.Append(obj._wrapped)
 
-        operation.SetArguments(arg)
-        operation.SetTools(tool)
+        # Handle operations with "zero" shapes
+        topo_result = None
+        if isinstance(operation, BRepAlgoAPI_Cut):
+            if tool.IsEmpty():
+                if arg.Extent() == 1:
+                    topo_result = arg.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(arg)
+        elif isinstance(operation, BRepAlgoAPI_Fuse):
+            if tool.IsEmpty():
+                if arg.Extent() == 1:
+                    topo_result = arg.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(arg)
+            elif arg.IsEmpty():
+                if tool.Extent() == 1:
+                    topo_result = tool.First()
+                else:
+                    topo_result = _make_topods_compound_from_shapes(tool)
+        elif isinstance(operation, BRepAlgoAPI_Common):
+            if tool.IsEmpty() or arg.IsEmpty():
+                return self.__class__()
 
-        operation.SetRunParallel(True)
-        operation.Build()
+        if topo_result is None:
+            operation.SetArguments(arg)
+            operation.SetTools(tool)
 
-        topo_result = downcast(operation.Shape())
+            operation.SetRunParallel(True)
+            operation.Build()
+
+            topo_result = downcast(operation.Shape())
 
         # Clean
         if SkipClean.clean:
@@ -2514,10 +2645,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
         if HAS_VTK:
             return shape_to_html(self)._repr_html_()
-        else:
-            return self.__repr__()
+        return repr(self)
 
-    def vertex(self) -> Vertex | None:
+    def vertex(self) -> Vertex:
         """Return the Vertex"""
         return Shape.get_single_shape(self, "Vertex")
 
@@ -2539,6 +2669,8 @@ class Comparable(ABC):
 
 
 class SupportsLessThan(Protocol):
+    """ShapeList comparison criteria"""
+
     def __lt__(self, other: Any) -> bool: ...
 
 
@@ -2844,7 +2976,9 @@ class ShapeList(list[T]):
     def __eq__(self, other: object) -> bool:
         """ShapeLists equality operator =="""
         return (
-            set(self) == set(other) if isinstance(other, ShapeList) else NotImplemented  # type: ignore
+            set(self) == set(other)
+            if isinstance(other, ShapeList)
+            else NotImplemented  # type: ignore
         )
 
     @overload
@@ -2927,9 +3061,7 @@ class ShapeList(list[T]):
         compounds = self.compounds()
         compound_count = len(compounds)
         if compound_count != 1:
-            warnings.warn(
-                f"Found {compound_count} compounds, returning first", stacklevel=2
-            )
+            raise ValueError(f"Expected exactly one compound, found {compound_count}")
         return compounds[0]
 
     def compounds(self) -> ShapeList[Compound]:
@@ -2941,7 +3073,7 @@ class ShapeList(list[T]):
         edges = self.edges()
         edge_count = len(edges)
         if edge_count != 1:
-            warnings.warn(f"Found {edge_count} edges, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one edge, found {edge_count}")
         return edges[0]
 
     def edges(self) -> ShapeList[Edge]:
@@ -2953,8 +3085,7 @@ class ShapeList(list[T]):
         faces = self.faces()
         face_count = len(faces)
         if face_count != 1:
-            msg = f"Found {face_count} faces, returning first"
-            warnings.warn(msg, stacklevel=2)
+            raise ValueError(f"Expected exactly one face, found {face_count}")
         return faces[0]
 
     def faces(self) -> ShapeList[Face]:
@@ -3074,7 +3205,7 @@ class ShapeList(list[T]):
         elif isinstance(filter_by, property):
 
             def predicate(obj):
-                return filter_by.__get__(obj)
+                return filter_by.__get__(obj)  # pylint: disable=unnecessary-dunder-call
 
         elif isinstance(filter_by, Axis):
             predicate = axis_parallel_predicate(filter_by, tolerance=tolerance)
@@ -3142,7 +3273,7 @@ class ShapeList(list[T]):
                 <= maximum,
                 self,
             )
-        elif inclusive == (False, False):
+        else:  # inclusive == (False, False):
             objects = filter(
                 lambda o: minimum < Plane(axis).to_local_coords(o).center().Z < maximum,
                 self,
@@ -3234,7 +3365,7 @@ class ShapeList(list[T]):
         elif isinstance(group_by, property):
 
             def key_f(obj):
-                val = group_by.__get__(obj)
+                val = group_by.__get__(obj)  # pylint: disable=unnecessary-dunder-call
                 try:
                     return round(val, tol_digits)
                 except TypeError:
@@ -3243,6 +3374,7 @@ class ShapeList(list[T]):
         else:
             raise ValueError(f"Unsupported group_by function: {group_by}")
 
+        # pylint: disable=possibly-used-before-assignment
         return GroupBy(key_f, self, reverse=reverse)
 
     def shell(self) -> Shell:
@@ -3250,7 +3382,7 @@ class ShapeList(list[T]):
         shells = self.shells()
         shell_count = len(shells)
         if shell_count != 1:
-            warnings.warn(f"Found {shell_count} shells, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one shell, found {shell_count}")
         return shells[0]
 
     def shells(self) -> ShapeList[Shell]:
@@ -3262,7 +3394,7 @@ class ShapeList(list[T]):
         solids = self.solids()
         solid_count = len(solids)
         if solid_count != 1:
-            warnings.warn(f"Found {solid_count} solids, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one solid, found {solid_count}")
         return solids[0]
 
     def solids(self) -> ShapeList[Solid]:
@@ -3366,7 +3498,7 @@ class ShapeList(list[T]):
         else:
             raise ValueError("Invalid sort_by criteria provided")
 
-        return ShapeList(objects)
+        return ShapeList(objects)  # pylint: disable=possibly-used-before-assignment
 
     def sort_by_distance(
         self, other: Shape | VectorLike, reverse: bool = False
@@ -3394,9 +3526,7 @@ class ShapeList(list[T]):
         vertices = self.vertices()
         vertex_count = len(vertices)
         if vertex_count != 1:
-            warnings.warn(
-                f"Found {vertex_count} vertices, returning first", stacklevel=2
-            )
+            raise ValueError(f"Expected exactly one vertex, found {vertex_count}")
         return vertices[0]
 
     def vertices(self) -> ShapeList[Vertex]:
@@ -3408,7 +3538,7 @@ class ShapeList(list[T]):
         wires = self.wires()
         wire_count = len(wires)
         if wire_count != 1:
-            warnings.warn(f"Found {wire_count} wires, returning first", stacklevel=2)
+            raise ValueError(f"Expected exactly one wire, found {wire_count}")
         return wires[0]
 
     def wires(self) -> ShapeList[Wire]:
@@ -3693,3 +3823,27 @@ def unwrap_topods_compound(
 
     # If there are no elements or more than one element, return TopoDS_Compound
     return compound
+
+
+def _make_topods_compound_from_shapes(
+    occt_shapes: Iterable[TopoDS_Shape | None],
+) -> TopoDS_Compound:
+    """Create an OCCT TopoDS_Compound
+
+    Create an OCCT TopoDS_Compound object from an iterable of TopoDS_Shape objects
+
+    Args:
+        occt_shapes (Iterable[TopoDS_Shape]): OCCT shapes
+
+    Returns:
+        TopoDS_Compound: OCCT compound
+    """
+    comp = TopoDS_Compound()
+    comp_builder = TopoDS_Builder()
+    comp_builder.MakeCompound(comp)
+
+    for shape in occt_shapes:
+        if shape is not None:
+            comp_builder.Add(comp, shape)
+
+    return comp

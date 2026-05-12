@@ -108,12 +108,12 @@ from .shape_core import (
     downcast,
     shapetype,
     topods_dim,
+    _make_topods_compound_from_shapes,
 )
 from .three_d import Mixin3D, Solid
 from .two_d import Face, Shell
 from .utils import (
     _extrude_topods_shape,
-    _make_topods_compound_from_shapes,
     tuplify,
     unwrapped_shapetype,
 )
@@ -397,7 +397,9 @@ class Compound(Mixin3D[TopoDS_Compound]):
             text_flat = Compound([]) + outline
             if any([not f.is_valid for f in text_flat.get_top_level_shapes()]):
                 raise ValueError(
-                    f"single_line_width ({single_line_width}) is too large for the text and produces invalid faces. Try a smaller width"
+                    "single_line_width "
+                    f"({single_line_width}) is too large for the text and "
+                    "produces invalid faces. Try a smaller width"
                 )
 
         return text_flat
@@ -587,20 +589,17 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 middle = Vector(properties.CentreOfMass())
             else:
                 raise NotImplementedError
-        elif center_of == CenterOf.BOUNDING_BOX:
+        else:  # center_of == CenterOf.BOUNDING_BOX:
             middle = self.bounding_box().center()
         return middle
 
-    def compound(self) -> Compound | None:
+    def compound(self) -> Compound:
         """Return the Compound"""
         shape_list = self.compounds()
         entity_count = len(shape_list)
-        if entity_count > 1:
-            warnings.warn(
-                f"Found {entity_count} compounds, returning first",
-                stacklevel=2,
-            )
-        return shape_list[0] if shape_list else None
+        if entity_count != 1:
+            raise ValueError(f"Expected exactly one compound, found {entity_count}")
+        return shape_list[0]
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""

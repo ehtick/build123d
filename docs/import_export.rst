@@ -257,8 +257,11 @@ For example:
 
 2D Importers
 ============
-.. py:module:: importers
 
+.. py:module:: import_dxf
+.. autofunction:: import_dxf
+
+.. py:module:: importers
 .. autofunction:: import_svg
 .. autofunction:: import_svg_as_buildline_code
 
@@ -268,6 +271,17 @@ For example:
 .. autofunction:: import_brep
 .. autofunction:: import_step
 .. autofunction:: import_stl
+
+STL Reconstruction
+------------------
+
+The :func:`~build123d.detect_primitives` helper can be used during STL
+reconstruction to detect analytic planes, cylinders, and spheres in a mesh-like
+shape and generate algebra-mode code fragments to aid manual redesign.
+
+See :ref:`stl_reconstruction_tutorial` for the full workflow and limitations.
+
+.. autofunction:: build123d.detect_primitives
 
 3D Mesh Import
 --------------
