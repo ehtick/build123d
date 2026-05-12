@@ -105,6 +105,7 @@ from OCP.GeomProjLib import GeomProjLib
 from OCP.gp import gp_Ax1, gp_Ax3, gp_Pln, gp_Pnt, gp_Vec
 from OCP.GProp import GProp_GProps
 from OCP.Precision import Precision
+from OCP.ShapeAnalysis import ShapeAnalysis_Edge
 from OCP.ShapeFix import ShapeFix_Solid, ShapeFix_Wire
 from OCP.Standard import (
     Standard_ConstructionError,
@@ -1102,6 +1103,12 @@ class Face(Mixin2D[TopoDS_Face]):
         ):
             return self.geom_adaptor().Radius()  # type:ignore[attr-defined]
         return None
+
+    @property
+    def seams(self: Face) -> ShapeList[Edge]:
+        """Return the seams contained within this Face"""
+        sae = ShapeAnalysis_Edge()
+        return self.edges().filter_by(lambda e: sae.IsSeam(e.wrapped, self.wrapped))
 
     @property
     def semi_angle(self) -> None | float:

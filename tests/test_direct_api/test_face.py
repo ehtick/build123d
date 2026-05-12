@@ -1327,6 +1327,11 @@ class TestFace(unittest.TestCase):
         with self.assertRaises(ValueError):
             Face(Wire.make_circle(5), [perimeter])
 
+    def test_seams(self):
+        self.assertEqual(len(Face.make_rect(1, 1).seams), 0)
+        self.assertEqual(len(Sphere(1).face().seams), 1)
+        self.assertEqual(len(Torus(4, 1).face().seams), 2)
+
 
 class TestAxesOfSysmmetrySplitNone(unittest.TestCase):
     def test_split_returns_none(self):
