@@ -1846,20 +1846,66 @@ class Shape(NodeMixin, Generic[TOPODS]):
             rotated_self = self.moved(Location(TopLoc_Location(transformation)))
         return rotated_self
 
-    def scale(self, factor: float) -> Self:
-        """Scales this shape through a transformation.
+    def scale(
+        self,
+        factor: float | tuple[float, float, float],
+        about: VectorLike | None = None,
+    ) -> Self:
+        """Scale this shape about a point.
+
+        Non-uniform scaling may change the underlying geometry type to splines.
+        When ``about`` isn't provided, the shape is scaled about its location.
 
         Args:
-          factor: float:
+            factor (float | tuple[float, float, float]): uniform scale factor or
+                three scale factors for the X, Y and Z directions.
+            about (VectorLike, optional): point to scale about. Defaults to the
+                shape's location position.
 
         Returns:
-
+            Shape: a copy of the scaled shape.
         """
 
-        transformation = gp_Trsf()
-        transformation.SetScale(gp_Pnt(), factor)
+        current_location = self.location
+        assert current_location is not None
+        about_point = current_location.position if about is None else Vector(about)
 
-        return self._apply_transform(transformation)
+        if isinstance(factor, (int, float)):
+            transformation = gp_Trsf()
+            transformation.SetScale(about_point.to_pnt(), float(factor))
+            return self._apply_transform(transformation)
+        elif (
+            isinstance(factor, tuple)
+            and len(factor) == 3
+            and all(isinstance(scale, (int, float)) for scale in factor)
+        ):
+            scale_vector = Vector(factor)
+            scale_matrix = Matrix(
+                [
+                    [
+                        scale_vector.X,
+                        0.0,
+                        0.0,
+                        about_point.X * (1 - scale_vector.X),
+                    ],
+                    [
+                        0.0,
+                        scale_vector.Y,
+                        0.0,
+                        about_point.Y * (1 - scale_vector.Y),
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        scale_vector.Z,
+                        about_point.Z * (1 - scale_vector.Z),
+                    ],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            return self.transform_geometry(scale_matrix)
+        else:
+            raise ValueError("factor must be a float or a three tuple of float")
 
     def shell(self) -> Shell:
         """Return the Shell"""

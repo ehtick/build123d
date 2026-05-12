@@ -110,6 +110,18 @@ class TestShape(unittest.TestCase):
     def test_scale(self):
         self.assertAlmostEqual(Solid.make_box(1, 1, 1).scale(2).volume, 2**3, 5)
 
+        located_box = Solid.make_box(1, 1, 1).locate(Location((10, 0, 0)))
+        scaled_box = located_box.scale(2)
+        self.assertAlmostEqual(scaled_box.volume, 2**3, 5)
+        self.assertAlmostEqual(scaled_box.center().X, 11, 5)
+
+        non_uniform_box = located_box.scale((2, 3, 4))
+        self.assertAlmostEqual(non_uniform_box.volume, 2 * 3 * 4, 5)
+        self.assertAlmostEqual(non_uniform_box.center().X, 11, 5)
+
+        origin_scaled_box = located_box.scale(2, about=(0, 0, 0))
+        self.assertAlmostEqual(origin_scaled_box.center().X, 21, 5)
+
     def test_fuse(self):
         box1 = Solid.make_box(1, 1, 1)
         box2 = Solid.make_box(1, 1, 1, Plane((1, 0, 0)))

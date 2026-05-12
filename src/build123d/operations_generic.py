@@ -47,8 +47,6 @@ from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
 from build123d.geometry import (
     Axis,
-    Location,
-    Matrix,
     Plane,
     Rotation,
     RotationLike,
@@ -846,6 +844,7 @@ def project(
 def scale(
     objects: Shape | Iterable[Shape] | None = None,
     by: float | tuple[float, float, float] = 1,
+    about: VectorLike | None = None,
     mode: Mode = Mode.REPLACE,
 ) -> Curve | Sketch | Part | Compound:
     """Generic Operation: scale
@@ -859,6 +858,8 @@ def scale(
     Args:
         objects (Edge |  Face |  Compound |  Solid or Iterable of): objects to scale
         by (float | tuple[float, float, float]): scale factor
+        about (VectorLike, optional): point to scale about. Defaults to each
+            object's location position.
         mode (Mode, optional): combination mode. Defaults to Mode.REPLACE.
 
     Raises:
@@ -875,39 +876,11 @@ def scale(
 
     validate_inputs(context, "scale", object_list)
 
-    if isinstance(by, (int, float)):
-        factor = float(by)
-    elif (
-        isinstance(by, (tuple))
-        and len(by) == 3
-        and all(isinstance(s, (int, float)) for s in by)
-    ):
-        by_vector = Vector(by)
-        scale_matrix = Matrix(
-            [
-                [by_vector.X, 0.0, 0.0, 0.0],
-                [0.0, by_vector.Y, 0.0, 0.0],
-                [0.0, 0.0, by_vector.Z, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        )
-    else:
-        raise ValueError("by must be a float or a three tuple of float")
-
     new_objects = []
     for obj in object_list:
         if obj is None:
             continue
-        current_location = obj.location
-        assert current_location is not None
-        obj_at_origin = obj.located(Location(Vector()))
-        if isinstance(by, (int, float)):
-            new_object = obj_at_origin.scale(factor).locate(current_location)
-        else:
-            new_object = obj_at_origin.transform_geometry(scale_matrix).locate(
-                current_location
-            )
-        new_objects.append(new_object)
+        new_objects.append(obj.scale(by, about=about))
 
     if context is not None:
         context._add_to_context(*new_objects, mode=mode)
