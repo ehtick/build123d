@@ -83,7 +83,7 @@ from OCP.BRepGProp import BRepGProp, BRepGProp_Face
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling, BRepOffsetAPI_MakePipeShell
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeRevol
-from OCP.BRepTools import BRepTools, BRepTools_ReShape
+from OCP.BRepTools import BRepTools, BRepTools_ReShape, BRepTools_WireExplorer
 from OCP.gce import gce_MakeLin
 from OCP.Geom import (
     Geom_BezierSurface,
@@ -120,6 +120,7 @@ from OCP.TColStd import (
     TColStd_Array1OfReal,
     TColStd_HArray2OfReal,
 )
+from OCP.TopAbs import TopAbs_Orientation
 from OCP.TopExp import TopExp
 from OCP.TopoDS import TopoDS, TopoDS_Face, TopoDS_Shape, TopoDS_Shell, TopoDS_Solid
 from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape, TopTools_ListOfShape
@@ -1118,6 +1119,48 @@ class Face(Mixin2D[TopoDS_Face]):
         ):
             return degrees(self.geom_adaptor().SemiAngle())  # type:ignore[attr-defined]
         return None
+
+    @property
+    def uv_face(self) -> Face:
+        """Create a planar face from a face's parametric-space boundary.
+
+        Each boundary edge's pcurve on ``self`` is converted to a normal
+        build123d ``Edge`` on the XY plane, where X is the surface U parameter and Y
+        is the surface V parameter. The original outer/inner wire structure is kept
+        so the result can be displayed with normal build123d/ocp-vscode tooling.
+
+        Args:
+            source_face: Planar or non-planar face to inspect.
+
+        Returns:
+            A planar ``Face`` in UV parameter space.
+        """
+        xy_face = BRepBuilderAPI_MakeFace(Plane.XY.wrapped).Face()
+        xy_surface = BRep_Tool.Surface_s(xy_face)
+
+        def uv_edge(native_edge) -> Edge:
+            first, last = BRep_Tool.Range_s(native_edge, self.wrapped)
+            pcurve = BRep_Tool.CurveOnSurface_s(native_edge, self.wrapped, first, last)
+            edge_builder = BRepBuilderAPI_MakeEdge(pcurve, xy_surface, first, last)
+            if not edge_builder.IsDone():  # pragma: no cover
+                raise ValueError("Unable to convert pcurve to a planar edge")
+
+            topods_edge = edge_builder.Edge()
+            if native_edge.Orientation() == TopAbs_Orientation.TopAbs_REVERSED:
+                topods_edge = TopoDS.Edge(topods_edge.Reversed())
+            return Edge(topods_edge)
+
+        def uv_wire(source_wire: Wire) -> Wire:
+            wire_explorer = BRepTools_WireExplorer(source_wire.wrapped)
+            uv_edges = []
+            while wire_explorer.More():
+                uv_edges.append(uv_edge(TopoDS.Edge(wire_explorer.Current())))
+                wire_explorer.Next()
+            return Wire(uv_edges)
+
+        outer_wire = uv_wire(self.outer_wire())
+        inner_wires = [uv_wire(wire) for wire in self.inner_wires()]
+        return Face(outer_wire, inner_wires)
 
     @property
     def volume(self) -> float:
