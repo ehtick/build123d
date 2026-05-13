@@ -285,7 +285,11 @@ def _enclosed_circ_param_offset(
     for the enclosed case, so no offset is needed there.
     """
     adapts = [
-        BRepAdaptor_Curve(t[0].wrapped) if isinstance(t[0].wrapped, TopoDS_Edge) else None
+        (
+            BRepAdaptor_Curve(t[0].wrapped)
+            if isinstance(t[0].wrapped, TopoDS_Edge)
+            else None
+        )
         for t in tangent_tuples
     ]
     is_circ = [
@@ -312,7 +316,7 @@ def _enclosed_circ_param_offset(
 def _make_2tan_rad_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     radius: float,
-    sagitta: Sagitta = Sagitta.SHORT,
+    sagitta: Sagitta | None = None,
     edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
@@ -361,6 +365,9 @@ def _make_2tan_rad_arcs(
     # ---------------------------
     # Solutions
     # ---------------------------
+    if sagitta is None:
+        sagitta = Sagitta.SHORT
+
     solutions: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
         circ: gp_Circ2d = gcc.ThisSolution(i)
@@ -402,7 +409,7 @@ def _make_2tan_rad_arcs(
 def _make_2tan_on_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 2
     center_on: Edge,
-    sagitta: Sagitta = Sagitta.SHORT,
+    sagitta: Sagitta | None = None,
     edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
@@ -454,6 +461,9 @@ def _make_2tan_on_arcs(
     # ---------------------------
     # Solutions
     # ---------------------------
+    if sagitta is None:
+        sagitta = Sagitta.SHORT
+
     solutions: list[TopoDS_Edge] = []
     for i in range(1, gcc.NbSolutions() + 1):
         circ: gp_Circ2d = gcc.ThisSolution(i)
@@ -470,7 +480,9 @@ def _make_2tan_on_arcs(
         if not _ok(1, u_arg2):
             continue
 
-        u_circ1, u_circ2 = _enclosed_circ_param_offset(tangent_tuples, circ, [u_circ1, u_circ2])
+        u_circ1, u_circ2 = _enclosed_circ_param_offset(
+            tangent_tuples, circ, [u_circ1, u_circ2]
+        )
 
         # Build sagitta arc(s) and select by LengthConstraint
         if sagitta == Sagitta.BOTH:
@@ -487,7 +499,7 @@ def _make_2tan_on_arcs(
 
 def _make_3tan_arcs(
     *tangencies: tuple[Edge, Tangency] | Edge | Vector,  # 3
-    sagitta: Sagitta = Sagitta.SHORT,
+    sagitta: Sagitta | None = None,
     edge_factory: Callable[[TopoDS_Edge], Edge],
 ) -> ShapeList[Edge]:
     """
@@ -562,18 +574,27 @@ def _make_3tan_arcs(
         if not _ok(2, u_arg3):
             continue
 
-        u_circ1, u_circ2, _u_circ3 = _enclosed_circ_param_offset(tangent_tuples, circ, [u_circ1, u_circ2, _u_circ3])
-
-        # Build arc(s) between u_circ1 and u_circ2 per LengthConstraint
-        if sagitta == Sagitta.BOTH:
-            out_topos.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
-        else:
+        u_circ1, u_circ2, _u_circ3 = _enclosed_circ_param_offset(
+            tangent_tuples,
+            circ,
+            [u_circ1, u_circ2, _u_circ3],
+        )
+        if sagitta is None:
             arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
-            arcs = sorted(
-                arcs,
-                key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e)),
-            )
-            out_topos.append(arcs[sagitta.value])
+            for e in arcs:
+                if edge_factory(e).intersect(Vertex(p3.X(), p3.Y(), 0)):
+                    out_topos.append(e)
+        else:
+            # Build arc(s) between u_circ1 and u_circ2 per LengthConstraint
+            if sagitta == Sagitta.BOTH:
+                out_topos.extend(_two_arc_edges_from_params(circ, u_circ1, u_circ2))
+            else:
+                arcs = _two_arc_edges_from_params(circ, u_circ1, u_circ2)
+                arcs = sorted(
+                    arcs,
+                    key=lambda e: GCPnts_AbscissaPoint.Length_s(BRepAdaptor_Curve(e)),
+                )
+                out_topos.append(arcs[sagitta.value])
 
     return ShapeList([edge_factory(e) for e in out_topos])
 

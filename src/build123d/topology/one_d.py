@@ -1854,7 +1854,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
     def make_constrained_arcs(
         cls,
         *args,
-        sagitta: Sagitta = Sagitta.SHORT,
+        sagitta: Sagitta | None = None,
         **kwargs,
     ) -> ShapeList[Edge]:
 
