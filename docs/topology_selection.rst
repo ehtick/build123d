@@ -247,8 +247,8 @@ fall into the following categories, though not all operators take all criteria:
 - Topological objects: ``Edge``, ``Wire``
 - Enums: :class:`~build_enums.SortBy`, :class:`~build_enums.GeomType`
 - Properties, eg: ``Face.area``, ``Edge.length``
-- ``ShapePredicate``, eg: ``lambda e: e.is_interior == 1``, ``lambda f: lf.edges() >= 3``
-- Callable eg: ``Vertex().distance``, |topo_distance_to|
+- Callable, eg: ``lambda e: e.is_interior == 1``, ``lambda f: len(f.edges()) >= 3``,
+  ``Vertex().distance``, |topo_distance_to|
 
 Sort
 =======

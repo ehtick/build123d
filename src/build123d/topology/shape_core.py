@@ -3276,11 +3276,9 @@ class ShapeList(list[T]):
 
     def group_by(
         self,
-        group_by: (
-            Callable[[Shape], K] | Axis | Edge | Wire | SortBy | property
-        ) = Axis.Z,
-        reverse=False,
-        tol_digits=6,
+        group_by: Callable[[T], K] | Axis | Edge | Wire | SortBy | property = Axis.Z,
+        reverse: bool = False,
+        tol_digits: int = 6,
     ) -> GroupBy[T, K]:
         """group by
 
@@ -3288,13 +3286,14 @@ class ShapeList(list[T]):
         Note that not all group_by criteria apply to all objects.
 
         Args:
-            group_by (SortBy, optional): group and sort criteria. Defaults to Axis.Z.
+            group_by (Callable[[T], K] | Axis | Edge | Wire | SortBy | property,
+                optional): group and sort criteria. Defaults to Axis.Z.
             reverse (bool, optional): flip order of sort. Defaults to False.
             tol_digits (int, optional): Tolerance for building the group keys by
                 round(key, tol_digits)
 
         Returns:
-            GroupBy[K, ShapeList]: sorted list of ShapeLists
+            GroupBy[T, K]: sorted groups of ShapeLists
         """
 
         if isinstance(group_by, Axis):
@@ -3396,7 +3395,7 @@ class ShapeList(list[T]):
 
     def sort_by(
         self,
-        sort_by: Axis | Callable[[T], K] | Edge | Wire | SortBy | property = Axis.Z,
+        sort_by: Callable[[T], K] | Axis | Edge | Wire | SortBy | property = Axis.Z,
         reverse: bool = False,
     ) -> ShapeList[T]:
         """sort by
@@ -3405,8 +3404,8 @@ class ShapeList(list[T]):
         objects.
 
         Args:
-            sort_by (Axis | Callable[[T], K] | Edge | Wire | SortBy, optional): sort criteria.
-               Defaults to Axis.Z.
+            sort_by (Callable[[T], K] | Axis | Edge | Wire | SortBy | property,
+                optional): sort criteria. Defaults to Axis.Z.
             reverse (bool, optional): flip order of sort. Defaults to False.
 
         Raises:
