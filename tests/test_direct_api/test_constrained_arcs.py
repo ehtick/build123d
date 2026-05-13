@@ -34,6 +34,7 @@ from build123d.build_enums import GeomType, LengthMode, Sagitta, Tangency
 from build123d.build_line import BuildLine
 from build123d.geometry import TOLERANCE, Axis, Plane, Vector
 from build123d.objects_curve import (
+    RadiusArc,
     CenterArc,
     ConstrainedArcs,
     Line,
@@ -499,6 +500,21 @@ def test_tan3_4():
     l3 = Line((-1, 0), (-0.75, 0))
     tan3 = Edge.make_constrained_arcs(l1, l2, l3)
     assert len(tan3) == 0
+
+
+def test_tan3_5():
+    "_enclosed_circ_param_offset"
+    c1 = CenterArc((0, 20), 20, -90, 90)
+    c2 = CenterArc((0, 20), 10, -90, 90)
+    ln1 = Line(c1 @ 1, c2 @ 1)
+    c3 = RadiusArc(c1 @ 1, c2 @ 1, 10)
+    for el in [ln1, c3]:
+        tan3 = Edge.make_constrained_arcs(
+            (c1, Tangency.UNQUALIFIED),
+            (c2, Tangency.UNQUALIFIED),
+            (el, Tangency.UNQUALIFIED),
+        )
+        assert el.intersect(tan3[0]) is not None
 
 
 def test_eggplant():
