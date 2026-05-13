@@ -32,7 +32,6 @@ license:
 from .shape_core import (
     Shape,
     Comparable,
-    ShapePredicate,
     GroupBy,
     ShapeList,
     topo_distance_to,
@@ -69,7 +68,6 @@ __all__ = [
     "Shape",
     "Comparable",
     "DraftAngleError",
-    "ShapePredicate",
     "GroupBy",
     "ShapeList",
     "topo_distance_to",
