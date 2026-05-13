@@ -103,7 +103,6 @@ from .one_d import Edge, Wire, Mixin1D
 from .shape_core import (
     Shape,
     ShapeList,
-    SkipClean,
     Joint,
     downcast,
     shapetype,
@@ -491,7 +490,6 @@ class Compound(Mixin3D[TopoDS_Compound]):
             s for s in self.get_top_level_shapes() + summands if s is not None
         )
 
-        # Only fuse the parts if necessary
         if len(summands) <= 1:
             result: Shape = Compound(summands[0:1])
         else:
@@ -499,9 +497,6 @@ class Compound(Mixin3D[TopoDS_Compound]):
             fuse_op.SetFuzzyValue(TOLERANCE)
             self.copy_attributes_to(summands[0], ["wrapped", "_NodeMixin__children"])
             result = self._bool_op(summands[:1], summands[1:], fuse_op)
-
-        if SkipClean.clean:
-            result = result.clean()
 
         return result
 
