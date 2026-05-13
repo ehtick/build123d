@@ -27,16 +27,21 @@ license:
 """
 
 import math
+
 import pytest
 from OCP.BRep import BRep_Tool
-from OCP.gp import gp_Pnt2d, gp_Dir2d, gp_Lin2d
-from build123d import Edge, Axis, Vector, Tangency, Plane
+from OCP.gp import gp_Pnt2d
+
+from build123d import Axis, Edge, Plane, Tangency, Vector
+from build123d.build_enums import GeomType
+from build123d.build_line import BuildLine
+from build123d.geometry import TOLERANCE
+from build123d.objects_curve import ConstrainedLines
 from build123d.topology.constrained_lines import (
+    _edge_from_line,
     _make_2tan_lines,
     _make_tan_oriented_lines,
-    _edge_from_line,
 )
-from build123d.geometry import TOLERANCE
 
 
 @pytest.fixture
@@ -278,3 +283,25 @@ def test_make_constrained_lines_raises(unit_circle):
     with pytest.raises(TypeError) as excinfo:
         Edge.make_constrained_lines(unit_circle, ("three", 0))
     assert "Invalid tangency:" in str(excinfo.value)
+
+
+def test_higher_level_constrained_lines(unit_circle):
+    lines = ConstrainedLines(unit_circle, Axis.Y, direction=(1, 1))
+    assert len(lines.edges()) == 2
+
+    with BuildLine() as drawing:
+        ConstrainedLines(
+            unit_circle,
+            Axis.Y,
+            direction=(1, 1),
+            selector=lambda l: l.sort_by(Axis.Y)[-1],
+        )
+    assert len(drawing.edges()) == 1
+
+    with pytest.raises(ValueError) as excinfo:
+        ConstrainedLines(
+            unit_circle,
+            Axis.Y,
+            direction=(1, 1),
+            selector=lambda l: l.filter_by(GeomType.CIRCLE),
+        )

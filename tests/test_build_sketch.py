@@ -196,9 +196,20 @@ class TestBuildSketchObjects(unittest.TestCase):
         with BuildSketch() as test:
             c = Circle(20)
         self.assertEqual(c.radius, 20)
+        self.assertEqual(c.arc_size, 360)
         self.assertEqual(c.align, (Align.CENTER, Align.CENTER))
         self.assertEqual(c.mode, Mode.ADD)
         self.assertAlmostEqual(test.sketch.area, pi * 20**2, 5)
+        self.assertEqual(c.faces()[0].normal_at(), Vector(0, 0, 1))
+
+    def test_circle_sector(self):
+        with BuildSketch() as test:
+            c = Circle(20, arc_size=180)
+        self.assertEqual(c.radius, 20)
+        self.assertEqual(c.arc_size, 180)
+        self.assertEqual(c.align, (Align.CENTER, Align.CENTER))
+        self.assertEqual(c.mode, Mode.ADD)
+        self.assertAlmostEqual(test.sketch.area, (pi * 20**2) / 2, 5)
         self.assertEqual(c.faces()[0].normal_at(), Vector(0, 0, 1))
 
     def test_ellipse(self):

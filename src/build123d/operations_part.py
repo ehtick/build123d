@@ -230,16 +230,14 @@ def extrude(
                     )
                 )
 
+    if both and len(new_solids) > 1:
+        fused_solids = new_solids.pop().fuse(*new_solids)
+        new_solids = fused_solids if isinstance(fused_solids, list) else [fused_solids]
+    if clean:
+        new_solids = [solid.clean() for solid in new_solids]
+
     if context is not None:
         context._add_to_context(*new_solids, clean=clean, mode=mode)
-    else:
-        if len(new_solids) > 1:
-            fused_solids = new_solids.pop().fuse(*new_solids)
-            new_solids = (
-                fused_solids if isinstance(fused_solids, list) else [fused_solids]
-            )
-        if clean:
-            new_solids = [solid.clean() for solid in new_solids]
 
     return Part(ShapeList(new_solids).solids())
 
@@ -509,7 +507,6 @@ def project_workplane(
     # Set the workplane's x direction
     workplane_x_dir = projection[0][0] - workplane_origin
     workplane.x_dir = workplane_x_dir
-    workplane._calc_transforms()
 
     return workplane
 

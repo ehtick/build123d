@@ -58,7 +58,8 @@ import copy
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import combinations
-
+from os import PathLike, fspath
+from typing import overload
 from typing_extensions import Self
 
 import OCP.TopAbs as ta
@@ -107,12 +108,12 @@ from .shape_core import (
     downcast,
     shapetype,
     topods_dim,
+    _make_topods_compound_from_shapes,
 )
 from .three_d import Mixin3D, Solid
 from .two_d import Face, Shell
 from .utils import (
     _extrude_topods_shape,
-    _make_topods_compound_from_shapes,
     tuplify,
     unwrapped_shapetype,
 )
@@ -233,7 +234,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         txt: str,
         font_size: float,
         font: str = "Arial",
-        font_path: str | None = None,
+        font_path: PathLike[str] | str | None = None,
         font_style: FontStyle = FontStyle.REGULAR,
         text_align: tuple[TextAlign, TextAlign] = (TextAlign.CENTER, TextAlign.CENTER),
         align: Align | tuple[Align, Align] | None = None,
@@ -252,7 +253,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             txt (str): text to render
             font_size (float): size of the font in model units
             font (str, optional): font name. Defaults to "Arial"
-            font_path (str, optional): system path to font file. Defaults to None
+            font_path (PathLike | str, optional): system path to font file. Defaults to None
             font_style (Font_Style, optional): font style, REGULAR, BOLD, BOLDITALIC, or
                 ITALIC. Defaults to Font_Style.REGULAR
             text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
@@ -298,9 +299,11 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 -wire_angle,
             )
 
+        font_path_str = fspath(font_path) if font_path is not None else None
+
         manager = FontManager()
-        if font_path and manager.check_font(font_path): # pragma: no cover
-            face_names = manager.register_font(font_path, True, False)
+        if font_path_str and manager.check_font(font_path_str):  # pragma: no cover
+            face_names = manager.register_font(font_path_str, True, False)
             # Check if font (name) is in face names and not bad or default (Arial)
             font_name = font if font in face_names else face_names[0]
             system_font = manager.find_font(font_name, font_style)
@@ -394,7 +397,9 @@ class Compound(Mixin3D[TopoDS_Compound]):
             text_flat = Compound([]) + outline
             if any([not f.is_valid for f in text_flat.get_top_level_shapes()]):
                 raise ValueError(
-                    f"single_line_width ({single_line_width}) is too large for the text and produces invalid faces. Try a smaller width"
+                    "single_line_width "
+                    f"({single_line_width}) is too large for the text and "
+                    "produces invalid faces. Try a smaller width"
                 )
 
         return text_flat
@@ -460,12 +465,10 @@ class Compound(Mixin3D[TopoDS_Compound]):
         """
         if self._dim == 1:
             curve = Curve() if self._wrapped is None else Curve(self.wrapped)
-            sum1d: Edge | Wire | ShapeList[Edge] = curve + other
-            if isinstance(sum1d, ShapeList):
-                result1d: Curve | Wire = Curve(sum1d)
-            elif isinstance(sum1d, Edge):
+            sum1d = curve + other
+            if isinstance(sum1d, Edge):
                 result1d = Curve([sum1d])
-            else:  # Wire
+            else:
                 result1d = sum1d
             self.copy_attributes_to(result1d, ["wrapped", "_NodeMixin__children"])
             return result1d
@@ -495,12 +498,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
             fuse_op = BRepAlgoAPI_Fuse()
             fuse_op.SetFuzzyValue(TOLERANCE)
             self.copy_attributes_to(summands[0], ["wrapped", "_NodeMixin__children"])
-            bool_result = self._bool_op(summands[:1], summands[1:], fuse_op)
-            if isinstance(bool_result, list):
-                result = Compound(bool_result)
-                self.copy_attributes_to(result, ["wrapped", "_NodeMixin__children"])
-            else:
-                result = bool_result
+            result = self._bool_op(summands[:1], summands[1:], fuse_op)
 
         if SkipClean.clean:
             result = result.clean()
@@ -512,9 +510,10 @@ class Compound(Mixin3D[TopoDS_Compound]):
         intersection = Shape.__and__(self, other)
         if intersection is None:
             return Compound()
-        intersection = Compound(
-            intersection if isinstance(intersection, list) else [intersection]
-        )
+        if isinstance(intersection, list):
+            intersection = Compound(intersection)
+        elif not isinstance(intersection, Compound):
+            intersection = Compound([intersection])
         self.copy_attributes_to(intersection, ["wrapped", "_NodeMixin__children"])
         return intersection
 
@@ -559,9 +558,8 @@ class Compound(Mixin3D[TopoDS_Compound]):
     def __sub__(self, other: None | Shape | Iterable[Shape]) -> Compound:
         """Cut other to self `-` operator"""
         difference = Shape.__sub__(self, other)
-        difference = Compound(
-            difference if isinstance(difference, list) else [difference]
-        )
+        if not isinstance(difference, Compound):
+            difference = Compound([difference])
         self.copy_attributes_to(difference, ["wrapped", "_NodeMixin__children"])
 
         return difference
@@ -591,20 +589,17 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 middle = Vector(properties.CentreOfMass())
             else:
                 raise NotImplementedError
-        elif center_of == CenterOf.BOUNDING_BOX:
+        else:  # center_of == CenterOf.BOUNDING_BOX:
             middle = self.bounding_box().center()
         return middle
 
-    def compound(self) -> Compound | None:
+    def compound(self) -> Compound:
         """Return the Compound"""
         shape_list = self.compounds()
         entity_count = len(shape_list)
-        if entity_count > 1:
-            warnings.warn(
-                f"Found {entity_count} compounds, returning first",
-                stacklevel=2,
-            )
-        return shape_list[0] if shape_list else None
+        if entity_count != 1:
+            raise ValueError(f"Expected exactly one compound, found {entity_count}")
+        return shape_list[0]
 
     def compounds(self) -> ShapeList[Compound]:
         """compounds - all the compounds in this Shape"""
@@ -713,149 +708,88 @@ class Compound(Mixin3D[TopoDS_Compound]):
 
         return results
 
-    def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge | Face | Solid]:
-        """Intersect Compound with Shape or geometry object
+    def _intersect(
+        self,
+        other: Shape | Vector | Location | Axis | Plane,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection for Compound (OR semantics).
+
+        Distributes intersection over elements, collecting all results:
+            Compound([a, b]).intersect(s) = (a ∩ s) ∪ (b ∩ s)
+            Compound([a, b]).intersect(Compound([c, d])) = (a ∩ c) ∪ (a ∩ d) ∪ (b ∩ c) ∪ (b ∩ d)
+
+        Handles both build123d assemblies (children) and OCCT Compounds (list()).
+        Nested Compounds are handled by recursion.
 
         Args:
-            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
+            other: Shape or geometry object to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+                (only relevant when Solids are involved)
+        """
+        # Convert geometry objects
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
+        elif isinstance(other, Plane):
+            other = Face(other)
+
+        # Get self elements: assembly children or OCCT direct children
+        self_elements = self.children if self.children else list(self)
+
+        if not self_elements:
+            return None
+
+        results: ShapeList = ShapeList()
+
+        # Distribute over elements (OR semantics for Compound arguments)
+        if isinstance(other, Compound):
+            other_elements = other.children if other.children else list(other)
+        else:
+            other_elements = [other]
+
+        for self_elem in self_elements:
+            for other_elem in other_elements:
+                intersection = self_elem._intersect(
+                    other_elem, tolerance, include_touched
+                )
+                if intersection:
+                    results.extend(intersection)
+
+        # Remove duplicates using Shape's __hash__
+        unique = ShapeList(set(results))
+
+        return unique if unique else None
+
+    def touch(
+        self, other: Shape, tolerance: float = 1e-6
+    ) -> ShapeList[Vertex | Edge | Face]:
+        """Distribute touch over compound elements.
+
+        Iterates over elements and collects touch results. Only Solid and
+        Face elements produce boundary contacts; other shapes return empty.
+
+        Args:
+            other: Shape to check boundary contacts with
+            tolerance: tolerance for contact detection
 
         Returns:
-            ShapeList[Vertex | Edge | Face | Solid] | None: ShapeList of vertices, edges,
-                faces, and/or solids.
+            ShapeList of boundary contact geometry (empty if no contact)
         """
+        results: ShapeList = ShapeList()
 
-        def to_vector(objs: Iterable) -> ShapeList:
-            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+        # Get elements: assembly children or OCCT direct children
+        elements = self.children if self.children else list(self)
 
-        def to_vertex(objs: Iterable) -> ShapeList:
-            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+        for elem in elements:
+            results.extend(elem.touch(other, tolerance))
 
-        def bool_op(
-            args: Sequence,
-            tools: Sequence,
-            operation: BRepAlgoAPI_Common | BRepAlgoAPI_Section,
-        ) -> ShapeList:
-            # Wrap Shape._bool_op for corrected output
-            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
-            if isinstance(intersections, ShapeList):
-                return intersections
-            if isinstance(intersections, Shape) and not intersections.is_null:
-                return ShapeList([intersections])
-            return ShapeList()
-
-        def expand_compound(compound: Compound) -> ShapeList:
-            shapes = ShapeList(compound.children)
-            for shape_type in [Vertex, Edge, Wire, Face, Shell, Solid]:
-                shapes.extend(compound.get_type(shape_type))
-            return shapes
-
-        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
-            # Remove lower order shapes from list which *appear* to be part of
-            # a higher order shape using a lazy distance check
-            # (sufficient for vertices, may be an issue for higher orders)
-            order_groups = []
-            for order in orders:
-                order_groups.append(
-                    ShapeList([s for s in shapes if isinstance(s, order)])
-                )
-
-            filtered_shapes = order_groups[-1]
-            for i in range(len(order_groups) - 1):
-                los = order_groups[i]
-                his: list = sum(order_groups[i + 1 :], [])
-                filtered_shapes.extend(
-                    ShapeList(
-                        lo
-                        for lo in los
-                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
-                    )
-                )
-
-            return filtered_shapes
-
-        common_set: ShapeList[Shape] = expand_compound(self)
-        target: ShapeList | Shape
-        for other in to_intersect:
-            # Conform target type
-            match other:
-                case Axis():
-                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
-                    bbox = self.bounding_box()
-                    dist = self.distance_to(other.position)
-                    dist = dist if dist >= 1 else 1
-                    target = Edge.make_line(
-                        other.position - other.direction * bbox.diagonal * dist,
-                        other.position + other.direction * bbox.diagonal * dist,
-                    )
-                case Plane():
-                    target = Face(other)
-                case Vector():
-                    target = Vertex(other)
-                case Location():
-                    target = Vertex(other.position)
-                case Compound():
-                    target = expand_compound(other)
-                case _ if issubclass(type(other), Shape):
-                    target = other
-                case _:
-                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
-
-            # Find common matches
-            common: list[Vertex | Edge | Wire | Face | Shell | Solid] = []
-            result: ShapeList
-            for obj in common_set:
-                if isinstance(target, Shape):
-                    target = ShapeList([target])
-                result = ShapeList()
-                for t in target:
-                    operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common = (
-                        BRepAlgoAPI_Section()
-                    )
-                    result.extend(bool_op((obj,), (t,), operation))
-                    if (
-                        not isinstance(obj, Edge | Wire)
-                        and not isinstance(t, Edge | Wire)
-                    ) or (
-                        isinstance(obj, Solid | Compound)
-                        or isinstance(t, Solid | Compound)
-                    ):
-                        # Face + Edge combinations may produce an intersection
-                        # with Common but always with Section.
-                        # No easy way to deduplicate
-                        # Many Solid + Edge combinations need Common
-                        operation = BRepAlgoAPI_Common()
-                        result.extend(bool_op((obj,), (t,), operation))
-
-                if result:
-                    common.extend(result)
-
-            expanded: ShapeList = ShapeList()
-            if common:
-                for shape in common:
-                    if isinstance(shape, Compound):
-                        expanded.extend(expand_compound(shape))
-                    else:
-                        expanded.append(shape)
-
-            if expanded:
-                common_set = ShapeList()
-                for shape in expanded:
-                    if isinstance(shape, Wire):
-                        common_set.extend(shape.edges())
-                    elif isinstance(shape, Shell):
-                        common_set.extend(shape.faces())
-                    else:
-                        common_set.append(shape)
-                common_set = to_vertex(set(to_vector(common_set)))
-                common_set = filter_shapes_by_order(
-                    common_set, [Vertex, Edge, Face, Solid]
-                )
-            else:
-                return None
-
-        return ShapeList(common_set)
+        return ShapeList(set(results))
 
     def project_to_viewport(
         self,
@@ -1010,6 +944,9 @@ class Sketch(Compound):
     def _dim(self) -> int:
         return 2
 
+    def __iadd__(self, other: None | Shape | Iterable[Shape]) -> Sketch:
+        return self + other
+
 
 class Part(Compound):
     """A Compound containing 3D objects - aka Solids"""
@@ -1019,3 +956,12 @@ class Part(Compound):
     @property
     def _dim(self) -> int:
         return 3
+
+    def __iadd__(self, other: None | Shape | Iterable[Shape]) -> Part:
+        return self + other
+
+
+Shape.register_composite_factory(None, Compound)
+Shape.register_composite_factory(1, Curve)
+Shape.register_composite_factory(2, Sketch)
+Shape.register_composite_factory(3, Part)

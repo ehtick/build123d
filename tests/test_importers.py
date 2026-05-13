@@ -8,7 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from build123d import BuildLine, Color, Line, Bezier, RadiusArc, Solid, Compound
+from build123d import (
+    BuildLine,
+    Color,
+    Line,
+    Bezier,
+    EllipticalStartArc,
+    RadiusArc,
+    Solid,
+    Compound,
+)
 from build123d.importers import (
     import_svg_as_buildline_code,
     import_brep,
@@ -30,27 +39,27 @@ class ImportSVG(unittest.TestCase):
             l1 = Bezier((0, 0), (0.25, -0.1), (0.5, -0.15), (1, 0))
             l2 = Line(l1 @ 1, (1, 1))
             l3 = RadiusArc(l2 @ 1, (0, 1), 2)
-            l4 = Line(l3 @ 1, l1 @ 0)
+            l4 = EllipticalStartArc(l3 @ 1, (-1, 0), 0.5, 1, 180, start_angle=0)
         svg = ExportSVG()
         svg.add_shape(test_obj.wires()[0], "")
         svg.write("test.svg")
 
         # Read the svg as code
         buildline_code, builder_name = import_svg_as_buildline_code("test.svg")
-
         # Execute it and convert to Edges
         ex_locals = {}
         exec(buildline_code, None, ex_locals)
         test_obj: BuildLine = ex_locals[builder_name]
-        found = 0
-        for edge in test_obj.edges():
-            if edge.geom_type == GeomType.BEZIER:
-                found += 1
-            elif edge.geom_type == GeomType.LINE:
-                found += 1
-            elif edge.geom_type == GeomType.ELLIPSE:
-                found += 1
-        self.assertEqual(found, 4)
+        self.assertEqual(
+            sum(e.geom_type == GeomType.BEZIER for e in test_obj.edges()), 1
+        )
+        self.assertEqual(sum(e.geom_type == GeomType.LINE for e in test_obj.edges()), 1)
+        self.assertEqual(
+            sum(e.geom_type == GeomType.CIRCLE for e in test_obj.edges()), 1
+        )
+        self.assertEqual(
+            sum(e.geom_type == GeomType.ELLIPSE for e in test_obj.edges()), 1
+        )
         os.remove("test.svg")
 
     def test_import_svg_as_buildline_code_invalid_name(self):
@@ -220,6 +229,78 @@ class ImportSTEP(unittest.TestCase):
         fused = Solid.fuse(*assembly.solids())
         # If the parts where placed correctly they all touch and can be fused
         self.assertEqual(len(fused.solids()), 1)
+
+    def test_roundtrip_nested_labels_colors(self):
+        a = Solid.make_sphere(1)
+        a.label = "sphere"
+        a.color = Color(1, 0, 0)
+
+        b = Solid.make_box(1, 1, 1).locate(Pos(-1, -2, -3))
+        b.label = "box"
+        b.color = Color(0, 0, 1)
+
+        sub = Compound(children=[a, b])
+        sub.label = "subasm"
+
+        root = Compound(children=[sub])
+        root.label = "assembly"
+        root.color = Color(0, 1, 0)
+        export_step(root, "test.step")
+        imported = import_step("test.step")
+        os.remove("test.step")
+
+        self.assertTrue(isinstance(imported, Compound))
+        self.assertEqual(imported.label, "assembly")
+        self.assertEqual(len(imported.children), 1)
+        self.assertEqual(imported.children[0].label, "subasm")
+        self.assertEqual(len(imported.children[0].children), 2)
+
+        by_label = {c.label: c for c in imported.children[0].children}
+        self.assertEqual(tuple(by_label["sphere"].color), (1, 0, 0, 1))
+        self.assertEqual(tuple(by_label["box"].color), (0, 0, 1, 1))
+
+    def test_roundtrip_component_color_overrides_parent(self):
+        c1 = Solid.make_sphere(1)
+        c1.label = "c1"
+        c1.color = Color(1, 0, 0)
+
+        c2 = Solid.make_box(1, 1, 1).locate(Pos(4, 5, 6))
+        c2.label = "c2"
+        c2.color = Color(0, 0, 1)
+
+        assy = Compound(children=[c1, c2])
+        assy.label = "assy"
+        assy.color = Color(0, 1, 0)
+        export_step(assy, "test.step")
+        imported = import_step("test.step")
+        os.remove("test.step")
+
+        by_label = {c.label: c for c in imported.children}
+        self.assertEqual(tuple(by_label["c1"].color), (1, 0, 0, 1))
+        self.assertEqual(tuple(by_label["c2"].color), (0, 0, 1, 1))
+        self.assertEqual(len(assy.children), len(imported.children))
+
+    def test_roundtrip_preserves_component_location(self):
+        moved = Solid.make_box(1, 1, 1).locate(Pos(-1, -2, -3))
+        moved.label = "moved"
+        moved.color = Color("blue")
+
+        fixed = Solid.make_sphere(1)
+        fixed.label = "fixed"
+        fixed.color = Color("red")
+
+        assy = Compound(children=[fixed, moved])
+        assy.label = "assy"
+
+        export_step(assy, "test.step")
+        imported = import_step("test.step")
+        os.remove("test.step")
+
+        by_label = {c.label: c for c in imported.children}
+        p = by_label["moved"].location.position
+        self.assertAlmostEqual(p.X, -1.0, 6)
+        self.assertAlmostEqual(p.Y, -2.0, 6)
+        self.assertAlmostEqual(p.Z, -3.0, 6)
 
 
 @pytest.mark.parametrize(

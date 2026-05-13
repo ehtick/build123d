@@ -32,6 +32,7 @@ import trianglesolver
 
 from math import cos, degrees, pi, radians, sin, tan
 from typing import cast
+from os import PathLike
 
 from collections.abc import Iterable
 
@@ -118,6 +119,7 @@ class Circle(BaseSketchObject):
 
     Args:
         radius (float): circle radius
+        arc_size (float, optional): angular size of sector. Defaults to 360.
         align (Align | tuple[Align, Align], optional): align MIN, CENTER, or MAX of object.
             Defaults to (Align.CENTER, Align.CENTER)
         mode (Mode, optional): combination mode. Defaults to Mode.ADD
@@ -128,6 +130,7 @@ class Circle(BaseSketchObject):
     def __init__(
         self,
         radius: float,
+        arc_size: float = 360.0,
         align: Align | tuple[Align, Align] | None = (Align.CENTER, Align.CENTER),
         mode: Mode = Mode.ADD,
     ):
@@ -135,9 +138,14 @@ class Circle(BaseSketchObject):
         validate_inputs(context, self)
 
         self.radius = radius
+        self.arc_size = arc_size
         self.align = tuplify(align, 2)
 
-        face = Face(Wire.make_circle(radius))
+        face = (
+            Face(Wire.make_circle(radius))
+            if arc_size == 360.0
+            else Face.revolve(Edge.make_line((radius, 0), (0, 0)), arc_size, Axis.Z)
+        )
         super().__init__(face, 0, self.align, mode)
 
 
@@ -436,14 +444,13 @@ class SlotCenterPoint(BaseSketchObject):
                 f"Got: distance = {half_line.length} (computed)"
             )
 
-        face = Face(
-            Wire.combine(
-                [
-                    Edge.make_line(point_v, center_v),
-                    Edge.make_line(center_v, center_v - half_line),
-                ]
-            )[0].offset_2d(height / 2)
+        slot_wires = Wire.combine(
+            [
+                Edge.make_line(point_v, center_v),
+                Edge.make_line(center_v, center_v - half_line),
+            ]
         )
+        face = Face(slot_wires[0].offset_2d(height / 2))  # pylint: disable=no-member
         super().__init__(face, rotation, None, mode)
 
 
@@ -570,7 +577,7 @@ class Text(BaseSketchObject):
         txt (str): text to render
         font_size (float): size of the font in model units
         font (str, optional): font name. Defaults to "Arial"
-        font_path (str, optional): system path to font file. Defaults to None
+        font_path (PathLike | str, optional): system path to font file. Defaults to None
         font_style (Font_Style, optional): font style, REGULAR, BOLD, BOLDITALIC, or
             ITALIC. Defaults to Font_Style.REGULAR
         text_align (tuple[TextAlign, TextAlign], optional): horizontal text align
@@ -595,7 +602,7 @@ class Text(BaseSketchObject):
         txt: str,
         font_size: float,
         font: str = "Arial",
-        font_path: str | None = None,
+        font_path: PathLike[str] | str | None = None,
         font_style: FontStyle = FontStyle.REGULAR,
         text_align: tuple[TextAlign, TextAlign] = (TextAlign.CENTER, TextAlign.CENTER),
         align: Align | tuple[Align, Align] | None = None,

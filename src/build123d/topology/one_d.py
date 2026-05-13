@@ -53,53 +53,57 @@ from __future__ import annotations
 
 import copy
 import warnings
+from bisect import bisect_right
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from itertools import combinations
 from math import atan2, ceil, copysign, cos, floor, inf, isclose, pi, radians
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING
 from typing import cast as tcast
+from typing import overload
 
 import numpy as np
 import OCP.TopAbs as ta
+from OCP.BOPAlgo import BOPAlgo_Splitter
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_CompCurve, BRepAdaptor_Curve
 from OCP.BRepAlgoAPI import (
     BRepAlgoAPI_Common,
     BRepAlgoAPI_Section,
-    BRepAlgoAPI_Splitter,
 )
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_DisconnectedWire,
     BRepBuilderAPI_EmptyWire,
     BRepBuilderAPI_MakeEdge,
-    BRepBuilderAPI_MakeEdge2d,
     BRepBuilderAPI_MakeFace,
     BRepBuilderAPI_MakePolygon,
+    BRepBuilderAPI_MakeVertex,
     BRepBuilderAPI_MakeWire,
     BRepBuilderAPI_NonManifoldWire,
+    BRepBuilderAPI_Transform,
 )
 from OCP.BRepExtrema import BRepExtrema_DistShapeShape, BRepExtrema_SupportType
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet2d
-from OCP.BRepGProp import BRepGProp, BRepGProp_Face
+from OCP.BRepGProp import BRepGProp
 from OCP.BRepLib import BRepLib, BRepLib_FindSurface
 from OCP.BRepLProp import BRepLProp
 from OCP.BRepOffset import BRepOffset_MakeOffset
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffset
-from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
 from OCP.BRepProj import BRepProj_Projection
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
+from OCP.ChFi2d import ChFi2d_FilletAlgo
+from OCP.Extrema import Extrema_ExtPC
 from OCP.GC import (
     GC_MakeArcOfCircle,
     GC_MakeArcOfEllipse,
-    GC_MakeArcOfParabola,
     GC_MakeArcOfHyperbola,
+    GC_MakeArcOfParabola,
 )
 from OCP.GCPnts import (
     GCPnts_AbscissaPoint,
     GCPnts_QuasiUniformDeflection,
     GCPnts_UniformDeflection,
 )
-from OCP.GProp import GProp_GProps
 from OCP.Geom import (
     Geom_BezierCurve,
     Geom_BSplineCurve,
@@ -111,31 +115,23 @@ from OCP.Geom import (
     Geom_TrimmedCurve,
 )
 from OCP.Geom2d import (
-    Geom2d_CartesianPoint,
-    Geom2d_Circle,
     Geom2d_Curve,
     Geom2d_Line,
-    Geom2d_Point,
     Geom2d_TrimmedCurve,
 )
-from OCP.Geom2dAdaptor import Geom2dAdaptor_Curve
 from OCP.Geom2dAPI import Geom2dAPI_InterCurveCurve
-from OCP.Geom2dGcc import Geom2dGcc_Circ2d2TanRad, Geom2dGcc_QualifiedCurve
 from OCP.GeomAbs import (
     GeomAbs_C0,
     GeomAbs_C1,
     GeomAbs_C2,
     GeomAbs_C3,
     GeomAbs_CN,
-    GeomAbs_C1,
     GeomAbs_G1,
     GeomAbs_G2,
     GeomAbs_JoinType,
 )
 from OCP.GeomAdaptor import GeomAdaptor_Curve
 from OCP.GeomAPI import (
-    GeomAPI,
-    GeomAPI_IntCS,
     GeomAPI_Interpolate,
     GeomAPI_PointsToBSpline,
     GeomAPI_ProjectPointOnCurve,
@@ -152,13 +148,11 @@ from OCP.gp import (
     gp_Ax2,
     gp_Ax3,
     gp_Circ,
-    gp_Circ2d,
     gp_Dir,
     gp_Dir2d,
     gp_Elips,
-    gp_Parab,
     gp_Hypr,
-    gp_Pln,
+    gp_Parab,
     gp_Pnt,
     gp_Pnt2d,
     gp_Trsf,
@@ -176,6 +170,7 @@ from OCP.Standard import (
 )
 from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TColStd import (
+    TColStd_Array1OfInteger,
     TColStd_Array1OfReal,
     TColStd_HArray1OfBoolean,
     TColStd_HArray1OfReal,
@@ -189,7 +184,6 @@ from OCP.TopoDS import (
     TopoDS_Edge,
     TopoDS_Face,
     TopoDS_Shape,
-    TopoDS_Shell,
     TopoDS_Vertex,
     TopoDS_Wire,
 )
@@ -201,7 +195,7 @@ from OCP.TopTools import (
 )
 from scipy.optimize import minimize_scalar
 from scipy.spatial import ConvexHull
-from typing_extensions import Self
+from typing_extensions import deprecated
 
 from build123d.build_enums import (
     AngularDirection,
@@ -209,12 +203,11 @@ from build123d.build_enums import (
     ContinuityLevel,
     FrameMethod,
     GeomType,
-    Keep,
     Kind,
-    Sagitta,
-    Tangency,
     PositionMode,
+    Sagitta,
     Side,
+    Tangency,
 )
 from build123d.geometry import (
     DEG2RAD,
@@ -229,39 +222,264 @@ from build123d.geometry import (
     logger,
 )
 
+from .constrained_lines import (
+    _make_2tan_lines,
+    _make_2tan_on_arcs,
+    _make_2tan_rad_arcs,
+    _make_3tan_arcs,
+    _make_tan_cen_arcs,
+    _make_tan_on_rad_arcs,
+    _make_tan_oriented_lines,
+)
 from .shape_core import (
     TOPODS,
     Shape,
     ShapeList,
     SkipClean,
-    TrimmingTool,
     downcast,
     get_top_level_topods_shapes,
     shapetype,
     topods_dim,
     unwrap_topods_compound,
-    _topods_bool_op,
 )
-from .utils import (
-    _extrude_topods_shape,
-    _make_topods_face_from_wires,
-    isclose_b,
-)
+from .utils import _extrude_topods_shape, _make_topods_face_from_wires, isclose_b
 from .zero_d import Vertex, topo_explore_common_vertex
-from .constrained_lines import (
-    _make_2tan_rad_arcs,
-    _make_2tan_on_arcs,
-    _make_3tan_arcs,
-    _make_tan_cen_arcs,
-    _make_tan_on_rad_arcs,
-    _make_tan_oriented_lines,
-    _make_2tan_lines,
-)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .composite import Compound, Curve, Part, Sketch  # pylint: disable=R0801
     from .three_d import Solid  # pylint: disable=R0801
     from .two_d import Face, Shell  # pylint: disable=R0801
+
+
+@dataclass(frozen=True)
+class _WireFilletCorner:
+    """Context needed to fillet a single planar wire corner."""
+
+    wire: Wire
+    vertex: Vertex
+    all_edges: ShapeList[Edge]
+    connected_edges: ShapeList[Edge]
+    connected_edge_indices: list[int]
+
+
+@dataclass(frozen=True)
+class _WireFilletSolution:
+    """Replacement edges for a filleted wire corner."""
+
+    trimmed_topods_edges: list[TopoDS_Edge]
+    fillet_topods_edge: TopoDS_Edge
+
+
+def _analyze_wire_fillet_corner(wire: Wire, vertex: Vertex) -> _WireFilletCorner:
+    """Collect the topology needed to fillet a single wire corner."""
+
+    all_edges = wire.edges()
+    connected_edges = all_edges.filter_by(
+        lambda edge: any(
+            edge_vertex.wrapped.IsSame(vertex.wrapped)
+            for edge_vertex in edge.vertices()
+        )
+    )
+    vertex_label = str(vertex)
+    if not connected_edges:
+        raise ValueError(f"Could not find shared vertex on wire: {vertex_label}")
+    if len(connected_edges) != 2:
+        raise ValueError(f"Vertex must connect exactly two edges: {vertex_label}")
+
+    connected_edge_indices = [all_edges.index(e) for e in connected_edges]
+
+    return _WireFilletCorner(
+        wire=wire,
+        vertex=vertex,
+        all_edges=all_edges,
+        connected_edges=connected_edges,
+        connected_edge_indices=connected_edge_indices,
+    )
+
+
+def _solve_wire_fillet_corner_chfi2d(
+    corner: _WireFilletCorner, radius: float
+) -> _WireFilletSolution | None:
+    """Try to fillet a planar wire corner with ``ChFi2d_FilletAlgo``."""
+
+    fillet_builder = ChFi2d_FilletAlgo()
+    fillet_builder.Init(
+        corner.connected_edges[0].wrapped,
+        corner.connected_edges[1].wrapped,
+        Plane.XY.wrapped,
+    )
+
+    vertex_point = BRep_Tool.Pnt_s(corner.vertex.wrapped)
+    if (
+        not fillet_builder.Perform(radius)
+        or fillet_builder.NbResults(vertex_point) == 0
+    ):
+        return None
+
+    trimmed_topods_edge0, trimmed_topods_edge1 = TopoDS_Edge(), TopoDS_Edge()
+    fillet_topods_edge = fillet_builder.Result(
+        vertex_point, trimmed_topods_edge0, trimmed_topods_edge1
+    )
+
+    return _WireFilletSolution(
+        trimmed_topods_edges=[trimmed_topods_edge0, trimmed_topods_edge1],
+        fillet_topods_edge=fillet_topods_edge,
+    )
+
+
+def _topods_edge_contains_vertex(
+    topods_edge: TopoDS_Edge, topods_vertex: TopoDS_Vertex
+) -> bool:
+    """Check whether an edge has the given vertex as one of its endpoints."""
+
+    edge_vertex0 = TopExp.FirstVertex_s(topods_edge)
+    edge_vertex1 = TopExp.LastVertex_s(topods_edge)
+    vertex_point = BRep_Tool.Pnt_s(topods_vertex)
+    return (
+        BRep_Tool.Pnt_s(edge_vertex0).Distance(vertex_point) < TOLERANCE
+        or BRep_Tool.Pnt_s(edge_vertex1).Distance(vertex_point) < TOLERANCE
+    )
+
+
+def _split_edge_at_vertex(edge: Edge, split_vertex: Vertex) -> list[TopoDS_Edge]:
+    """Split an edge at a vertex and return the resulting edge segments."""
+
+    splitter = BOPAlgo_Splitter()
+    splitter.AddArgument(edge.wrapped)
+    splitter.AddTool(split_vertex.wrapped)
+    splitter.Perform()
+
+    split_shape = splitter.Shape()
+    split_edges = []
+    explorer = TopExp_Explorer(split_shape, ta.TopAbs_EDGE)
+    while explorer.More():
+        split_edges.append(TopoDS.Edge(explorer.Current()))
+        explorer.Next()
+
+    return split_edges
+
+
+def _wire_fillet_corner_is_tangent_continuous(corner: _WireFilletCorner) -> bool:
+    """Determine if two incident edges are tangent-continuous at a corner."""
+
+    tangent0 = corner.connected_edges[0].tangent_at(corner.vertex)
+    tangent1 = corner.connected_edges[1].tangent_at(corner.vertex)
+    if tangent0.cross(tangent1).length > TOLERANCE:
+        return False
+
+    sample_length = min(edge.length for edge in corner.connected_edges) * 1e-3
+    sample_length = min(
+        sample_length, *(edge.length * 0.25 for edge in corner.connected_edges)
+    )
+    sample_length = max(sample_length, TOLERANCE * 100)
+
+    reflected_points = []
+    for edge in corner.connected_edges:
+        if TopExp.FirstVertex_s(edge.wrapped).IsSame(corner.vertex.wrapped):
+            sample_point = edge.position_at(sample_length, PositionMode.LENGTH)
+        else:
+            sample_point = edge.position_at(
+                edge.length - sample_length, PositionMode.LENGTH
+            )
+        reflected_points.append(Vector(corner.vertex) * 2 - Vector(sample_point))
+
+    return min(
+        corner.connected_edges[1].distance_to(reflected_points[0]),
+        corner.connected_edges[0].distance_to(reflected_points[1]),
+    ) <= max(TOLERANCE * 10, sample_length * 0.25)
+
+
+def _solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(
+    corner: _WireFilletCorner, radius: float
+) -> _WireFilletSolution | None:
+    """Fallback fillet using the ``Geom2dGcc_Circ2d2TanRad`` tangent-arc solver."""
+
+    fillet_arcs = _make_2tan_rad_arcs(
+        *corner.connected_edges,
+        radius=radius,
+        sagitta=Sagitta.BOTH,
+        edge_factory=Edge,
+    )
+    if not fillet_arcs:
+        return None
+
+    fillet_arc = fillet_arcs.sort_by_distance(corner.vertex)[0]
+
+    trimmed_topods_edges = []
+    for connected_edge in corner.connected_edges:
+        other_vertex = [v for v in connected_edge.vertices() if v != corner.vertex][0]
+        fillet_vertex = fillet_arc.vertices().sort_by_distance(connected_edge)[0]
+        split_vertex = Vertex(
+            BRepBuilderAPI_MakeVertex(Vector(fillet_vertex).to_pnt()).Vertex()
+        )
+        split_edges = _split_edge_at_vertex(copy.deepcopy(connected_edge), split_vertex)
+        trimmed_topods_edges.append(
+            next(
+                edge
+                for edge in split_edges
+                if _topods_edge_contains_vertex(edge, other_vertex.wrapped)
+            )
+        )
+
+    return _WireFilletSolution(
+        trimmed_topods_edges=trimmed_topods_edges,
+        fillet_topods_edge=fillet_arc.wrapped,  # pylint: disable=no-member
+    )
+
+
+def _splice_wire_fillet_corner(
+    corner: _WireFilletCorner, solution: _WireFilletSolution
+) -> Wire:
+    """Replace two connected edges with a fillet and rebuild the wire."""
+
+    all_topods_edges = [edge.wrapped for edge in corner.all_edges]
+
+    # Flip any edges that were reversed during trimming
+    for i in range(2):
+        if (
+            solution.trimmed_topods_edges[i].Orientation()
+            != corner.connected_edges[i].wrapped.Orientation()
+        ):
+            solution.trimmed_topods_edges[i].Reverse()
+
+    for i in range(2):
+        all_topods_edges[corner.connected_edge_indices[i]] = (
+            solution.trimmed_topods_edges[i]
+        )
+
+    n = len(all_topods_edges)
+    if corner.connected_edge_indices[1] == (corner.connected_edge_indices[0] + 1) % n:
+        insert_index = corner.connected_edge_indices[0] + 1
+    else:
+        insert_index = corner.connected_edge_indices[1] + 1
+
+    all_topods_edges.insert(insert_index, solution.fillet_topods_edge)
+
+    combined_edges = TopTools_ListOfShape()
+    for topods_edge in all_topods_edges:
+        combined_edges.Append(topods_edge)
+    wire_builder = BRepBuilderAPI_MakeWire()
+    wire_builder.Add(combined_edges)
+    wire_builder.Build()
+
+    return Wire(wire_builder.Wire())
+
+
+def _fillet_wire_corner(wire: Wire, vertex: Vertex, radius: float) -> Wire:
+    """Fillet a single planar wire corner with the available 2D fillet solvers."""
+
+    corner = _analyze_wire_fillet_corner(wire, vertex)
+    if _wire_fillet_corner_is_tangent_continuous(corner):
+        return wire
+    vertex_label = str(vertex)
+    solution = _solve_wire_fillet_corner_chfi2d(corner, radius)
+    if solution is None:
+        solution = _solve_wire_fillet_corner_geom2dgcc_circ2d2tanrad(corner, radius)
+    if solution is None:
+        raise ValueError(
+            f"Fillet algorithm failed for {vertex_label} with radius {radius}"
+        )
+    return _splice_wire_fillet_corner(corner, solution)
 
 
 class Mixin1D(Shape[TOPODS]):
@@ -391,9 +609,7 @@ class Mixin1D(Shape[TOPODS]):
 
     # ---- Instance Methods ----
 
-    def __add__(
-        self, other: None | Shape | Iterable[Shape]
-    ) -> Edge | Wire | ShapeList[Edge]:
+    def __add__(self, other: None | Shape | Iterable[Shape]) -> Edge | Wire | Shape:
         """fuse shape to wire/edge operator +"""
 
         # Convert `other` to list of base topods objects and filter out None values
@@ -421,22 +637,20 @@ class Mixin1D(Shape[TOPODS]):
 
         if self._wrapped is None:  # an empty object
             if len(summands) == 1:
-                sum_shape: Edge | Wire | ShapeList[Edge] = summands[0]
+                sum_shape: Edge | Wire | Shape = summands[0]
             else:
                 try:
                     sum_shape = Wire(summand_edges)
                 except Exception:
                     # pylint: disable=[no-member]
                     sum_shape = summands[0].fuse(*summands[1:])
-                    if type(self).order == 4:
-                        sum_shape = type(self)(sum_shape)  # type: ignore
         else:
             try:
                 sum_shape = Wire(self.edges() + ShapeList(summand_edges))
             except Exception:
                 sum_shape = self.fuse(*summands)
 
-        if SkipClean.clean and not isinstance(sum_shape, list):
+        if SkipClean.clean:
             sum_shape = sum_shape.clean()
 
         # If there is only one Edge, return that
@@ -558,6 +772,7 @@ class Mixin1D(Shape[TOPODS]):
             return result
 
         # Center the plane on the lines
+        # pylint: disable=consider-using-generator
         global_center = sum(
             [e.position_at(0.5) for e in all_lines], start=Vector(0, 0, 0)
         ) / len(all_lines)
@@ -713,133 +928,75 @@ class Mixin1D(Shape[TOPODS]):
 
         return Vector(curve.Value(umax))
 
-    def intersect(
-        self, *to_intersect: Shape | Vector | Location | Axis | Plane
-    ) -> None | ShapeList[Vertex | Edge]:
-        """Intersect Edge with Shape or geometry object
+    def _intersect(
+        self,
+        other: Shape | Vector | Location | Axis | Plane,
+        tolerance: float = 1e-6,
+        include_touched: bool = False,
+    ) -> ShapeList | None:
+        """Single-object intersection for Edge/Wire.
+
+        Returns same-dimension overlap or crossing geometry:
+        - 1D + 1D → Edge (collinear overlap) + Vertex (crossing)
+        - 1D + Face/Solid/Compound → delegates to other._intersect(self)
 
         Args:
-            to_intersect (Shape | Vector | Location | Axis | Plane): objects to intersect
-
-        Returns:
-            ShapeList[Vertex | Edge] | None: ShapeList of vertices and/or edges
+            other: Shape or geometry object to intersect with
+            tolerance: tolerance for intersection detection
+            include_touched: if True, include boundary contacts
+                (only relevant when Solids are involved)
         """
+        # Convert geometry objects to shapes
+        if isinstance(other, Vector):
+            other = Vertex(other)
+        elif isinstance(other, Location):
+            other = Vertex(other.position)
+        elif isinstance(other, Axis):
+            other = Edge(other)
 
-        def to_vector(objs: Iterable) -> ShapeList:
-            return ShapeList([Vector(v) if isinstance(v, Vertex) else v for v in objs])
+        results: ShapeList = ShapeList()
 
-        def to_vertex(objs: Iterable) -> ShapeList:
-            return ShapeList([Vertex(v) if isinstance(v, Vector) else v for v in objs])
+        # Trim infinite edges before OCCT operations
+        if isinstance(other, Edge) and other.is_infinite:
+            bbox = self.bounding_box(optimal=False)
+            other = other.trim_infinite(
+                bbox.diagonal + (other.center() - bbox.center()).length
+            )
 
-        def bool_op(
-            args: Sequence,
-            tools: Sequence,
-            operation: BRepAlgoAPI_Section | BRepAlgoAPI_Common,
-        ) -> ShapeList:
-            # Wrap Shape._bool_op for corrected output
-            intersections: Shape | ShapeList = Shape()._bool_op(args, tools, operation)
-            if isinstance(intersections, ShapeList):
-                return intersections or ShapeList()
-            if isinstance(intersections, Shape) and not intersections.is_null:
-                return ShapeList([intersections])
-            return ShapeList()
+        # 1D + Plane: run Section directly with OCP Face
+        if isinstance(other, Plane):
+            face: Shape = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
+            section = self._bool_op_list((self,), (face,), BRepAlgoAPI_Section())
+            results.extend(section.expand())
 
-        def filter_shapes_by_order(shapes: ShapeList, orders: list) -> ShapeList:
-            # Remove lower order shapes from list which *appear* to be part of
-            # a higher order shape using a lazy distance check
-            # (sufficient for vertices, may be an issue for higher orders)
-            order_groups = []
-            for order in orders:
-                order_groups.append(
-                    ShapeList([s for s in shapes if isinstance(s, order)])
-                )
+        # 1D + 1D: Common (collinear overlap) + Section (crossing vertices)
+        elif isinstance(other, (Edge, Wire)):
+            common = self._bool_op_list((self,), (other,), BRepAlgoAPI_Common())
+            results.extend(common.expand())
+            section = self._bool_op_list((self,), (other,), BRepAlgoAPI_Section())
+            # Extract vertices from section (edges already in Common for wires)
+            for shape in section:
+                if isinstance(shape, Vertex) and not shape.is_null:
+                    results.append(shape)
 
-            filtered_shapes = order_groups[-1]
-            for i in range(len(order_groups) - 1):
-                los = order_groups[i]
-                his: list = sum(order_groups[i + 1 :], [])
-                filtered_shapes.extend(
-                    ShapeList(
-                        lo
-                        for lo in los
-                        if all(lo.distance_to(hi) > TOLERANCE for hi in his)
-                    )
-                )
+        # 1D + Vertex: point containment on edge
+        elif isinstance(other, Vertex):
+            if other.distance_to(self) <= tolerance:
+                results.append(other)
 
-            return filtered_shapes
+        # Delegate to higher-order shapes (Face, Solid, etc.)
+        else:
+            result = other._intersect(self, tolerance, include_touched)
+            if result:
+                results.extend(result)
 
-        common_set: ShapeList[Vertex | Edge | Wire] = ShapeList([self])
-        target: Shape | Plane
-        for other in to_intersect:
-            # Conform target type
-            match other:
-                case Axis():
-                    # BRepAlgoAPI_Section seems happier if Edge isnt infinite
-                    bbox = self.bounding_box()
-                    dist = self.distance_to(other.position)
-                    dist = dist if dist >= 1 else 1
-                    target = Edge.make_line(
-                        other.position - other.direction * bbox.diagonal * dist,
-                        other.position + other.direction * bbox.diagonal * dist,
-                    )
-                case Plane():
-                    target = other
-                case Vector():
-                    target = Vertex(other)
-                case Location():
-                    target = Vertex(other.position)
-                case _ if issubclass(type(other), Shape):
-                    target = other
-                case _:
-                    raise ValueError(f"Unsupported type to_intersect: {type(other)}")
-
-            # Find common matches
-            common: list[Vertex | Edge | Wire] = []
-            result: ShapeList | None
-            for obj in common_set:
-                match (obj, target):
-                    case (_, Plane()):
-                        assert isinstance(other.wrapped, gp_Pln)
-                        target = Shape(BRepBuilderAPI_MakeFace(other.wrapped).Face())
-                        operation1 = BRepAlgoAPI_Section()
-                        result = bool_op((obj,), (target,), operation1)
-                        operation2 = BRepAlgoAPI_Common()
-                        result.extend(bool_op((obj,), (target,), operation2))
-
-                    case (_, Vertex() | Edge() | Wire()):
-                        operation1 = BRepAlgoAPI_Section()
-                        section = bool_op((obj,), (target,), operation1)
-                        result = section
-                        if not section:
-                            operation2 = BRepAlgoAPI_Common()
-                            result.extend(bool_op((obj,), (target,), operation2))
-
-                    case _ if issubclass(type(target), Shape):
-                        result = target.intersect(obj)
-
-                if result:
-                    common.extend(result)
-
-            if common:
-                common_set = ShapeList()
-                for shape in common:
-                    if isinstance(shape, Wire):
-                        common_set.extend(shape.edges())
-                    else:
-                        common_set.append(shape)
-                common_set = to_vertex(set(to_vector(common_set)))
-                common_set = filter_shapes_by_order(common_set, [Vertex, Edge])
-            else:
-                return None
-
-        return ShapeList(common_set)
+        return results if results else None
 
     def location_at(
         self,
         distance: float,
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool | None = None,
         x_dir: VectorLike | None = None,
     ) -> Location:
         """Locations along curve
@@ -855,14 +1012,9 @@ class Mixin1D(Shape[TOPODS]):
                 spots. The CORRECTED frame behaves more like a “camera dolly” or
                 sweep profile would — it's smoother and more stable.
                 Defaults to FrameMethod.FRENET.
-            planar (bool, optional): planar mode. Defaults to None.
             x_dir (VectorLike, optional): override the x_dir to help with plane
-                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                creation along a 1D shape. Must be perpendicular to shapes tangent.
                 Defaults to None.
-
-        .. deprecated::
-            The `planar` parameter is deprecated and will be removed in a future release.
-            Use `x_dir` to specify orientation instead.
 
         Returns:
             Location: A Location object representing local coordinate system
@@ -876,10 +1028,25 @@ class Mixin1D(Shape[TOPODS]):
             else:
                 distance = self.length - distance
 
-        if position_mode == PositionMode.PARAMETER:
-            param = self.param_at(distance)
-        else:
-            param = self.param_at(distance / self.length)
+        if isinstance(self, Wire):
+            if frame_method == FrameMethod.CORRECTED:
+                # BRep_CompCurve parameter
+                param = self.param_at(distance / self.length)
+            else:
+                # A BRep_Curve parameter taken from a Edge based curve
+                if position_mode == PositionMode.PARAMETER:
+                    curve, param, _ = self._occt_param_at(
+                        distance * self.length, PositionMode.LENGTH
+                    )
+                else:
+                    curve, param, _ = self._occt_param_at(distance, PositionMode.LENGTH)
+
+        else:  # Edge
+            if position_mode == PositionMode.PARAMETER:
+                param = self.param_at(distance)
+            else:
+                param = self.param_at(distance / self.length)
+            curve = self.geom_adaptor()
 
         law: GeomFill_TrihedronLaw
         if frame_method == FrameMethod.FRENET:
@@ -895,18 +1062,7 @@ class Mixin1D(Shape[TOPODS]):
         pnt = curve.Value(param)
 
         transformation = gp_Trsf()
-        if planar is not None:
-            warnings.warn(
-                "The 'planar' parameter is deprecated and will be removed in a future version. "
-                "Use 'x_dir' to control orientation instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if planar is not None and planar:
-            transformation.SetTransformation(
-                gp_Ax3(pnt, gp_Dir(0, 0, 1), gp_Dir(normal.XYZ())), gp_Ax3()
-            )
-        elif x_dir is not None:
+        if x_dir is not None:
             try:
 
                 transformation.SetTransformation(
@@ -934,7 +1090,6 @@ class Mixin1D(Shape[TOPODS]):
         distances: Iterable[float],
         position_mode: PositionMode = PositionMode.PARAMETER,
         frame_method: FrameMethod = FrameMethod.FRENET,
-        planar: bool | None = None,
         x_dir: VectorLike | None = None,
     ) -> list[Location]:
         """Locations along curve
@@ -947,22 +1102,16 @@ class Mixin1D(Shape[TOPODS]):
                 Defaults to PositionMode.PARAMETER.
             frame_method (FrameMethod, optional): moving frame calculation method.
                 Defaults to FrameMethod.FRENET.
-            planar (bool, optional): planar mode. Defaults to False.
             x_dir (VectorLike, optional): override the x_dir to help with plane
-                creation along a 1D shape. Must be perpendicalar to shapes tangent.
+                creation along a 1D shape. Must be perpendicular to shapes tangent.
                 Defaults to None.
-
-        .. deprecated::
-            The `planar` parameter is deprecated and will be removed in a future release.
-            Use `x_dir` to specify orientation instead.
 
         Returns:
             list[Location]: A list of Location objects representing local coordinate
                 systems at the specified distances.
         """
         return [
-            self.location_at(d, position_mode, frame_method, planar, x_dir)
-            for d in distances
+            self.location_at(d, position_mode, frame_method, x_dir) for d in distances
         ]
 
     def normal(self) -> Vector:
@@ -1079,8 +1228,8 @@ class Mixin1D(Shape[TOPODS]):
             if closed:
                 self0 = line.position_at(0)
                 self1 = line.position_at(1)
-                end0 = offset_wire.position_at(0)
-                end1 = offset_wire.position_at(1)
+                end0 = offset_wire.position_at(0)  # pylint: disable=no-member
+                end1 = offset_wire.position_at(1)  # pylint: disable=no-member
                 if (self0 - end0).length - abs(distance) <= TOLERANCE:
                     edge0 = Edge.make_line(self0, end0)
                     edge1 = Edge.make_line(self1, end1)
@@ -1093,42 +1242,6 @@ class Mixin1D(Shape[TOPODS]):
 
         offset_edges = offset_wire.edges()
         return offset_edges[0] if len(offset_edges) == 1 else offset_wire
-
-    def param_at(self, position: float) -> float:
-        """
-        Map a normalized arc-length position to the underlying OCCT parameter.
-
-        The meaning of the returned parameter depends on the type of self:
-
-        - **Edge**: Returns the native OCCT curve parameter corresponding to the
-          given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
-          edges, OCCT may return a value **outside** the edge's nominal parameter
-          range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
-          the period). If you require a value folded into the edge's range, apply a
-          modulo with the parameter span.
-
-        - **Wire**: Returns a *composite* parameter encoding both the edge index
-          and the position within that edge: the **integer part** is the zero-based
-          count of fully traversed edges, and the **fractional part** is the
-          normalized position in `[0.0, 1.0]` along the current edge.
-
-        Args:
-            position (float): Normalized arc-length position along the shape,
-                where `0.0` is the start and `1.0` is the end. Values outside
-                `[0.0, 1.0]` are not validated and yield OCCT-dependent results.
-
-        Returns:
-            float: OCCT parameter (for edges) **or** composite “edgeIndex + fraction”
-            parameter (for wires), as described above.
-
-        """
-
-        curve = self.geom_adaptor()
-
-        length = GCPnts_AbscissaPoint.Length_s(curve)
-        return GCPnts_AbscissaPoint(
-            curve, length * position, curve.FirstParameter()
-        ).Parameter()
 
     def perpendicular_line(
         self, length: float, u_value: float, plane: Plane = Plane.XY
@@ -1221,10 +1334,9 @@ class Mixin1D(Shape[TOPODS]):
                 Vector(curve.Value(discretizer.Parameter(i + 1)))
                 for i in range(discretizer.NbPoints())
             ]
-        elif distances is not None:
+        if distances is not None:
             return [self.position_at(d, position_mode) for d in distances]
-        else:
-            raise ValueError("Either distances or deflection must be provided")
+        raise ValueError("Either distances or deflection must be provided")
 
     def project(
         self, face: Face, direction: VectorLike, closest: bool = True
@@ -1424,22 +1536,6 @@ class Mixin1D(Shape[TOPODS]):
             Vector: tangent value
         """
         return self.derivative_at(position, 1, position_mode).normalized()
-
-    # def vertex(self) -> Vertex | None:
-    #     """Return the Vertex"""
-    #     return Shape.get_single_shape(self, "Vertex")
-
-    # def vertices(self) -> ShapeList[Vertex]:
-    #     """vertices - all the vertices in this Shape"""
-    #     return Shape.get_shape_list(self, "Vertex")
-
-    # def wire(self) -> Wire | None:
-    #     """Return the Wire"""
-    #     return Shape.get_single_shape(self, "Wire")
-
-    # def wires(self) -> ShapeList[Wire]:
-    #     """wires - all the wires in this Shape"""
-    #     return Shape.get_shape_list(self, "Wire")
 
 
 class Edge(Mixin1D[TopoDS_Edge]):
@@ -1750,6 +1846,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         """
 
     @classmethod
+    # pylint: disable=missing-function-docstring
     def make_constrained_arcs(
         cls,
         *args,
@@ -1781,14 +1878,14 @@ class Edge(Mixin1D[TopoDS_Edge]):
             if isinstance(tangency_arg, Axis):
                 tangencies.append(Edge(tangency_arg))
                 continue
-            elif isinstance(tangency_arg, Edge):
+            if isinstance(tangency_arg, Edge):
                 tangencies.append(tangency_arg)
                 continue
             if isinstance(tangency_arg, tuple):
                 if isinstance(tangency_arg[0], Axis):
                     tangencies.append(tuple(Edge(tangency_arg[0], tangency_arg[1])))
                     continue
-                elif isinstance(tangency_arg[0], Edge):
+                if isinstance(tangency_arg[0], Edge):
                     tangencies.append(tangency_arg)
                     continue
             if isinstance(tangency_arg, Vertex):
@@ -1805,7 +1902,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         tangencies = sorted(tangencies, key=lambda x: isinstance(x, Vector))
 
         tan_count = len(tangencies)
-        if not (1 <= tan_count <= 3):
+        if not 1 <= tan_count <= 3:
             raise TypeError("Provide 1 to 3 tangency targets.")
 
         # Radius sanity
@@ -1908,12 +2005,13 @@ class Edge(Mixin1D[TopoDS_Edge]):
         direction: VectorLike | None = None,
     ) -> ShapeList[Edge]:
         """
-        Create all planar line(s) on the XY plane tangent to one curve and passing
-        through a fixed point.
+        Create all planar line(s) on the XY plane tangent to one curve with a
+        fixed orientation, defined either by an angle measured from a reference
+        axis or by a direction vector.
 
         Args:
             tangency_one (Edge): edge that line will be tangent to
-            tangency_two (Axis): axis that angle will be measured against
+            tangency_two (Axis): reference axis from which the angle is measured
             angle : float, optional
                 Line orientation in degrees (measured CCW from the X-axis).
             direction : VectorLike, optional
@@ -1961,7 +2059,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
                 else:
                     tangencies.append(Edge(tangency_arg))
                 continue
-            elif isinstance(tangency_arg, Edge):
+            if isinstance(tangency_arg, Edge):
                 tangencies.append(tangency_arg)
                 continue
             if isinstance(tangency_arg, tuple) and isinstance(tangency_arg[0], Edge):
@@ -1997,15 +2095,15 @@ class Edge(Mixin1D[TopoDS_Edge]):
             return _make_tan_oriented_lines(
                 tangencies[0], tangencies[1], ang_rad, edge_factory=cls
             )
-        else:
-            assert not isinstance(
-                tangencies[0], (Axis, Vector)
-            ), "Internal error - 1st tangency can't be an Axis | Vector"
-            assert not isinstance(
-                tangencies[1], Axis
-            ), "Internal error - 2nd tangency can't be an Axis"
 
-            return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
+        assert not isinstance(
+            tangencies[0], (Axis, Vector)
+        ), "Internal error - 1st tangency can't be an Axis | Vector"
+        assert not isinstance(
+            tangencies[1], Axis
+        ), "Internal error - 2nd tangency can't be an Axis"
+
+        return _make_2tan_lines(tangencies[0], tangencies[1], edge_factory=cls)
 
     @classmethod
     def make_ellipse(
@@ -2049,12 +2147,26 @@ class Edge(Mixin1D[TopoDS_Edge]):
         if start_angle == end_angle:  # full ellipse case
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_gp).Edge())
         else:  # arc case
-            # take correction_angle into account
+            # radians, apply correction
+            a1 = (start_angle * DEG2RAD) - correction_angle
+            a2 = (end_angle * DEG2RAD) - correction_angle
+
+            if angular_direction == AngularDirection.COUNTER_CLOCKWISE:
+                # ensure a2 > a1
+                if a2 <= a1:
+                    a2 += 2 * pi
+                sense = True
+                alpha1, alpha2 = a1, a2
+            else:
+                # CLOCKWISE: want decreasing angle
+                if a2 >= a1:
+                    a2 -= 2 * pi
+                # make alpha1 < alpha2 by swapping and reversing sense
+                sense = False
+                alpha1, alpha2 = a2, a1
+
             ellipse_geom = GC_MakeArcOfEllipse(
-                ellipse_gp,
-                start_angle * DEG2RAD - correction_angle,
-                end_angle * DEG2RAD - correction_angle,
-                angular_direction == AngularDirection.COUNTER_CLOCKWISE,
+                ellipse_gp, alpha1, alpha2, sense
             ).Value()
             ellipse = cls(BRepBuilderAPI_MakeEdge(ellipse_geom).Edge())
 
@@ -2074,7 +2186,8 @@ class Edge(Mixin1D[TopoDS_Edge]):
         Makes an parabola centered at the origin of plane.
 
         Args:
-            focal_length (float): focal length the parabola (distance from the vertex to focus along the x-axis of plane)
+            focal_length (float): focal length the parabola (distance from the
+                vertex to focus along the x-axis of plane)
             plane (Plane, optional): base plane. Defaults to Plane.XY.
             start_angle (float, optional): Defaults to 0.0.
             end_angle (float, optional): Defaults to 90.0.
@@ -2353,6 +2466,85 @@ class Edge(Mixin1D[TopoDS_Edge]):
             raise ValueError("B-spline interpolation failed")
 
         spline_geom = spline_builder.Curve()
+
+        return cls(BRepBuilderAPI_MakeEdge(spline_geom).Edge())
+
+    @classmethod
+    def make_bspline(
+        cls,
+        control_points: Iterable[VectorLike],
+        knots: Iterable[float],
+        degree: int,
+        weights: Iterable[float] | None = None,
+        periodic: bool = False,
+    ) -> Edge:
+        """Create an exact B-spline edge from control points and knot data.
+
+        Args:
+            control_points (Iterable[VectorLike]): Control points (poles) defining
+                the spline shape.
+            knots (Iterable[float]): Knot sequence for the spline. Repeated knot
+                values are converted to unique knot values plus multiplicities.
+            degree (int): Polynomial degree of the spline.
+            weights (Iterable[float] | None, optional): Optional per-control-point
+                weights for rational B-splines. Defaults to ``None``.
+            periodic (bool, optional): Whether to create a periodic spline.
+                Defaults to ``False``.
+
+        Raises:
+            ValueError: B-spline requires at least one knot.
+
+        Returns:
+            Edge: the B-spline edge
+        """
+
+        knot_list = list(knots)
+        if not knot_list:
+            raise ValueError("B-spline requires at least one knot")
+
+        point_vectors = [Vector(point) for point in control_points]
+        unique_knots = [knot_list[0]]
+        multiplicities = [1]
+        for knot in knot_list[1:]:
+            if abs(knot - unique_knots[-1]) <= TOLERANCE:
+                multiplicities[-1] += 1
+            else:
+                unique_knots.append(knot)
+                multiplicities.append(1)
+
+        poles_array = TColgp_Array1OfPnt(1, len(point_vectors))
+        for index, point in enumerate(point_vectors, start=1):
+            poles_array.SetValue(index, point.to_pnt())
+
+        knots_array = TColStd_Array1OfReal(1, len(unique_knots))
+        for index, knot in enumerate(unique_knots, start=1):
+            knots_array.SetValue(index, float(knot))
+
+        multiplicities_array = TColStd_Array1OfInteger(1, len(multiplicities))
+        for index, multiplicity in enumerate(multiplicities, start=1):
+            multiplicities_array.SetValue(index, multiplicity)
+
+        weights_list = list(weights) if weights is not None else []
+        if weights_list:
+            weights_array = TColStd_Array1OfReal(1, len(weights_list))
+            for index, weight in enumerate(weights_list, start=1):
+                weights_array.SetValue(index, float(weight))
+            spline_geom = Geom_BSplineCurve(
+                poles_array,
+                weights_array,
+                knots_array,
+                multiplicities_array,
+                degree,
+                periodic,
+            )
+        else:
+            spline_geom = Geom_BSplineCurve(
+                poles_array,
+                knots_array,
+                multiplicities_array,
+                degree,
+                periodic,
+            )
 
         return cls(BRepBuilderAPI_MakeEdge(spline_geom).Edge())
 
@@ -2692,6 +2884,132 @@ class Edge(Mixin1D[TopoDS_Edge]):
             raise ValueError("Can't find adaptor for empty edge")
         return BRepAdaptor_Curve(self.wrapped)
 
+    def geom_equal(
+        self,
+        other: Edge,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two edges for geometric equality within tolerance.
+
+        This compares the geometric properties of two edges, not their topological
+        identity. Two independently created edges with the same geometry will
+        return True.
+
+        Args:
+            other: Edge to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if edges are geometrically equal within tolerance
+        """
+        if not isinstance(other, Edge):
+            return False
+
+        # geom_type must match
+        if self.geom_type != other.geom_type:
+            return False
+
+        # Common: start and end points
+        if (self @ 0) != (other @ 0) or (self @ 1) != (other @ 1):
+            return False
+
+        ga1 = self.geom_adaptor()
+        ga2 = other.geom_adaptor()
+
+        match self.geom_type:
+            case GeomType.LINE:
+                # Line: fully defined by endpoints (already checked)
+                return True
+
+            case GeomType.CIRCLE:
+                c1, c2 = ga1.Circle(), ga2.Circle()
+                return (
+                    abs(c1.Radius() - c2.Radius()) < tol
+                    and Vector(c1.Location()) == Vector(c2.Location())
+                    and Vector(c1.Axis().Direction()) == Vector(c2.Axis().Direction())
+                )
+
+            case GeomType.ELLIPSE:
+                e1, e2 = ga1.Ellipse(), ga2.Ellipse()
+                return (
+                    abs(e1.MajorRadius() - e2.MajorRadius()) < tol
+                    and abs(e1.MinorRadius() - e2.MinorRadius()) < tol
+                    and Vector(e1.Location()) == Vector(e2.Location())
+                    and Vector(e1.Axis().Direction()) == Vector(e2.Axis().Direction())
+                )
+
+            case GeomType.HYPERBOLA:
+                h1, h2 = ga1.Hyperbola(), ga2.Hyperbola()
+                return (
+                    abs(h1.MajorRadius() - h2.MajorRadius()) < tol
+                    and abs(h1.MinorRadius() - h2.MinorRadius()) < tol
+                    and Vector(h1.Location()) == Vector(h2.Location())
+                    and Vector(h1.Axis().Direction()) == Vector(h2.Axis().Direction())
+                )
+
+            case GeomType.PARABOLA:
+                p1, p2 = ga1.Parabola(), ga2.Parabola()
+                return (
+                    abs(p1.Focal() - p2.Focal()) < tol
+                    and Vector(p1.Location()) == Vector(p2.Location())
+                    and Vector(p1.Axis().Direction()) == Vector(p2.Axis().Direction())
+                )
+
+            case GeomType.BEZIER:
+                b1, b2 = ga1.Bezier(), ga2.Bezier()
+                if b1.Degree() != b2.Degree() or b1.NbPoles() != b2.NbPoles():
+                    return False
+                for i in range(1, b1.NbPoles() + 1):
+                    if Vector(b1.Pole(i)) != Vector(b2.Pole(i)):
+                        return False
+                    if b1.IsRational() and abs(b1.Weight(i) - b2.Weight(i)) >= tol:
+                        return False
+                return True
+
+            case GeomType.BSPLINE:
+                s1, s2 = ga1.BSpline(), ga2.BSpline()
+                if s1.Degree() != s2.Degree():
+                    return False
+                if s1.IsPeriodic() != s2.IsPeriodic():
+                    return False
+                if s1.NbPoles() != s2.NbPoles() or s1.NbKnots() != s2.NbKnots():
+                    return False
+                for i in range(1, s1.NbPoles() + 1):
+                    if Vector(s1.Pole(i)) != Vector(s2.Pole(i)):
+                        return False
+                    if s1.IsRational() and abs(s1.Weight(i) - s2.Weight(i)) >= tol:
+                        return False
+                for i in range(1, s1.NbKnots() + 1):
+                    if abs(s1.Knot(i) - s2.Knot(i)) >= tol:
+                        return False
+                    if s1.Multiplicity(i) != s2.Multiplicity(i):
+                        return False
+                return True
+
+            case GeomType.OFFSET:
+                oc1, oc2 = ga1.OffsetCurve(), ga2.OffsetCurve()
+                # Compare offset values and directions
+                if abs(oc1.Offset() - oc2.Offset()) >= tol:
+                    return False
+                if Vector(oc1.Direction()) != Vector(oc2.Direction()):
+                    return False
+                # Compare basis curves (recursive)
+                basis1 = Edge(BRepBuilderAPI_MakeEdge(oc1.BasisCurve()).Edge())
+                basis2 = Edge(BRepBuilderAPI_MakeEdge(oc2.BasisCurve()).Edge())
+                return basis1.geom_equal(basis2, tol)
+
+            case _:  # pragma: no cover
+                # I don't think, GeomAbs_OtherCurve can be created in Python
+                # OTHER/unknown: compare sample points
+                for i in range(1, num_interpolation_points + 1):
+                    t = i / (num_interpolation_points + 1)
+                    if (self @ t) != (other @ t):
+                        return False
+                return True
+
     def _occt_param_at(
         self, position: float, position_mode: PositionMode = PositionMode.PARAMETER
     ) -> tuple[BRepAdaptor_Curve, float, bool]:
@@ -2734,6 +3052,35 @@ class Edge(Mixin1D[TopoDS_Edge]):
             comp_curve, length * value, comp_curve.FirstParameter()
         ).Parameter()
         return comp_curve, occt_param, self.is_forward
+
+    def param_at(self, position: float) -> float:
+        """
+        Map a normalized arc-length position to the underlying OCCT parameter.
+
+        Returns the native OCCT curve parameter corresponding to the
+        given normalized `position` (0.0 → start, 1.0 → end). For closed/periodic
+        edges, OCCT may return a value **outside** the edge's nominal parameter
+        range `[param_min, param_max]` (e.g., by adding/subtracting multiples of
+        the period). If you require a value folded into the edge's range, apply a
+        modulo with the parameter span.
+
+        Args:
+            position (float): Normalized arc-length position along the shape,
+                where `0.0` is the start and `1.0` is the end. Values outside
+                `[0.0, 1.0]` are not validated and yield OCCT-dependent results.
+
+        Returns:
+            float: OCCT parameter (for edges) **or** composite “edgeIndex + fraction”
+            parameter (for wires), as described above.
+
+        """
+
+        curve = self.geom_adaptor()
+
+        length = GCPnts_AbscissaPoint.Length_s(curve)
+        return GCPnts_AbscissaPoint(
+            curve, length * position, curve.FirstParameter()
+        ).Parameter()
 
     def param_at_point(self, point: VectorLike) -> float:
         """
@@ -2911,13 +3258,14 @@ class Edge(Mixin1D[TopoDS_Edge]):
         if self._wrapped is None:
             raise ValueError("An empty edge can't be reversed")
 
-        assert isinstance(self.wrapped, TopoDS_Edge)
+        assert isinstance(self._wrapped, TopoDS_Edge)
 
         reversed_edge = copy.deepcopy(self)
+        # pylint: disable=attribute-defined-outside-init
         if reconstruct:
             first: float = self.param_at(0)
             last: float = self.param_at(1)
-            curve = BRep_Tool.Curve_s(self.wrapped, first, last)
+            curve = BRep_Tool.Curve_s(self._wrapped, first, last)
             first = curve.ReversedParameter(first)
             last = curve.ReversedParameter(last)
             topods_edge = BRepBuilderAPI_MakeEdge(curve.Reversed(), last, first).Edge()
@@ -2926,44 +3274,27 @@ class Edge(Mixin1D[TopoDS_Edge]):
             reversed_edge.wrapped = TopoDS.Edge(self.wrapped.Reversed())
         return reversed_edge
 
+    @deprecated(
+        "to_axis is deprecated and will be removed in a future version. "
+        " Use 'Axis(Edge)' instead."
+    )
     def to_axis(self) -> Axis:
         """Translate a linear Edge to an Axis"""
-        warnings.warn(
-            "to_axis is deprecated and will be removed in a future version. "
-            "Use 'Axis(Edge)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         if self.geom_type != GeomType.LINE:
             raise ValueError(
                 f"to_axis is only valid for linear Edges not {self.geom_type}"
             )
         return Axis(self.position_at(0), self.position_at(1) - self.position_at(0))
 
+    @deprecated(
+        "to_wire is deprecated and will be removed in a future version. "
+        " Use 'Wire(Edge)' instead."
+    )
     def to_wire(self) -> Wire:
         """Edge as Wire"""
-        warnings.warn(
-            "to_wire is deprecated and will be removed in a future version. "
-            "Use 'Wire(Edge)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return Wire([self])
 
     def trim(self, start: float | VectorLike, end: float | VectorLike) -> Edge:
-        """_summary_
-
-        Args:
-            start (float | VectorLike): _description_
-            end (float | VectorLike): _description_
-
-        Raises:
-            TypeError: _description_
-            ValueError: _description_
-
-        Returns:
-            Edge: _description_
-        """
         """trim
 
         Create a new edge by keeping only the section between start and end.
@@ -2980,32 +3311,36 @@ class Edge(Mixin1D[TopoDS_Edge]):
             Edge: trimmed edge
         """
 
+        # Get the normalized edge parameters
         start_u = Mixin1D._to_param(self, start, "start")
         end_u = Mixin1D._to_param(self, end, "end")
 
-        start_u, end_u = sorted([start_u, end_u])
+        start_point = self.position_at(start_u)
 
-        # if start_u >= end_u:
-        #     raise ValueError(f"start ({start_u}) must be less than end ({end_u})")
+        # Convert the normalized edge parameters into curve parameters
+        comp_curve_start, parm_start, _ = self._occt_param_at(start_u)
+        _comp_curve_end, parm_end, _ = self._occt_param_at(end_u)
 
-        if self._wrapped is None:
-            raise ValueError("Can't trim empty edge")
-
-        self_copy = copy.deepcopy(self)
-        assert self_copy.wrapped is not None
-
-        new_curve = BRep_Tool.Curve_s(
-            self_copy.wrapped, self.param_at(0), self.param_at(1)
+        # Rebuild the edge
+        trimmed_edge = Edge(
+            BRepBuilderAPI_MakeEdge(
+                BRep_Tool.Curve_s(
+                    self.wrapped,
+                    comp_curve_start.FirstParameter(),
+                    comp_curve_start.LastParameter(),
+                ),
+                *sorted([parm_start, parm_end]),
+            ).Edge()
         )
-        parm_start = self.param_at(start_u)
-        parm_end = self.param_at(end_u)
-        trimmed_curve = Geom_TrimmedCurve(
-            new_curve,
-            parm_start,
-            parm_end,
+
+        # Reverse it if necessary
+        same_start = (trimmed_edge.position_at(0) - start_point).length < TOLERANCE
+        same_direction = (
+            self.tangent_at(start_u).dot(trimmed_edge.tangent_at(0)) > 1 - TOLERANCE
         )
-        new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
-        return Edge(new_edge)
+        if same_start and same_direction:
+            return trimmed_edge
+        return trimmed_edge.reversed(reconstruct=True)
 
     def trim_to_length(self, start: float | VectorLike, length: float) -> Edge:
         """trim_to_length
@@ -3050,6 +3385,61 @@ class Edge(Mixin1D[TopoDS_Edge]):
 
         new_edge = BRepBuilderAPI_MakeEdge(trimmed_curve).Edge()
         return Edge(new_edge)
+
+    def trim_to_other(
+        self: Edge,
+        other: Shape | Axis | Location | Plane | VectorLike,
+    ) -> Edge | None:
+        """Return the shortest Edge of self trimmed by other or None if they don't intersect"""
+
+        other_obj = Vector(other) if isinstance(other, Sequence) else other
+
+        # Find all of the possible intersections: vertices and edges
+        intersections = self.intersect(other_obj)
+
+        if not intersections:
+            return None
+
+        # Get the vertices from any edges and all of the other vertices
+        intersection_pnts = intersections.vertices()
+
+        # Trim to all of the intersection points
+        self_trims = ShapeList([self.trim(0, pnt) for pnt in intersection_pnts])
+
+        # Take the closest one
+        shortest_trimmed_self = self_trims.sort_by(Edge.length)[0]
+
+        return shortest_trimmed_self
+
+    @property
+    def is_infinite(self) -> bool:
+        """Check if edge is infinite (LINE with length > 1e100)."""
+        return self.geom_type == GeomType.LINE and self.length > 1e100
+
+    def trim_infinite(self, half_length: float) -> Edge:
+        """Trim an infinite line edge to a finite length.
+
+        OCCT's boolean operations struggle with very long edges (length > 1e100).
+        This method trims such edges to a reasonable size centered at edge.center().
+
+        For non-infinite edges, returns self unchanged.
+
+        Args:
+            half_length: Half-length of the resulting edge
+
+        Returns:
+            Trimmed edge if infinite, otherwise self
+        """
+        if not self.is_infinite:
+            return self
+
+        origin = self.center()
+        direction = (self.end_point() - self.start_point()).normalized()
+
+        return Edge.make_line(
+            origin - direction * half_length,
+            origin + direction * half_length,
+        )
 
 
 class Wire(Mixin1D[TopoDS_Wire]):
@@ -3650,6 +4040,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
         edge_list: ShapeList[Edge] = ShapeList()
         while explorer.More():
             next_edge = Edge(explorer.Current())
+            # pylint: disable=attribute-defined-outside-init
             next_edge.topo_parent = (
                 self if self.topo_parent is None else self.topo_parent
             )
@@ -3676,19 +4067,40 @@ class Wire(Mixin1D[TopoDS_Wire]):
         if self._wrapped is None:
             raise ValueError("Can't fillet an empty wire")
 
-        # Create a face to fillet
-        unfilleted_face = _make_topods_face_from_wires(self.wrapped)
-        # Fillet the face
-        fillet_builder = BRepFilletAPI_MakeFillet2d(unfilleted_face)
+        wire_pln = self.common_plane()
+        if wire_pln is None:
+            raise ValueError(f"Wire is not planar {self}")
+
+        # Force the wire to Plane.XY for the fillet operation
+        filleted_wire = wire_pln.to_local_coords(self)
         for vertex in vertices:
-            if vertex.wrapped is not None:
-                fillet_builder.AddFillet(vertex.wrapped, radius)
-        fillet_builder.Build()
-        filleted_face = downcast(fillet_builder.Shape())
-        if not isinstance(filleted_face, TopoDS_Face):
-            raise RuntimeError("An internal error occured creating the fillet")
-        # Return the outer wire
-        return Wire(BRepTools.OuterWire_s(filleted_face))
+            vertex_local = wire_pln.to_local_coords(vertex)
+            current_vertex = filleted_wire.vertices().sort_by_distance(vertex_local)[0]
+            if (Vector(current_vertex) - Vector(vertex_local)).length > TOLERANCE:
+                raise ValueError(f"Could not find fillet vertex on wire: {vertex}")
+            filleted_wire = _fillet_wire_corner(filleted_wire, current_vertex, radius)
+
+        # Return the filleted wire to the wire plane
+        globalized_filleted_wire: Wire = wire_pln.from_local_coords(filleted_wire)
+
+        # Transform the wire back to the original location not that of the wire_pln
+        old_loc = globalized_filleted_wire.location
+        # pylint: disable=attribute-defined-outside-init
+        new_loc = Location(self._wrapped.Location())
+        geometry_adjust = new_loc.inverse() * old_loc
+        trsf = geometry_adjust.wrapped.Transformation()
+        base_wire = globalized_filleted_wire.wrapped.Located(TopLoc_Location())
+        transformed = TopoDS.Wire(
+            BRepBuilderAPI_Transform(base_wire, trsf, True).Shape()
+        )
+        final_wire = Wire(transformed)
+        final_wire.location = Location(self._wrapped.Location())
+
+        # Ensure the wire direction is the same
+        if self.is_forward != final_wire.is_forward:
+            final_wire.wrapped.Reverse()
+
+        return final_wire
 
     def fix_degenerate_edges(self, precision: float) -> Wire:
         """fix_degenerate_edges
@@ -3732,6 +4144,74 @@ class Wire(Mixin1D[TopoDS_Wire]):
                 ordered_edges.append(edge.reversed())
 
         return ordered_edges
+
+    def geom_equal(
+        self,
+        other: Wire,
+        tol: float = 1e-6,
+        num_interpolation_points: int = 5,
+    ) -> bool:
+        """Compare two wires for geometric equality within tolerance.
+
+        This compares the geometric properties of two wires by comparing their
+        constituent edges pairwise. Two independently created wires with the
+        same geometry will return True.
+
+        Args:
+            other: Wire to compare with
+            tol: Tolerance for numeric comparisons. Defaults to 1e-6.
+            num_interpolation_points: Number of points to sample for unknown
+                curve types. Defaults to 5.
+
+        Returns:
+            bool: True if wires are geometrically equal within tolerance
+        """
+        if not isinstance(other, Wire):
+            return False
+
+        # Use order_edges to ensure consistent edge ordering and orientation
+        edges1 = self.order_edges()
+        edges2 = other.order_edges()
+        if len(edges1) != len(edges2):
+            return False
+        return all(
+            e1.geom_equal(e2, tol, num_interpolation_points)
+            for e1, e2 in zip(edges1, edges2)
+        )
+
+    def param_at(self, position: float) -> float:
+        """
+        Return the OCCT comp-curve parameter corresponding to the given wire position.
+        This is *not* the edge composite parameter; it is the parameter of the wire’s
+        BRepAdaptor_CompCurve.
+        """
+        curve = self.geom_adaptor()
+
+        # Compute the correct target point along the wire
+        target_pnt = self.position_at(position)
+
+        # Project to comp-curve parameter
+        extrema = Extrema_ExtPC(target_pnt.to_pnt(), curve)
+        if not extrema.IsDone() or extrema.NbExt() == 0:
+            raise RuntimeError("Failed to find point on curve")
+
+        min_dist = float("inf")
+        closest_pnt = None
+        closest_param = None
+        for i in range(1, extrema.NbExt() + 1):
+            dist = extrema.SquareDistance(i)
+            if dist < min_dist:
+                min_dist = dist
+                closest_pnt = extrema.Point(i).Value()
+                closest_param = extrema.Point(i).Parameter()
+
+        if (
+            closest_pnt is None
+            or (Vector(tcast(gp_Pnt, closest_pnt)) - target_pnt).length > TOLERANCE
+        ):
+            raise RuntimeError("Failed to find point on curve")
+
+        return tcast(float, closest_param)
 
     def param_at_point(self, point: VectorLike) -> float:
         """
@@ -3855,28 +4335,51 @@ class Wire(Mixin1D[TopoDS_Wire]):
             at the given position, the corresponding OCCT parameter on that edge and
             if edge is_forward.
         """
-        wire_curve_adaptor = self.geom_adaptor()
-
+        # Normalize to absolute distance along the wire
         if position_mode == PositionMode.PARAMETER:
             if not self.is_forward:
-                position = 1 - position
-            occt_wire_param = self.param_at(position)
+                position = 1.0 - position
+            distance = position * self.length
         else:
             if not self.is_forward:
                 position = self.length - position
-            occt_wire_param = self.param_at(position / self.length)
+            distance = position
 
-        topods_edge_at_position = TopoDS_Edge()
-        occt_edge_params = wire_curve_adaptor.Edge(
-            occt_wire_param, topods_edge_at_position
-        )
-        edge_curve_adaptor = BRepAdaptor_Curve(topods_edge_at_position)
+        # Build ordered edges and cumulative lengths
+        self_edges = self.edges()
+        edge_lengths = [e.length for e in self_edges]
+        cumulative_lengths = []
+        total = 0.0
+        for edge_length in edge_lengths:
+            total += edge_length
+            cumulative_lengths.append(total)
 
-        return (
-            edge_curve_adaptor,
-            occt_edge_params[0],
-            topods_edge_at_position.Orientation() == TopAbs_Orientation.TopAbs_FORWARD,
+        # Clamp distance
+        if distance <= 0.0:
+            edge_idx = 0
+            local_dist = 0.0
+        elif distance >= total:
+            edge_idx = len(self_edges) - 1
+            local_dist = edge_lengths[edge_idx]
+        else:
+            edge_idx = bisect_right(cumulative_lengths, distance)
+            prev_cum = cumulative_lengths[edge_idx - 1] if edge_idx > 0 else 0.0
+            local_dist = distance - prev_cum
+
+        target_edge = self_edges[edge_idx]
+
+        # Convert local distance to edge fraction
+        local_frac = (
+            0.0 if target_edge.length == 0 else (local_dist / target_edge.length)
         )
+        if not target_edge.is_forward:
+            local_frac = 1 - local_frac
+
+        # Use edge param_at to get native OCCT parameter
+        occt_edge_param = target_edge.param_at(local_frac)
+
+        edge_curve_adaptor = target_edge.geom_adaptor()
+        return edge_curve_adaptor, occt_edge_param, target_edge.is_forward
 
     def project_to_shape(
         self,
@@ -4072,14 +4575,12 @@ class Wire(Mixin1D[TopoDS_Wire]):
 
         return Edge(edge_builder.Edge())
 
+    @deprecated(
+        "to_wire is deprecated and will be removed in a future version. "
+        " Use 'Wire(Wire)' instead."
+    )
     def to_wire(self) -> Wire:
         """Return Wire - used as a pair with Edge.to_wire when self is Wire | Edge"""
-        warnings.warn(
-            "to_wire is deprecated and will be removed in a future version. "
-            "Use 'Wire(Wire)' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return self
 
     def trim(self: Wire, start: float | VectorLike, end: float | VectorLike) -> Wire:
@@ -4102,7 +4603,9 @@ class Wire(Mixin1D[TopoDS_Wire]):
 
         # If this is really just an edge, skip the complexity of a Wire
         if len(ordered_edges) == 1:
-            return Wire([ordered_edges[0].trim(start_u, end_u)])
+            ordered_edge = ordered_edges[0]  # pylint: disable=no-member
+            t_edge = ordered_edge.trim(start_u, end_u)  # pylint: disable=no-member
+            return Wire([t_edge])
 
         total_length = self.length
         start_len = start_u * total_length
