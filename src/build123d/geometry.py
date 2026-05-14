@@ -547,7 +547,7 @@ class Vector:
         Returns:
             Vector: rotated vector
         """
-        return Vector(self.wrapped.Rotated(axis.wrapped, pi * angle / 180))
+        return Vector(self.wrapped.Rotated(axis.wrapped, radians(angle)))
 
     @overload
     def intersect(self, vector: VectorLike) -> Vector | None:
