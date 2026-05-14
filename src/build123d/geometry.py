@@ -2521,9 +2521,9 @@ class Matrix:
         self.wrapped = trsf  #: the OCP transformation function
 
     def rotate(self, axis: Axis, angle: float):
-        """General rotate about axis"""
+        """General rotate about axis by angle in degrees"""
         new = gp_Trsf()
-        new.SetRotation(axis.wrapped, angle)
+        new.SetRotation(axis.wrapped, radians(angle))
         self.wrapped = self.wrapped * gp_GTrsf(new)
 
     def inverse(self) -> Matrix:
