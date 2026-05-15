@@ -71,6 +71,7 @@ from OCP.gp import (
     gp_Pln,
     gp_Pnt,
     gp_Pnt2d,
+    gp_Vec2d,
 )
 from OCP.IntAna2d import IntAna2d_AnaIntersection
 from OCP.Standard import Standard_ConstructionError, Standard_Failure
@@ -518,29 +519,58 @@ def _make_3tan_arcs(
 
     # Build inputs for GCC
     results = [_as_gcc_arg(*t) for t in tangent_tuples]
-    q_o: tuple[
-        Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve, Geom2dGcc_QualifiedCurve
-    ]
-    q_o, h_e, e_first, e_last, is_edge = map(tuple, zip(*results))
+    q_o_orig, h_e_orig, e_first, e_last, is_edge = map(tuple, zip(*results))
 
     # Provide initial middle guess parameters for all of the edges
     guesses: tuple[float, float, float] = tuple(
-        [(e_last[i] - e_first[i]) / 2 + e_first[i] for i in range(3)]
+        [(e_last[i] - e_first[i]) / 3 *2 + e_first[i] for i in range(3)]
     )
-
     # Generate all valid circles tangent to the 3 inputs
     msg = "Unable to find a circle tangent to all three objects"
+    gcc = None
+    current_h_e = h_e_orig
+
+    # 1. Standard attempt
     try:
-        gcc = Geom2dGcc_Circ2d3Tan(*q_o, TOLERANCE, *guesses)
-    except (Standard_ConstructionError, Standard_Failure) as con_err:
-        raise RuntimeError(msg) from con_err
-    if not gcc.IsDone() or gcc.NbSolutions() == 0:
+        gcc = Geom2dGcc_Circ2d3Tan(*q_o_orig, TOLERANCE, *guesses)
+    except (Standard_ConstructionError, Standard_Failure):
+        pass
+
+    if gcc is None or not gcc.IsDone() or gcc.NbSolutions() == 0:
+        # 2. Perturbation attempt to break numerical singularities
+        nudged_q_o = []
+        nudged_h_e = []
+        for i in range(3):
+            q = q_o_orig[i]
+            h = h_e_orig[i]
+            qual_val = tangent_tuples[i][1].value
+            if h:
+                h.Translate(gp_Vec2d(TOLERANCE, TOLERANCE))
+                adapt = Geom2dAdaptor_Curve(h, e_first[i], e_last[i])
+                q_nudged = Geom2dGcc_QualifiedCurve(adapt, qual_val)
+                nudged_q_o.append(q_nudged)
+                nudged_h_e.append(h)
+            else:
+                # Nudge the point
+                p = q.Pnt2d()
+                p.Translate(gp_Vec2d(TOLERANCE, TOLERANCE))
+                nudged_q_o.append(Geom2d_CartesianPoint(p))
+                nudged_h_e.append(None)
+
+        try:
+            gcc = Geom2dGcc_Circ2d3Tan(*nudged_q_o, TOLERANCE, *guesses)
+        except (Standard_ConstructionError, Standard_Failure):
+            gcc = None
+
+        current_h_e = tuple(nudged_h_e)
+
+    if gcc is None or not gcc.IsDone() or gcc.NbSolutions() == 0:
         raise RuntimeError(msg)
 
     def _ok(i: int, u: float) -> bool:
         """Does the given parameter value lie within the edge range?"""
         return (
-            True if not is_edge[i] else _param_in_trim(u, e_first[i], e_last[i], h_e[i])
+            True if not is_edge[i] else _param_in_trim(u, e_first[i], e_last[i], current_h_e[i])
         )
 
     # ---------------------------
