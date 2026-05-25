@@ -207,3 +207,17 @@ This project ports the low-level dependencies required for build123d to run in a
 For a fully featured frontend, check out ``Yet Another CAD Viewer`` (see above).
 
 See: `OCP.wasm <https://github.com/yeicor/OCP.wasm>`_
+
+partomatic
+==========
+
+Partomatic provides a standardized system for building parametric models in build123d.
+The open nature of build123d is its strength, but it makes it difficult to build
+standardized tooling to interface with your projects. It makes it easy to:
+
+  * import and export configuration files
+  * easily export models for projects that provide large numbers of intersectional options
+  * share the built-in web interface allowing end-users to change properties and see the results quickly
+  * generate logs for compilation and web interface events that can be consumed by an OpenTelemetry platform
+
+See: `Partomatic <https://github.com/x0pherl/partomatic>`_
