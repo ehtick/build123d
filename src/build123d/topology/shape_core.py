@@ -958,7 +958,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
             raise RuntimeError("Composite factory is not registered")
         return factory(shape_list)
 
-    def __add__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
+    @overload
+    def __add__(self, other: None) -> Self: ...
+    @overload
+    def __add__(self, other: Shape | Iterable[Shape]) -> Self | Compound: ...
+    def __add__(self, other):
         """fuse shape to self operator +"""
         # Convert `other` to list of base objects and filter out None values
         if other is None:
@@ -1091,7 +1095,11 @@ class Shape(NodeMixin, Generic[TOPODS]):
             f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
         )
 
-    def __sub__(self, other: None | Shape | Iterable[Shape]) -> Self | Compound:
+    @overload
+    def __sub__(self, other: None) -> Self: ...
+    @overload
+    def __sub__(self, other: Shape | Iterable[Shape]) -> Self | Compound: ...
+    def __sub__(self, other):
         """cut shape from self operator -"""
 
         if self._wrapped is None:
