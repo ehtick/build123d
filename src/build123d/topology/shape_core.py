@@ -2190,8 +2190,8 @@ class Shape(NodeMixin, Generic[TOPODS]):
         def process_sides(sides):
             """Process sides to determine if it should be None, a single element,
             a Shell, or a ShapeList."""
-            # if not sides:
-            #     return None
+            if not sides:
+                return None
             if len(sides) == 1:
                 return sides[0]
             # Attempt to create a shell
@@ -2217,13 +2217,16 @@ class Shape(NodeMixin, Generic[TOPODS]):
                 continue
             perimeter_edges.Append(perimeter_edge.wrapped)
 
-        # Split the shells by the perimeter edges
-        lefts: list[Shell] = []
-        rights: list[Shell] = []
-        for target_shell in self.shells():
-            if not target_shell:
+        # Split the shells/faces by the perimeter edges
+        lefts: list[Shell | Face] = []
+        rights: list[Shell | Face] = []
+        target_shapes = self.shells()
+        if not target_shapes:
+            target_shapes = self.faces()
+        for target_shape in target_shapes:
+            if not target_shape:
                 continue
-            constructor = BRepFeat_SplitShape(target_shell.wrapped)
+            constructor = BRepFeat_SplitShape(target_shape.wrapped)
             constructor.Add(perimeter_edges)
             constructor.Build()
             lefts.extend(get(constructor.Left()))
