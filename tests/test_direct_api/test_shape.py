@@ -271,6 +271,20 @@ class TestShape(unittest.TestCase):
         with self.assertRaises(ValueError):
             _, _ = target2.split_by_perimeter(Edge.make_circle(1), Keep.TOP)
 
+    def test_split_by_perimeter_standalone_spherical_face_without_seam_crossing(self):
+        sphere = Solid.make_sphere(10).rotate(Axis.Z, 90)
+        spherical_face = sphere.faces()[0]
+        circle = Plane.YZ.offset(15) * Circle(5).face()
+        perimeter = circle.project_to_shape(sphere, (-1, 0, 0))[0].edge()
+
+        self.assertGreater(spherical_face.seams[0].distance_to(perimeter), 1)
+        inside, outside = spherical_face.split_by_perimeter(perimeter, Keep.BOTH)
+
+        self.assertIsNotNone(inside)
+        self.assertIsNotNone(outside)
+        self.assertLess(inside.area, outside.area)
+        self.assertAlmostEqual(inside.area + outside.area, spherical_face.area, 5)
+
     def test_distance(self):
         sphere1 = Solid.make_sphere(1, Plane((-5, 0, 0)))
         sphere2 = Solid.make_sphere(1, Plane((5, 0, 0)))
