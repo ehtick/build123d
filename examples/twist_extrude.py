@@ -2,7 +2,7 @@
 
 name: twist_extrude.py
 by:   KilowattSynthesis
-date: June 3rd 2025
+date: 2026-06-03
 
 desc:
 
@@ -12,7 +12,7 @@ desc:
 
 license:
 
-    Copyright 2025 KilowattSynthesis
+    Copyright 2026 KilowattSynthesis
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
