@@ -626,11 +626,12 @@ class AxisMeta(type):
 class Axis(metaclass=AxisMeta):
     """Axis
 
-    Axis defined by point and direction
+    Axis defined by point and direction or by two points
 
     Args:
         origin (VectorLike): start point
         direction (VectorLike): direction
+        end_point (VectorLike): point used with origin to define direction
         edge (Edge): origin & direction defined by start of edge
         location (Location): location to convert to axis
 
@@ -655,6 +656,10 @@ class Axis(metaclass=AxisMeta):
         """Axis: point and direction"""
 
     @overload
+    def __init__(self, origin: VectorLike, *, end_point: VectorLike) -> None:
+        """Axis: point and end point"""
+
+    @overload
     def __init__(self, edge: Edge) -> None:
         """Axis: start of Edge"""
 
@@ -664,6 +669,7 @@ class Axis(metaclass=AxisMeta):
         gp_ax1 = kwargs.pop("gp_ax1", None)
         origin = kwargs.pop("origin", None)
         direction = kwargs.pop("direction", None)
+        end_point = kwargs.pop("end_point", None)
         edge = kwargs.pop("edge", None)
         location = kwargs.pop("location", None)
 
@@ -686,6 +692,12 @@ class Axis(metaclass=AxisMeta):
                 raise ValueError(f"Unrecognized single argument: {arg}")
         elif len(args) == 2:
             origin, direction = args
+
+        # Convert end point to direction
+        if end_point is not None:
+            if direction is not None:
+                raise ValueError("Axis end_point cannot be used with direction")
+            direction = Vector(end_point) - Vector(origin)
 
         # Handle edge-based construction
         if edge is not None:
