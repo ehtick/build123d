@@ -2148,6 +2148,10 @@ class Shape(NodeMixin, Generic[TOPODS]):
     ) -> Face | Shell | ShapeList[Face] | None:
         """split_by_perimeter and keep inside (default)"""
 
+    @deprecated(
+        "Shape.split_by_perimeter is deprecated; use Face.split_by_perimeter "
+        "or Shell.split_by_perimeter instead."
+    )
     def split_by_perimeter(self, perimeter: Edge | Wire, keep: Keep = Keep.INSIDE):
         """split_by_perimeter
 
