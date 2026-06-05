@@ -516,16 +516,15 @@ def test_make_constrained_arcs_3tan():
         )
         assert el.intersect(tan3[0]) is not None
 
+
 def test_constrained_arcs_2tan_center_on():
     """test correct trimming in _make_2tan_on_arcs"""
     c1 = CenterArc((0, 20), 20, -90, 90)
     ln2 = Line(c1 @ 1, (10, 20))
-    ln3 = Line(
-        (10, 10),
-        ln2 @ 1
-    )
+    ln3 = Line((10, 10), ln2 @ 1)
     ln4 = ConstrainedArcs(tangency_one=c1, tangency_two=ln2, center_on=ln3)
     assert ln4.vertices().sort_by(Axis.Y)[0].intersect(c1) is not None
+
 
 def test_eggplant():
     """complex set of 4 arcs"""
