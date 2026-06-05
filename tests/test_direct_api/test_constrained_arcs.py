@@ -26,7 +26,6 @@ license:
 
 """
 
-from numpy._core.umath import tan
 import pytest
 from OCP.BRep import BRep_Tool
 from OCP.gp import gp_Ax2d, gp_Circ2d, gp_Dir2d, gp_Pnt2d
