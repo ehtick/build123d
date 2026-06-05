@@ -26,6 +26,7 @@ license:
 
 """
 
+from numpy._core.umath import tan
 import pytest
 from OCP.BRep import BRep_Tool
 from OCP.gp import gp_Ax2d, gp_Circ2d, gp_Dir2d, gp_Pnt2d
@@ -500,6 +501,15 @@ def test_tan3_4():
     l3 = Line((-1, 0), (-0.75, 0))
     tan3 = Edge.make_constrained_arcs(l1, l2, l3)
     assert len(tan3) == 0
+
+
+def test_tan3_5():
+    l1 = Line((-1, 0), (-0.5, 2))
+    l2 = Line((1, 0), (0.5, 2))
+    l3 = Line((-1, 0), (1, 0))
+    tan3_short = Edge.make_constrained_arcs(l1, l2, l3, sagitta=Sagitta.SHORT)
+    tan3_long = Edge.make_constrained_arcs(l1, l2, l3, sagitta=Sagitta.LONG)
+    assert tan3_long[0].length > tan3_short[0].length
 
 
 def test_make_constrained_arcs_3tan():
