@@ -532,13 +532,13 @@ def _make_3tan_arcs(
 
     # 1. Standard attempt
     try:
-        gcc = Geom2dGcc_Circ2d3Tan(*q_o_orig, TOLERANCE, *guesses)
+        gcc = Geom2dGcc_Circ2d3Tan(*q_o_orig, TOLERANCE, *guesses) # type: ignore[call-overload]
     except (Standard_ConstructionError, Standard_Failure):
         pass
 
     if gcc is None or not gcc.IsDone() or gcc.NbSolutions() == 0:
         # 2. Perturbation attempt to break numerical singularities
-        nudged_q_o = []
+        nudged_q_o: list[Geom2dGcc_QualifiedCurve | Geom2d_CartesianPoint] = []
         nudged_h_e = []
         for i in range(3):
             q = q_o_orig[i]
@@ -558,7 +558,7 @@ def _make_3tan_arcs(
                 nudged_h_e.append(None)
 
         try:
-            gcc = Geom2dGcc_Circ2d3Tan(*nudged_q_o, TOLERANCE, *guesses)
+            gcc = Geom2dGcc_Circ2d3Tan(*nudged_q_o, TOLERANCE, *guesses) # type: ignore[call-overload]
         except (Standard_ConstructionError, Standard_Failure):
             gcc = None
 
