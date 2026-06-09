@@ -18,20 +18,28 @@ desc:
             --to-ref HEAD \
             --output release_data.json \
             --summary-output release_summary.json \
-            --llm-input-output release_llm_input.json
+            --llm-input-output release_llm_input.json \
+            --github-notes-input-output release_github_notes_input.json
 
     Outputs:
 
     * ``--output`` writes the full audit data: commits, PRs, and issues.
     * ``--summary-output`` writes a condensed but still broad release summary.
     * ``--llm-input-output`` writes grouped topics intended for LLM drafting.
+    * ``--github-notes-input-output`` writes a single LLM input tailored to the
+      existing GitHub release-note style, including a template, style guide,
+      linked selected changes, compatibility candidates, contributors, and the
+      full changelog URL.
 
     Drafting release notes with an LLM:
 
-    Use ``release_llm_input.json`` as the primary LLM input. Ask the LLM to draft
-    concise release notes for build123d users, merge related topics instead of
-    producing one bullet per topic, include a Compatibility Notes section from
-    ``compatibility_candidates``, and include first-time contributors. Treat the
+    Use ``release_github_notes_input.json`` when drafting release notes for the
+    GitHub Releases page in the existing project style. This file includes a
+    template, style guide, linked PR/commit entries, compatibility candidates,
+    contributor data, and the full changelog URL. Use ``release_llm_input.json``
+    for a shorter grouped/editorial draft. In either case, ask the LLM to merge
+    related topics instead of producing one bullet per topic, include a
+    Compatibility Notes section from ``compatibility_candidates``, and treat the
     generated Markdown as a review draft; verify compatibility notes and contributor
     names before publishing.
 
@@ -1019,6 +1027,307 @@ def build_llm_input(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def github_repo_url(owner: str, repo: str) -> str:
+    """Return the GitHub repository URL."""
+    return f"https://github.com/{owner}/{repo}"
+
+
+def commit_url(owner: str, repo: str, sha: str) -> str:
+    """Return the GitHub commit URL."""
+    return f"{github_repo_url(owner, repo)}/commit/{sha}"
+
+
+def compare_url(owner: str, repo: str, from_ref: str, to_ref: str) -> str:
+    """Return the GitHub compare URL for the release."""
+    return f"{github_repo_url(owner, repo)}/compare/{from_ref}...{to_ref}"
+
+
+def pr_by_merge_sha(data: ReleaseData) -> dict[str, PullRequestRecord]:
+    """Map merge commit SHAs to pull requests."""
+    return {
+        pull_request.merge_commit_sha: pull_request
+        for pull_request in data.pull_requests
+        if pull_request.merge_commit_sha
+    }
+
+
+def commit_by_short_sha(data: ReleaseData) -> dict[str, CommitRecord]:
+    """Map short commit SHAs to commit records."""
+    return {commit.short_sha: commit for commit in data.commits}
+
+
+def github_style_source(
+    source_id: str,
+    owner: str,
+    repo: str,
+    prs_by_number: dict[int, PullRequestRecord],
+    commits_by_short_sha: dict[str, CommitRecord],
+) -> dict[str, Any]:
+    """Return link/author details for a PR or commit source id."""
+    if source_id.startswith("pr:"):
+        number = int(source_id.split(":", maxsplit=1)[1])
+        pull_request = prs_by_number[number]
+        return {
+            "id": source_id,
+            "kind": "pull_request",
+            "title": pull_request.title,
+            "author": pull_request.user_login,
+            "reference": f"#{pull_request.number}",
+            "url": pull_request.html_url,
+        }
+
+    short_sha = source_id.split(":", maxsplit=1)[1]
+    commit = commits_by_short_sha[short_sha]
+    return {
+        "id": source_id,
+        "kind": "commit",
+        "title": commit.title,
+        "author": commit.author.name,
+        "reference": commit.short_sha,
+        "url": commit_url(owner, repo, commit.sha),
+    }
+
+
+def selected_other_change(
+    change: dict[str, Any],
+    owner: str,
+    repo: str,
+    prs_by_number: dict[int, PullRequestRecord],
+    commits_by_short_sha: dict[str, CommitRecord],
+) -> dict[str, Any]:
+    """Build a detailed GitHub-release-style selected change record."""
+    source = github_style_source(
+        change["id"],
+        owner,
+        repo,
+        prs_by_number,
+        commits_by_short_sha,
+    )
+    return {
+        "title": change["title"],
+        "category": change["category"],
+        "source": source,
+        "linked_issues": change.get("linked_issues", []),
+        "suggested_bullet_style": (
+            "- {title} by @{author} in {reference}"
+            if source["kind"] == "pull_request"
+            else "- {title} by {author} in {reference}"
+        ),
+    }
+
+
+def github_style_compatibility_candidate(
+    candidate: dict[str, Any],
+    owner: str,
+    repo: str,
+    prs_by_number: dict[int, PullRequestRecord],
+    commits_by_short_sha: dict[str, CommitRecord],
+) -> dict[str, Any]:
+    """Add GitHub-style source links to a compatibility candidate."""
+    return {
+        **candidate,
+        "sources": [
+            github_style_source(
+                source_id,
+                owner,
+                repo,
+                prs_by_number,
+                commits_by_short_sha,
+            )
+            for source_id in candidate["source_ids"]
+        ],
+    }
+
+
+def github_style_new_contributors(
+    summary: dict[str, Any],
+    owner: str,
+    repo: str,
+    commits_by_short_sha: dict[str, CommitRecord],
+) -> list[dict[str, Any]]:
+    """Build first-time contributor records with available source links."""
+    contributors = []
+    for contributor in summary["contributors"]["first_time"]:
+        first_commit = None
+        for short_sha, commit in commits_by_short_sha.items():
+            if (
+                commit.author.name == contributor["name"]
+                and commit.author.email == contributor["email"]
+            ):
+                first_commit = commit
+                break
+
+        source = None
+        if first_commit is not None:
+            source = {
+                "kind": "commit",
+                "reference": first_commit.short_sha,
+                "url": commit_url(owner, repo, first_commit.sha),
+                "title": first_commit.title,
+            }
+
+        contributors.append(
+            {
+                "name": contributor["name"],
+                "github_login": contributor.get("github_login"),
+                "source": source,
+            }
+        )
+    return contributors
+
+
+def build_github_notes_input(
+    data: ReleaseData,
+    summary: dict[str, Any],
+    owner: str,
+    repo: str,
+) -> dict[str, Any]:
+    """Build a single LLM input for GitHub-style release notes."""
+    llm_input = build_llm_input(summary)
+    prs_by_number = {
+        pull_request.number: pull_request for pull_request in data.pull_requests
+    }
+    commits_by_short_sha = commit_by_short_sha(data)
+    selected_changes = []
+    for category, changes in summary["changes_by_category"].items():
+        if category == "internal":
+            continue
+        for change in changes:
+            if not change.get("release_note_candidate", True):
+                continue
+            selected_changes.append(
+                selected_other_change(
+                    change,
+                    owner,
+                    repo,
+                    prs_by_number,
+                    commits_by_short_sha,
+                )
+            )
+
+    selected_changes.sort(
+        key=lambda change: (
+            change["category"],
+            source_sort_key(change["source"]["id"]),
+        )
+    )
+
+    return {
+        "release": {
+            **summary["release"],
+            "repository_url": github_repo_url(owner, repo),
+            "full_changelog_url": compare_url(
+                owner,
+                repo,
+                data.release.from_ref,
+                data.release.to_ref,
+            ),
+        },
+        "output_template": {
+            "title": "build123d {version}",
+            "sections": [
+                {
+                    "heading": "Breaking Changes",
+                    "optional": True,
+                    "instructions": (
+                        "Only include confirmed backwards-incompatible changes. "
+                        "Omit this section if none are confirmed."
+                    ),
+                },
+                {
+                    "heading": "Compatibility Notes",
+                    "optional": True,
+                    "instructions": (
+                        "Include deprecations, moved APIs, changed defaults, "
+                        "and behavior changes users should review."
+                    ),
+                },
+                {
+                    "heading": "Notable Changes",
+                    "instructions": (
+                        "Use 8-15 bullets. Prefer grouped, user-visible "
+                        "changes over individual commits."
+                    ),
+                },
+                {
+                    "heading": "Selected Other Changes",
+                    "instructions": (
+                        "Use detailed bullets with author and PR/commit links. "
+                        "Do not include every selected change."
+                    ),
+                },
+                {
+                    "heading": "New Contributors",
+                    "optional": True,
+                    "instructions": (
+                        "Thank first-time contributors. Use source links when "
+                        "available."
+                    ),
+                },
+                {
+                    "heading": "Full Changelog",
+                    "instructions": "Include the full changelog compare link.",
+                },
+            ],
+        },
+        "style_guide": [
+            "Match the existing build123d GitHub release-note style.",
+            "Use concise Markdown bullets.",
+            "Prefer 'by @user in #123' for pull requests.",
+            "Use direct commit links only when no PR exists.",
+            "Do not list every commit.",
+            "Keep compatibility notes separate from confirmed breaking changes.",
+        ],
+        "example_bullets": [
+            "Added a new `Face.wrap` method by @gumyr.",
+            "@jwagenet added four new 1D tangent objects in #947.",
+            (
+                "Fix `revolve` direction and size with negative "
+                "`revolution_arc` by @jwagenet in #964."
+            ),
+            "Deprecating `Color.to_tuple` by @gumyr in 83cea39.",
+        ],
+        "notable_topics": llm_input["topics_by_category"],
+        "compatibility_candidates": [
+            github_style_compatibility_candidate(
+                candidate,
+                owner,
+                repo,
+                prs_by_number,
+                commits_by_short_sha,
+            )
+            for candidate in llm_input["compatibility_candidates"]
+        ],
+        "selected_other_changes": selected_changes[:160],
+        "new_contributors": github_style_new_contributors(
+            summary,
+            owner,
+            repo,
+            commits_by_short_sha,
+        ),
+        "contributors": llm_input["contributors"],
+        "counts": {
+            **llm_input["counts"],
+            "selected_other_changes": min(len(selected_changes), 160),
+            "selected_other_changes_available": len(selected_changes),
+        },
+        "llm_instructions": [
+            "Generate Markdown suitable for a GitHub release body.",
+            "Follow output_template section order.",
+            "Use notable_topics for the Notable Changes section.",
+            (
+                "Use selected_other_changes for detailed linked bullets, but "
+                "choose the most useful subset."
+            ),
+            (
+                "Use compatibility_candidates for Compatibility Notes; do not "
+                "claim Breaking Changes unless the item is clearly breaking."
+            ),
+            "Include new_contributors and the full_changelog_url.",
+        ],
+    }
+
+
 def github_token() -> str:
     """Return a GitHub token from the environment."""
     token = os.environ.get("GITHUB_TOKEN")
@@ -1438,6 +1747,11 @@ def parse_args() -> argparse.Namespace:
         help="Write tightly grouped LLM input JSON to this path.",
     )
     parser.add_argument(
+        "--github-notes-input-output",
+        type=Path,
+        help="Write GitHub-release-style LLM input JSON to this path.",
+    )
+    parser.add_argument(
         "--include-pr-files",
         action="store_true",
         help="Fetch per-file PR details. Slower; commit file details are always collected.",
@@ -1492,6 +1806,13 @@ def main() -> int:
         summary_output = json.dumps(summary, indent=2)
         llm_input = build_llm_input(summary)
         llm_input_output = json.dumps(llm_input, indent=2)
+        github_notes_input = build_github_notes_input(
+            release_data,
+            summary,
+            args.owner,
+            args.repo,
+        )
+        github_notes_output = json.dumps(github_notes_input, indent=2)
         if args.summary_output:
             args.summary_output.write_text(f"{summary_output}\n")
             print(
@@ -1508,6 +1829,14 @@ def main() -> int:
                 f"{args.llm_input_output}",
                 file=sys.stderr,
             )
+        if args.github_notes_input_output:
+            args.github_notes_input_output.write_text(f"{github_notes_output}\n")
+            print(
+                f"wrote GitHub notes input with "
+                f"{github_notes_input['counts']['selected_other_changes']} "
+                f"selected changes to {args.github_notes_input_output}",
+                file=sys.stderr,
+            )
         if args.output:
             args.output.write_text(f"{raw_output}\n")
             print(
@@ -1516,7 +1845,11 @@ def main() -> int:
                 f"{len(release_data.issues)} issues to {args.output}",
                 file=sys.stderr,
             )
-        elif not args.summary_output and not args.llm_input_output:
+        elif (
+            not args.summary_output
+            and not args.llm_input_output
+            and not args.github_notes_input_output
+        ):
             print(raw_output)
         return 0
 
