@@ -1779,7 +1779,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
             tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
         ),
         *,
-        sagitta: Sagitta | None = None,
+        sagitta: Sagitta = Sagitta.SHORT,
     ) -> ShapeList[Edge]:
         """
         Create planar circular arc(s) on XY tangent to three provided objects.
@@ -1790,7 +1790,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
                 Geometric entities to be contacted/touched by the circle(s)
             sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
-                None (the arc that touches the three input curves is chosen).
+                LengthConstraint.SHORT.
 
         Returns:
             ShapeList[Edge]: tangent arcs
@@ -1854,7 +1854,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
     def make_constrained_arcs(
         cls,
         *args,
-        sagitta: Sagitta | None = None,
+        sagitta: Sagitta = Sagitta.SHORT,
         **kwargs,
     ) -> ShapeList[Edge]:
 

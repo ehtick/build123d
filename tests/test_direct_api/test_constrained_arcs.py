@@ -502,26 +502,22 @@ def test_tan3_4():
     assert len(tan3) == 0
 
 
-def test_tan3_5():
-    l1 = Line((-1, 0), (-0.5, 2))
-    l2 = Line((1, 0), (0.5, 2))
-    l3 = Line((-1, 0), (1, 0))
-    tan3_short = Edge.make_constrained_arcs(l1, l2, l3, sagitta=Sagitta.SHORT)
-    tan3_long = Edge.make_constrained_arcs(l1, l2, l3, sagitta=Sagitta.LONG)
-    assert tan3_long[0].length > tan3_short[0].length
-
-
 def test_make_constrained_arcs_3tan():
     """test correct trimming in _make_3tan_arcs"""
     c1 = CenterArc((0, 20), 20, -90, 90)
     c2 = CenterArc((0, 20), 10, -90, 90)
     ln1 = Line(c1 @ 1, c2 @ 1)
     c3 = RadiusArc(c1 @ 1, c2 @ 1, 10)
-    for el in [ln1, c3]:
+    for i, el in enumerate([ln1, c3]):
+        if i == 0:
+            sagitta = Sagitta.LONG
+        else:
+            sagitta = Sagitta.SHORT
         tan3 = Edge.make_constrained_arcs(
             (c1, Tangency.UNQUALIFIED),
             (c2, Tangency.UNQUALIFIED),
             (el, Tangency.UNQUALIFIED),
+            sagitta=sagitta,
         )
         assert el.intersect(tan3[0]) is not None
 

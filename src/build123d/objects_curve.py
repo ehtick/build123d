@@ -721,7 +721,7 @@ class ConstrainedArcs(BaseCurveObject):
             tuple[Axis | Edge, Tangency] | Axis | Edge | Vertex | VectorLike
         ),
         *,
-        sagitta: Sagitta | None = None,
+        sagitta: Sagitta = Sagitta.SHORT,
         selector: Callable[
             [ShapeList[Edge]], Edge | ShapeList[Edge]
         ] = lambda arcs: arcs,
@@ -736,7 +736,7 @@ class ConstrainedArcs(BaseCurveObject):
                 Geometric entities to be contacted/touched by the circle(s)
             sagitta (LengthConstraint, optional): returned arc selector
                 (i.e. either the short, long or both arcs). Defaults to
-                None (the arc that touches the three input curves is chosen).
+                LengthConstraint.SHORT.
             selector (Callable, optional): typically a lambda which chooses one or more of the
                 results. Defaults to lambda arcs: arcs.
             mode (Mode, optional): combination mode. Defaults to Mode.ADD.
