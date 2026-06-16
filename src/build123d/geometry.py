@@ -42,7 +42,6 @@ import logging
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from math import degrees, log10, pi, prod, radians
-from numbers import Real
 from typing import TYPE_CHECKING, Any, Type, TypeAlias, cast, overload
 
 import numpy as np
@@ -2839,13 +2838,9 @@ class Plane(metaclass=PlaneMeta):
                     if (
                         len(args) == 1
                         and not any((arg_x_dir, arg_y_dir, passed_y_dir, passed_z_dir))
-                        and not all(isinstance(point, Real) for point in arg0)
+                        and not all(isinstance(point, (int, float)) for point in arg0)
                     ):
-                        try:
-                            points = [Vector(point) for point in arg0]
-                        except TypeError:
-                            points = []
-
+                        points = [Vector(point) for point in arg0]
                         if len(points) == 3:
                             arg_origin = points[0]
                             arg_x_dir = points[1] - points[0]
