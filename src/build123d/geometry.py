@@ -2835,18 +2835,25 @@ class Plane(metaclass=PlaneMeta):
                         raise TypeError(type_error_message) from exc
             elif arg_origin is None:
                 try:
-                    if (
-                        len(args) == 1
-                        and not any((arg_x_dir, arg_y_dir, passed_y_dir, passed_z_dir))
-                        and not all(isinstance(point, (int, float)) for point in arg0)
+                    if len(args) == 1 and not any(
+                        (arg_x_dir, arg_y_dir, passed_y_dir, passed_z_dir)
                     ):
-                        points = [Vector(point) for point in arg0]
-                        if len(points) == 3:
+                        arg0_sequence = list(arg0)
+                        if all(
+                            isinstance(coordinate, (int, float))
+                            for coordinate in arg0_sequence
+                        ):
+                            arg_origin = Vector(arg0_sequence)
+                        else:
+                            if len(arg0_sequence) != 3:
+                                raise TypeError("Expected three VectorLike points")
+                            try:
+                                points = [Vector(point) for point in arg0_sequence]
+                            except Exception as exc:
+                                raise TypeError("Expected three VectorLike points") from exc
                             arg_origin = points[0]
                             arg_x_dir = points[1] - points[0]
                             arg_z_dir = arg_x_dir.cross(points[2] - points[0])
-                        else:
-                            arg_origin = Vector(arg0)
                     else:
                         arg_origin = Vector(arg0)
 
@@ -2854,6 +2861,8 @@ class Plane(metaclass=PlaneMeta):
                         arg_x_dir = Vector(args[1]).normalized()
                     if len(args) > 2:
                         arg_z_dir = Vector(args[2]).normalized()
+                except TypeError:
+                    raise
                 except Exception as exc:
                     raise TypeError(type_error_message) from exc
 
