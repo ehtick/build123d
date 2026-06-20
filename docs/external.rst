@@ -38,7 +38,7 @@ A web-based CAD viewer for OCP models (CadQuery/build123d) that runs in any mode
 static site deployment. Features include interactive inspection of faces, edges, and vertices, 
 measurement tools, per-model clipping planes, transparency control, and hot reloading via ``yacv-server``. 
 It also has a build123d playground for editing and sharing models directly in the browser 
-(`demo <https://yeicor-3d.github.io/yet-another-cad-viewer/#pg_code_url=https://raw.githubusercontent.com/gumyr/build123d/refs/heads/dev/examples/toy_truck.py>`_).
+(`demo <https://yeicor-3d.github.io/yet-another-cad-viewer/#pg_code=https://raw.githubusercontent.com/gumyr/build123d/refs/heads/dev/examples/toy_truck.py&pg_version=dev>`_).
 
 See: `Yet Another CAD Viewer <https://github.com/yeicor-3d/yet-another-cad-viewer>`_
 
