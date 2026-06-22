@@ -31,6 +31,7 @@ license:
 # pylint: disable=too-many-lines
 
 import math
+import io
 import xml.etree.ElementTree as ET
 from copy import copy
 from enum import Enum, auto
@@ -638,7 +639,11 @@ class ExportDXF(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    def write(self, file_name: PathLike | str | bytes | BytesIO):
+    def write(
+        self,
+        file_name: PathLike | str | bytes | BytesIO,
+        ascii_format: bool = True,
+    ):
         """write
 
         Writes the DXF data to the specified file name.
@@ -646,6 +651,8 @@ class ExportDXF(Export2D):
         Args:
             file_name (PathLike |  str |  bytes | BytesIO): The file name (including path) where
                 the DXF data will be written.
+            ascii_format (bool, optional): Export the file as ASCII (True) or binary
+                (False) DXF format. Defaults to True.
         """
         # Reset the main CAD viewport of the model space to the
         # extents of its entities.
@@ -655,9 +662,21 @@ class ExportDXF(Export2D):
 
         if not isinstance(file_name, BytesIO):
             file_name = fsdecode(file_name)
-            self._document.saveas(file_name)
+            self._document.saveas(file_name, fmt="asc" if ascii_format else "bin")
         else:
-            self._document.write(file_name, fmt="bin")
+            if ascii_format:
+                text_stream = io.TextIOWrapper(
+                    file_name,
+                    encoding="utf-8",
+                    newline="",
+                )
+                try:
+                    self._document.write(text_stream, fmt="asc")
+                    text_stream.flush()
+                finally:
+                    text_stream.detach()
+            else:
+                self._document.write(file_name, fmt="bin")
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
