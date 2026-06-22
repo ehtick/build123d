@@ -491,12 +491,14 @@ class Compound(Mixin3D[TopoDS_Compound]):
         )
 
         if len(summands) <= 1:
-            result: Shape = Compound(summands[0:1])
+            result: Shape = Shape.make_composite(summands[0:1], self._dim)
         else:
             fuse_op = BRepAlgoAPI_Fuse()
             fuse_op.SetFuzzyValue(TOLERANCE)
             self.copy_attributes_to(summands[0], ["wrapped", "_NodeMixin__children"])
             result = self._bool_op(summands[:1], summands[1:], fuse_op)
+            if not isinstance(result, Compound):
+                result = Shape.make_composite([result], self._dim)
 
         return result
 
@@ -506,9 +508,9 @@ class Compound(Mixin3D[TopoDS_Compound]):
         if intersection is None:
             return Compound()
         if isinstance(intersection, list):
-            intersection = Compound(intersection)
+            intersection = Shape.make_composite(intersection)
         elif not isinstance(intersection, Compound):
-            intersection = Compound([intersection])
+            intersection = Shape.make_composite([intersection])
         self.copy_attributes_to(intersection, ["wrapped", "_NodeMixin__children"])
         return intersection
 
@@ -554,7 +556,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
         """Cut other to self `-` operator"""
         difference = Shape.__sub__(self, other)
         if not isinstance(difference, Compound):
-            difference = Compound([difference])
+            difference = Shape.make_composite([difference])
         self.copy_attributes_to(difference, ["wrapped", "_NodeMixin__children"])
 
         return difference
