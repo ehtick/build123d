@@ -78,7 +78,7 @@ from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape, TopoDS_Vertex
 
-from build123d.build_enums import Align, Align2DType, Align3DType, Extrinsic, Intrinsic
+from build123d.build_enums import Align, Align2D, Align3D, Extrinsic, Intrinsic
 
 if TYPE_CHECKING:  # pragma: no cover
     from .topology import Edge, Face, Shape, Vertex
@@ -1252,7 +1252,7 @@ class BoundBox:
             return False
         return self.wrapped.Distance(other.wrapped) <= tolerance
 
-    def to_align_offset(self, align: Align2DType | Align3DType) -> Vector:
+    def to_align_offset(self, align: Align2D | Align3D) -> Vector:
         """Amount to move object to achieve the desired alignment"""
         return to_align_offset(self.min, self.max, align)
 
@@ -2850,7 +2850,9 @@ class Plane(metaclass=PlaneMeta):
                             try:
                                 points = [Vector(point) for point in arg0_sequence]
                             except Exception as exc:
-                                raise TypeError("Expected three VectorLike points") from exc
+                                raise TypeError(
+                                    "Expected three VectorLike points"
+                                ) from exc
                             arg_origin = points[0]
                             arg_x_dir = points[1] - points[0]
                             arg_z_dir = arg_x_dir.cross(points[2] - points[0])
@@ -3442,7 +3444,7 @@ CLASS_REGISTRY = {
 def to_align_offset(
     min_point: VectorLike,
     max_point: VectorLike,
-    align: Align2DType | Align3DType,
+    align: Align2D | Align3D,
     center: VectorLike | None = None,
 ) -> Vector:
     """Amount to move object to achieve the desired alignment"""

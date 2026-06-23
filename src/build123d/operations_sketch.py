@@ -30,9 +30,13 @@ license:
 from __future__ import annotations
 
 from collections.abc import Iterable
+
 from scipy.spatial import Voronoi
-from typing import cast
+
+from build123d.build_common import flatten_sequence, validate_inputs
 from build123d.build_enums import Mode, SortBy, Transition
+from build123d.build_sketch import BuildSketch
+from build123d.geometry import Plane, Vector
 from build123d.topology import (
     Compound,
     Curve,
@@ -40,13 +44,10 @@ from build123d.topology import (
     Face,
     ShapeList,
     Shell,
-    Wire,
     Sketch,
+    Wire,
     topo_explore_connected_edges,
 )
-from build123d.geometry import Plane, Vector, TOLERANCE
-from build123d.build_common import flatten_sequence, validate_inputs
-from build123d.build_sketch import BuildSketch
 
 
 def full_round(
@@ -213,9 +214,7 @@ def make_face(
         outer_edges = ShapeList(
             edge
             for item in flatten_sequence(edges)
-            for edge in (
-                item.edges() if isinstance(item, (Wire, Curve)) else [item]
-            )
+            for edge in (item.edges() if isinstance(item, (Wire, Curve)) else [item])
         )
     elif context is not None:
         outer_edges = context.pending_edges
