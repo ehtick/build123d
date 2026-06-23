@@ -2806,7 +2806,9 @@ def topo_distance_to(
     if not all(isinstance(shape, Shape) for shape in sources):
         raise ValueError("Topological distance requires Shape objects")
 
+    # pylint: disable=no-member
     peer_type = sources[0].shape_type
+
     if any(shape.shape_type != peer_type for shape in sources):
         raise ValueError("Topological distance requires shapes of the same type")
 
