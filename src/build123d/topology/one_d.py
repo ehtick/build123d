@@ -164,11 +164,7 @@ from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from OCP.ShapeFix import ShapeFix_Shape, ShapeFix_Wireframe
-from OCP.Standard import (
-    Standard_ConstructionError,
-    Standard_Failure,
-    Standard_NoSuchObject,
-)
+from OCP.Standard import Standard_ConstructionError
 from OCP.TColgp import TColgp_Array1OfPnt, TColgp_Array1OfVec, TColgp_HArray1OfPnt
 from OCP.TColStd import (
     TColStd_Array1OfInteger,
@@ -560,7 +556,7 @@ class Mixin1D(Shape[TOPODS]):
         geom = self.geom_adaptor()
         if isinstance(geom, BRepAdaptor_CompCurve):
             # Wire: delegate to the first edge (CompCurve reports OtherCurve)
-            return self.edges()[0].radius
+            return self.edges().first.radius
         if geom.GetType() != GeomAbs_Circle:
             raise ValueError("Shape could not be reduced to a circle")
         return geom.Circle().Radius()
@@ -647,13 +643,13 @@ class Mixin1D(Shape[TOPODS]):
             else:
                 try:
                     sum_shape = Wire(summand_edges)
-                except Exception:
+                except (ValueError, RuntimeError, Standard_ConstructionError):
                     # pylint: disable=[no-member]
-                    sum_shape = summands[0].fuse(*summands[1:])
+                    sum_shape = summands.first.fuse(*summands[1:])
         else:
             try:
                 sum_shape = Wire(self.edges() + ShapeList(summand_edges))
-            except Exception:
+            except (ValueError, RuntimeError, Standard_ConstructionError):
                 sum_shape = self.fuse(*summands)
 
         if SkipClean.clean:
@@ -2911,6 +2907,7 @@ class Edge(Mixin1D[TopoDS_Edge]):
         Returns:
             bool: True if edges are geometrically equal within tolerance
         """
+        # pylint: disable=too-many-return-statements
         if not isinstance(other, Edge):
             return False
 
@@ -3717,7 +3714,7 @@ class Wire(Mixin1D[TopoDS_Wire]):
     @classmethod
     def extrude(cls, obj: Shape, direction: VectorLike) -> Wire:
         """extrude - invalid operation for Wire"""
-        raise NotImplementedError("Wires can't be created by extrusion")
+        raise ValueError("Wires can't be created by extrusion")
 
     @classmethod
     def make_circle(cls, radius: float, plane: Plane = Plane.XY) -> Wire:

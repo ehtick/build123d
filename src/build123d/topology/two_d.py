@@ -248,7 +248,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
 
     @overload
     def split_by_perimeter(
-        self, perimeter: Edge | Wire
+        self, perimeter: Edge | Wire, keep: Literal[Keep.INSIDE] = Keep.INSIDE
     ) -> Face | Shell | ShapeList[Face] | None:
         """split_by_perimeter and keep inside (default)"""
 
@@ -1511,6 +1511,61 @@ class Face(Mixin2D[TopoDS_Face]):
 
         return cls(pln_shape)
 
+    @staticmethod
+    def _surface_exterior_edges(exterior: Wire | Iterable[Edge]) -> ShapeList[Edge]:
+        """Normalize and validate the exterior boundary for make_surface."""
+        normalized_exterior = (
+            exterior
+            if isinstance(exterior, Wire)
+            else list(exterior)
+            if isinstance(exterior, Iterable)
+            else exterior
+        )
+        if isinstance(normalized_exterior, Wire):
+            outside_edges = normalized_exterior.edges()
+        elif isinstance(normalized_exterior, Iterable) and all(
+            isinstance(o, Edge) for o in normalized_exterior
+        ):
+            outside_edges = ShapeList(normalized_exterior)
+        else:
+            raise ValueError("exterior must be a Wire or list of Edges")
+
+        if any(not edge for edge in outside_edges):
+            raise ValueError("exterior contains empty edges")
+
+        return outside_edges
+
+    @classmethod
+    def _build_surface_face(
+        cls,
+        surface: BRepOffsetAPI_MakeFilling,
+        error_message: str,
+        failure_exceptions,
+    ) -> Face:
+        """Build a filling surface and convert it into a Face."""
+        try:
+            surface.Build()
+            return cls(surface.Shape())  # type: ignore[call-overload]
+        except failure_exceptions as err:
+            raise RuntimeError(error_message) from err
+
+    @classmethod
+    def _add_surface_holes(
+        cls, surface_face: Face, interior_wires: Iterable[Wire]
+    ) -> Face:
+        """Add interior wires as holes to a surface face."""
+        makeface_object = BRepBuilderAPI_MakeFace(surface_face.wrapped)
+        for wire in interior_wires:
+            if not wire:
+                raise ValueError("interior_wires contain an empty wire")
+            makeface_object.Add(wire.wrapped)
+        try:
+            return cls(makeface_object.Face())
+        except StdFail_NotDone as err:
+            raise RuntimeError(
+                "Error adding interior hole in non-planar face with provided interior_wires"
+            ) from err
+
     @classmethod
     def make_surface(
         cls,
@@ -1539,8 +1594,6 @@ class Face(Mixin2D[TopoDS_Face]):
         Returns:
             Face: Potentially non-planar face
         """
-        exterior = list(exterior) if isinstance(exterior, Iterable) else exterior
-        # pylint: disable=too-many-branches
         if surface_points:
             surface_point_vectors = [Vector(p) for p in surface_points]
         else:
@@ -1567,56 +1620,32 @@ class Face(Mixin2D[TopoDS_Face]):
             # the greatest number of segments which the filling surface can have
             MaxSegments=9,
         )
-        if isinstance(exterior, Wire):
-            outside_edges = exterior.edges()
-        elif isinstance(exterior, Iterable) and all(
-            isinstance(o, Edge) for o in exterior
-        ):
-            outside_edges = ShapeList(exterior)
-        else:
-            raise ValueError("exterior must be a Wire or list of Edges")
 
-        for edge in outside_edges:
-            if not edge:
-                raise ValueError("exterior contains empty edges")
+        for edge in cls._surface_exterior_edges(exterior):
             surface.Add(edge.wrapped, GeomAbs_C0)
 
-        try:
-            surface.Build()
-            surface_face = Face(surface.Shape())  # type: ignore[call-overload]
-        except (
-            Standard_Failure,
-            StdFail_NotDone,
-            Standard_NoSuchObject,
-            Standard_ConstructionError,
-        ) as err:
-            raise RuntimeError(
-                "Error building non-planar face with provided exterior"
-            ) from err
+        surface_face = cls._build_surface_face(
+            surface,
+            "Error building non-planar face with provided exterior",
+            (
+                Standard_Failure,
+                StdFail_NotDone,
+                Standard_NoSuchObject,
+                Standard_ConstructionError,
+            ),
+        )
         if surface_point_vectors:
             for point in surface_point_vectors:
                 surface.Add(gp_Pnt(*point))
-            try:
-                surface.Build()
-                surface_face = Face(surface.Shape())  # type: ignore[call-overload]
-            except StdFail_NotDone as err:
-                raise RuntimeError(
-                    "Error building non-planar face with provided surface_points"
-                ) from err
+            surface_face = cls._build_surface_face(
+                surface,
+                "Error building non-planar face with provided surface_points",
+                (StdFail_NotDone,),
+            )
 
         # Next, add wires that define interior holes - note these wires must be entirely interior
         if interior_wires:
-            makeface_object = BRepBuilderAPI_MakeFace(surface_face.wrapped)
-            for wire in interior_wires:
-                if not wire:
-                    raise ValueError("interior_wires contain an empty wire")
-                makeface_object.Add(wire.wrapped)
-            try:
-                surface_face = Face(makeface_object.Face())
-            except StdFail_NotDone as err:
-                raise RuntimeError(
-                    "Error adding interior hole in non-planar face with provided interior_wires"
-                ) from err
+            surface_face = cls._add_surface_holes(surface_face, interior_wires)
 
         surface_face = surface_face.fix()
         if not surface_face.is_valid:
