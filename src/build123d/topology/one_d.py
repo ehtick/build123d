@@ -125,6 +125,7 @@ from OCP.GeomAbs import (
     GeomAbs_C1,
     GeomAbs_C2,
     GeomAbs_C3,
+    GeomAbs_Circle,
     GeomAbs_CN,
     GeomAbs_G1,
     GeomAbs_G2,
@@ -557,11 +558,12 @@ class Mixin1D(Shape[TOPODS]):
 
         """
         geom = self.geom_adaptor()
-        try:
-            circ = geom.Circle()
-        except (Standard_NoSuchObject, Standard_Failure) as err:
-            raise ValueError("Shape could not be reduced to a circle") from err
-        return circ.Radius()
+        if isinstance(geom, BRepAdaptor_CompCurve):
+            # Wire: delegate to the first edge (CompCurve reports OtherCurve)
+            return self.edges()[0].radius
+        if geom.GetType() != GeomAbs_Circle:
+            raise ValueError("Shape could not be reduced to a circle")
+        return geom.Circle().Radius()
 
     @property
     def volume(self) -> float:
