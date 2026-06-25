@@ -3401,7 +3401,9 @@ class Plane(metaclass=PlaneMeta):
         surface2 = Geom_Plane(plane.wrapped)
         intersector = GeomAPI_IntSS(surface1, surface2, TOLERANCE)
         if intersector.IsDone() and intersector.NbLines() > 0:
-            return Axis(intersector.Line(1).Position())
+            intersection_line = intersector.Line(1)
+            assert isinstance(intersection_line, Geom_Line)
+            return Axis(intersection_line.Position())
         return None
 
     def _intersect_location(self, location: Location) -> Vector | Location | None:
