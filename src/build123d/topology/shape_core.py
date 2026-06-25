@@ -2653,9 +2653,9 @@ class Shape(NodeMixin, Generic[TOPODS]):
     def _repr_html_(self):
         """Jupyter 3D representation support"""
 
-        from build123d.jupyter_tools import shape_to_html, HAS_VTK
+        from build123d.jupyter_tools import shape_to_html, has_vtk
 
-        if HAS_VTK:
+        if has_vtk:
             return shape_to_html(self)._repr_html_()
         return repr(self)
 
