@@ -684,9 +684,9 @@ class ExportDXF(Export2D):
         """Create a Vec2 from a gp_Pnt or Vector.
         This method also checks for points z != 0."""
         if isinstance(pt, (gp_XYZ, gp_Pnt, gp_Vec)):
-            (x, y, z) = (pt.X(), pt.Y(), pt.Z())
+            x, y, z = (pt.X(), pt.Y(), pt.Z())
         elif isinstance(pt, Vector):
-            (x, y, z) = tuple(pt)
+            x, y, z = tuple(pt)
         else:
             raise TypeError(
                 f"Expected `gp_Pnt`, `gp_XYZ`, `gp_Vec`, or `Vector`.  Got `{type(pt).__name__}`."
@@ -981,6 +981,8 @@ class ExportSVG(Export2D):
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def __init__(
         self,
         unit: Unit = Unit.MM,
@@ -1241,7 +1243,7 @@ class ExportSVG(Export2D):
         curve = edge.geom_adaptor()
         fp = curve.FirstParameter()
         lp = curve.LastParameter()
-        (u0, u1) = (lp, fp) if reverse else (fp, lp)
+        u0, u1 = (lp, fp) if reverse else (fp, lp)
         p0 = self._path_point(curve.Value(u0))
         p1 = self._path_point(curve.Value(u1))
         result = PT.Line(p0, p1)
@@ -1284,7 +1286,7 @@ class ExportSVG(Export2D):
         du = lp - fp
         large_arc = (du < -math.pi) or (du > math.pi)
         sweep = (z_axis.Z() > 0) ^ reverse
-        (u0, u1) = (lp, fp) if reverse else (fp, lp)
+        u0, u1 = (lp, fp) if reverse else (fp, lp)
         start = self._path_point(curve.Value(u0))
         end = self._path_point(curve.Value(u1))
         radius = complex(radius, radius)  # type: ignore[assignment]
@@ -1337,7 +1339,7 @@ class ExportSVG(Export2D):
         du = lp - fp
         large_arc = (du < -math.pi) or (du > math.pi)
         sweep = (z_axis.Z() > 0) ^ reverse
-        (u0, u1) = (lp, fp) if reverse else (fp, lp)
+        u0, u1 = (lp, fp) if reverse else (fp, lp)
         start = self._path_point(curve.Value(u0))
         end = self._path_point(curve.Value(u1))
         radius = complex(major_radius, minor_radius)  # type: ignore[assignment]
@@ -1492,8 +1494,8 @@ class ExportSVG(Export2D):
     ) -> ET.Element:
         def _color_attribs(color: Color | None) -> tuple[str, str | None]:
             if color is not None:
-                (r, g, b, a) = tuple(color)
-                (r, g, b, a) = (int(r * 255), int(g * 255), int(b * 255), round(a, 3))
+                r, g, b, a = tuple(color)
+                r, g, b, a = (int(r * 255), int(g * 255), int(b * 255), round(a, 3))
                 rgb = f"rgb({r},{g},{b})"
                 opacity = f"{a}" if a < 1 else None
                 return (rgb, opacity)
@@ -1505,7 +1507,7 @@ class ExportSVG(Export2D):
         attribs["fill"] = fill
         if fill_opacity is not None:
             attribs["fill-opacity"] = fill_opacity
-        (stroke, stroke_opacity) = _color_attribs(layer.line_color)
+        stroke, stroke_opacity = _color_attribs(layer.line_color)
         attribs["stroke"] = stroke
         if stroke_opacity:
             attribs["stroke-opacity"] = stroke_opacity

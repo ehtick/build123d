@@ -309,6 +309,15 @@ class TestPlane(unittest.TestCase):
         self.assertAlmostEqual(p.origin, p0.origin)
         self.assertAlmostEqual(p.z_dir, p0.z_dir)
 
+    def test_set_y_dir(self):
+        """Ensure changing `y_dir` doesn't change `origin` and `z_dir`"""
+        p = Plane.XY.offset(-1)
+        p0 = copy.copy(p)
+        p.y_dir = -2, 1, 0
+        self.assertAlmostEqual(p.y_dir, Vector(-2, 1, 0).normalized())
+        self.assertAlmostEqual(p.origin, p0.origin)
+        self.assertAlmostEqual(p.z_dir, p0.z_dir)
+
     def test_plane_neg(self):
         p = Plane(
             origin=(1, 2, 3),
